@@ -1,0 +1,704 @@
+// src/supabase.ts
+import 'dotenv/config';
+import { createClient } from '@supabase/supabase-js';
+import type { LogItem, LogJson, DuplicateKind, DuplicateInfo } from './types';
+import { getWibTimeHHmm } from './time';
+
+const url = process.env.SUPABASE_URL!;
+const anonKey = process.env.SUPABASE_ANON_KEY!;
+
+
+export const supabase = createClient(url, anonKey);
+
+// --- CACHE USER TERDAFTAR (In-Memory) ---
+// Map<PhoneNumber, PushName>
+// Map<PhoneNumber, PushName>
+const registeredUsersCache = new Map<string, string>();
+// Map<LidJid, PhoneNumber> -> Untuk resolusi cepat
+const lidToPhoneCache = new Map<string, string>();
+
+let isCacheInitialized = false;
+
+export async function initRegisteredUsersCache() {
+  if (isCacheInitialized) return;
+  console.log('🔄 Memuat cache pengguna terdaftar...');
+  
+  // Ambil semua data dari lid_phone_map
+  const { data, error } = await supabase
+    .from('lid_phone_map')
+    .select('lid_jid, phone_number, push_name');
+
+  if (error) {
+    console.error('❌ Gagal memuat cache pengguna:', error.message);
+    return; 
+  }
+
+  if (data) {
+    data.forEach(row => {
+      // Cache Phone -> Name
+      if (row.phone_number) {
+        registeredUsersCache.set(row.phone_number, row.push_name || '');
+      }
+      // Cache LID -> Phone
+      if (row.lid_jid && row.phone_number) {
+        lidToPhoneCache.set(row.lid_jid, row.phone_number);
+      }
+    });
+    console.log(`✅ Cache pengguna dimuat: ${registeredUsersCache.size} user, ${lidToPhoneCache.size} LID mapping.`);
+  }
+  isCacheInitialized = true;
+}
+
+export function getRegisteredUserNameSync(phoneNumber: string): string | null {
+  // Cek dulu apakah key ini sebenarnya adalah LID?
+  const mappedPhone = lidToPhoneCache.get(phoneNumber);
+  const key = mappedPhone || phoneNumber;
+  
+  return registeredUsersCache.get(key) || null;
+}
+
+export function getPhoneFromLidSync(lid: string): string | null {
+  return lidToPhoneCache.get(lid) || null;
+}
+
+// --- HITUNG TOTAL DATA HARI INI UNTUK PENGIRIM ---
+export async function getTotalDataTodayForSender(
+  senderPhone: string,
+  processingDayKey: string
+): Promise<number> {
+  const { count, error } = await supabase
+    .from('data_harian')
+    .select('*', { count: 'exact', head: true })
+    .eq('sender_phone', senderPhone)
+    .eq('processing_day_key', processingDayKey);
+
+  if (error) {
+    console.error('Error getTotalDataTodayForSender:', error);
+    return 0;
+  }
+  return count ?? 0;
+}
+
+export async function checkDuplicateForItem(
+  item: LogItem,
+  ctx: { processingDayKey: string; senderPhone: string }
+): Promise<LogItem> {
+  if (item.status !== 'OK') return item;
+
+  const { processingDayKey, senderPhone } = ctx;
+
+  const markDup = (args: {
+    kind: DuplicateKind;
+    safe_message: string;
+    first_seen_at?: string | null;
+    first_seen_wib_time?: string | null;
+    original_data?: { nama: string; no_kjp: string; no_ktp: string; no_kk: string } | null;
+  }): LogItem => {
+    const info: DuplicateInfo = {
+      kind: args.kind,
+      processing_day_key: processingDayKey,
+      safe_message: args.safe_message,
+      first_seen_at: args.first_seen_at ?? null,
+      first_seen_wib_time: args.first_seen_wib_time ?? null,
+      original_data: args.original_data ?? null,
+    };
+
+    return {
+      ...item,
+      status: 'SKIP_DUPLICATE',
+      duplicate_info: info,
+    };
+  };
+
+  // (1) Cek Duplikat NAMA (per hari)
+  if (item.parsed.nama) {
+    const { data, error } = await supabase
+      .from('data_harian')
+      .select('nama, no_kjp, no_ktp, no_kk')
+      .eq('processing_day_key', processingDayKey)
+      .ilike('nama', item.parsed.nama) // Case-insensitive
+      .limit(1);
+
+    if (!error && data && data.length > 0) {
+      const orig = data[0];
+      return markDup({
+        kind: 'NAME',
+        safe_message:
+          'Nama sudah terdaftar hari ini. Jika orang berbeda tapi nama sama, tambahkan 4 digit terakhir Nomor Kartu di belakang nama (contoh: BUDI-1234).',
+        original_data: {
+          nama: orig.nama || '',
+          no_kjp: orig.no_kjp || '',
+          no_ktp: orig.no_ktp || '',
+          no_kk: orig.no_kk || '',
+        },
+      });
+    }
+  }
+
+  // (2) Cek Duplikat Nomor Kartu (no_kjp)
+  if (item.parsed.no_kjp) {
+    const { data, error } = await supabase
+      .from('data_harian')
+      .select('nama, no_kjp, no_ktp, no_kk')
+      .eq('processing_day_key', processingDayKey)
+      .eq('no_kjp', item.parsed.no_kjp)
+      .limit(1);
+
+    if (!error && data && data.length > 0) {
+      const orig = data[0];
+      return markDup({
+        kind: 'NO_KJP',
+        safe_message: 'No Kartu sudah terdaftar hari ini.',
+        original_data: {
+          nama: orig.nama || '',
+          no_kjp: orig.no_kjp || '',
+          no_ktp: orig.no_ktp || '',
+          no_kk: orig.no_kk || '',
+        },
+      });
+    }
+  }
+
+  // (3) Cek Duplikat NIK (no_ktp)
+  if (item.parsed.no_ktp) {
+    const { data, error } = await supabase
+      .from('data_harian')
+      .select('nama, no_kjp, no_ktp, no_kk')
+      .eq('processing_day_key', processingDayKey)
+      .eq('no_ktp', item.parsed.no_ktp)
+      .limit(1);
+
+    if (!error && data && data.length > 0) {
+      const orig = data[0];
+      return markDup({
+        kind: 'NO_KTP',
+        safe_message: 'No KTP sudah digunakan hari ini.',
+        original_data: {
+          nama: orig.nama || '',
+          no_kjp: orig.no_kjp || '',
+          no_ktp: orig.no_ktp || '',
+          no_kk: orig.no_kk || '',
+        },
+      });
+    }
+  }
+
+  // (4) Cek Duplikat KK (no_kk)
+  // Aturan:
+  // - Boleh dipakai ulang jika sender_phone SAMA.
+  // - Ditolak jika sender_phone BEDA.
+  if (item.parsed.no_kk) {
+    const { data, error } = await supabase
+      .from('data_harian')
+      .select('received_at, sender_phone, nama, no_kjp, no_ktp, no_kk')
+      .eq('processing_day_key', processingDayKey)
+      .eq('no_kk', item.parsed.no_kk)
+      .order('received_at', { ascending: true })
+      .limit(1);
+
+    if (!error && data && data.length > 0) {
+      const existingSender = data[0].sender_phone;
+
+      // Jika pengirim beda, maka ANGGAP DUPLIKAT
+      if (existingSender !== senderPhone) {
+        const firstSeenAt = data[0].received_at ? String(data[0].received_at) : null;
+        const timeWib = firstSeenAt ? getWibTimeHHmm(new Date(firstSeenAt)) : '??.??';
+        const orig = data[0];
+
+        return markDup({
+          kind: 'NO_KK_OTHER',
+          first_seen_at: firstSeenAt,
+          first_seen_wib_time: timeWib,
+          safe_message: `No KK sudah digunakan hari ini oleh nomor WA lain pada jam ${timeWib} WIB.`,
+          original_data: {
+            nama: orig.nama || '',
+            no_kjp: orig.no_kjp || '',
+            no_ktp: orig.no_ktp || '',
+            no_kk: orig.no_kk || '',
+          },
+        });
+      }
+      // Jika pengirim sama, LANJUT (tidak dianggap duplikat)
+    }
+  }
+
+  return item;
+}
+
+export async function saveLogAndOkItems(log: LogJson, rawText: string): Promise<void> {
+  // 1) Simpan log pesan
+  const { error: logError } = await supabase.from('log_pesan_wa').insert([
+    {
+      tanggal: log.tanggal,
+      processing_day_key: log.processing_day_key,
+      received_at: log.received_at,
+      sumber: 'wa',
+      sender_phone: log.sender_phone,
+      wa_message_id: log.message_id,
+      stats_total_blocks: log.stats.total_blocks,
+      stats_ok_count: log.stats.ok_count,
+      stats_skip_format_count: log.stats.skip_format_count,
+      stats_skip_duplicate_count: log.stats.skip_duplicate_count,
+      raw_text: rawText,
+      log_json: log,
+    },
+  ]);
+
+  if (logError) {
+    console.error('Error insert log_pesan_wa:', logError);
+  }
+
+  // 2) Simpan item OK ke data_harian
+  const okItems = log.items.filter((it) => it.status === 'OK');
+  if (okItems.length === 0) {
+    // Tidak ada yg perlu disimpan
+    return;
+  }
+
+  const rows = okItems.map((it) => ({
+    tanggal: log.tanggal,
+    processing_day_key: log.processing_day_key,
+    received_at: log.received_at,
+    sumber: 'wa',
+    sender_phone: log.sender_phone,
+    sender_name: log.sender_name || null, // <--- TAMBAHAN BARU
+    nama: it.parsed.nama,
+    no_kjp: it.parsed.no_kjp,
+    no_ktp: it.parsed.no_ktp,
+    no_kk: it.parsed.no_kk,
+    meta: {
+      message_id: log.message_id,
+      index: it.index,
+      received_at: log.received_at,
+    },
+  }));
+
+  const { error: dataError } = await supabase.from('data_harian').insert(rows);
+
+  if (dataError) {
+    console.error('Error insert data_harian:', dataError);
+  } else {
+    console.log(`Berhasil simpan ${rows.length} item OK ke data_harian.`);
+  }
+}
+
+// --- HAPUS DATA (HANYA MILIK PENGIRIM) ---
+export async function deleteDataByNameOrCard(
+  senderPhone: string,
+  processingDayKey: string,
+  query: string
+): Promise<{ success: boolean; count: number; mode: 'name' | 'number'; error: any }> {
+  try {
+    const raw = (query || '').trim();
+    const digits = raw.replace(/\D/g, '');
+
+    // Jika user mengirim nomor (ada digit minimal 4), kita asumsi cari nomor
+    // (minimal 4 digit untuk menghindari salah hapus data pendek 123)
+    if (digits.length >= 4) {
+      const { count, error } = await supabase
+        .from('data_harian')
+        .delete({ count: 'exact' })
+        .eq('processing_day_key', processingDayKey) // Pastikan hari yg sama
+        .eq('sender_phone', senderPhone)            // Pastikan milik dia
+        .or(`no_kjp.eq.${digits},no_ktp.eq.${digits},no_kk.eq.${digits}`);
+
+      if (error) {
+        console.error('Error delete data by number:', error);
+        return { success: false, count: 0, mode: 'number', error };
+      }
+
+      return { success: true, count: count ?? 0, mode: 'number', error: null };
+    }
+
+    // Selain itu, anggap nama
+    const nameQ = raw;
+    if (!nameQ) return { success: true, count: 0, mode: 'name', error: null };
+
+    const norm = nameQ.trim().toUpperCase();
+
+    const { count, error } = await supabase
+      .from('data_harian')
+      .delete({ count: 'exact' })
+      .eq('processing_day_key', processingDayKey)
+      .eq('sender_phone', senderPhone)
+      .ilike('nama', `%${norm}%`);
+
+    if (error) {
+      console.error('Error delete data by name:', error);
+      return { success: false, count: 0, mode: 'name', error };
+    }
+
+    return { success: true, count: count ?? 0, mode: 'name', error: null };
+  } catch (error) {
+    console.error('Error during deleteDataByNameOrCard:', error);
+    return { success: false, count: 0, mode: 'name', error: null };
+  }
+}
+
+export async function deleteDailyDataByIndex(
+    senderPhone: string, 
+    processingDayKey: string,
+    targetIndex: number // 1-based index
+): Promise<{ success: boolean; deletedName?: string }> {
+    // 1. Ambil data dengan urutan yang SAMA PERSIS dengan REKAP
+    const { data, error } = await supabase
+        .from('data_harian')
+        .select('id, nama')
+        .eq('processing_day_key', processingDayKey)
+        .eq('sender_phone', senderPhone)
+        .order('received_at', { ascending: true });
+
+    if (error || !data || data.length === 0) return { success: false };
+    
+    // 2. Ambil item berdasarkan index
+    const item = data[targetIndex - 1]; // convert to 0-based
+    
+    if (!item) return { success: false };
+    
+    // 3. Hapus by ID
+    const { error: delError } = await supabase
+        .from('data_harian')
+        .delete()
+        .eq('id', item.id);
+        
+    if (delError) return { success: false };
+    
+    return { success: true, deletedName: item.nama };
+}
+// --- HAPUS DATA TERAKHIR (UNTUK FITUR BATAL/UNDO) ---
+export async function deleteLastSubmission(
+  senderPhone: string,
+  processingDayKey: string,
+  maxAgeMinutes: number = 5
+): Promise<{ success: boolean; count: number; names: string[] }> {
+  try {
+    // Ambil data terakhir yang dikirim user hari ini
+    const { data, error: selectError } = await supabase
+      .from('data_harian')
+      .select('id, nama, received_at')
+      .eq('processing_day_key', processingDayKey)
+      .eq('sender_phone', senderPhone)
+      .order('received_at', { ascending: false })
+      .limit(50); // Ambil beberapa untuk cek waktu
+
+    if (selectError || !data || data.length === 0) {
+      return { success: false, count: 0, names: [] };
+    }
+
+    // Filter data yang masih dalam batas waktu (maxAgeMinutes)
+    const now = new Date();
+    const cutoffTime = new Date(now.getTime() - maxAgeMinutes * 60 * 1000);
+    
+    // Cari semua data yang received_at >= cutoff (berarti baru dikirim dalam X menit terakhir)
+    // dan yang memiliki received_at yang sama (dikirim dalam 1 batch pesan)
+    const recentData = data.filter((row: any) => {
+      const receivedAt = new Date(row.received_at);
+      return receivedAt >= cutoffTime;
+    });
+
+    if (recentData.length === 0) {
+      return { success: false, count: 0, names: [] };
+    }
+
+    // Ambil batch terakhir (semua data dengan received_at yang sama persis atau sangat dekat)
+    const lastReceivedAt = new Date((recentData[0] as any).received_at);
+    const batchData = recentData.filter((row: any) => {
+      const receivedAt = new Date(row.received_at);
+      // Toleransi 2 detik untuk 1 batch
+      return Math.abs(receivedAt.getTime() - lastReceivedAt.getTime()) < 2000;
+    });
+
+    if (batchData.length === 0) {
+      return { success: false, count: 0, names: [] };
+    }
+
+    // Hapus data batch tersebut
+    const idsToDelete = batchData.map((row: any) => row.id);
+    const namesToDelete = batchData.map((row: any) => row.nama);
+
+    const { error: deleteError, count } = await supabase
+      .from('data_harian')
+      .delete({ count: 'exact' })
+      .in('id', idsToDelete);
+
+    if (deleteError) {
+      console.error('Error delete last submission:', deleteError);
+      return { success: false, count: 0, names: [] };
+    }
+
+    return { success: true, count: count ?? batchData.length, names: namesToDelete };
+  } catch (error) {
+    console.error('Error during deleteLastSubmission:', error);
+    return { success: false, count: 0, names: [] };
+  }
+}
+
+// --- STATISTIK DASHBOARD ---
+export interface DashboardStats {
+  todayCount: number;
+  weekCount: number;
+  monthCount: number;
+  activeUsersToday: number;
+  activeUsersWeek: number;
+  totalRegisteredUsers: number;
+  topUsers: { phone: string; name: string; count: number }[];
+}
+
+export async function getStatistics(processingDayKey: string): Promise<DashboardStats> {
+  const today = processingDayKey;
+  
+  // Hitung 7 hari dan 30 hari ke belakang
+  const weekAgo = shiftDateString(today, -6);
+  const monthAgo = shiftDateString(today, -29);
+  
+  // Query data hari ini
+  const { count: todayCount } = await supabase
+    .from('data_harian')
+    .select('*', { count: 'exact', head: true })
+    .eq('processing_day_key', today);
+  
+  // Query data 7 hari
+  const { count: weekCount } = await supabase
+    .from('data_harian')
+    .select('*', { count: 'exact', head: true })
+    .gte('processing_day_key', weekAgo)
+    .lte('processing_day_key', today);
+  
+  // Query data 30 hari
+  const { count: monthCount } = await supabase
+    .from('data_harian')
+    .select('*', { count: 'exact', head: true })
+    .gte('processing_day_key', monthAgo)
+    .lte('processing_day_key', today);
+  
+  // Active users hari ini
+  const { data: todayUsers } = await supabase
+    .from('data_harian')
+    .select('sender_phone')
+    .eq('processing_day_key', today);
+  const activeUsersToday = new Set(todayUsers?.map(r => r.sender_phone) || []).size;
+  
+  // Active users minggu ini
+  const { data: weekUsers } = await supabase
+    .from('data_harian')
+    .select('sender_phone')
+    .gte('processing_day_key', weekAgo)
+    .lte('processing_day_key', today);
+  const activeUsersWeek = new Set(weekUsers?.map(r => r.sender_phone) || []).size;
+  
+  // Total registered users
+  const totalRegisteredUsers = registeredUsersCache.size;
+  
+  // Top 10 users hari ini (by data count)
+  const userCounts = new Map<string, number>();
+  todayUsers?.forEach(r => {
+    userCounts.set(r.sender_phone, (userCounts.get(r.sender_phone) || 0) + 1);
+  });
+  
+  const topUsers = Array.from(userCounts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([phone, count]) => ({
+      phone,
+      name: registeredUsersCache.get(phone) || phone,
+      count
+    }));
+  
+  return {
+    todayCount: todayCount ?? 0,
+    weekCount: weekCount ?? 0,
+    monthCount: monthCount ?? 0,
+    activeUsersToday,
+    activeUsersWeek,
+    totalRegisteredUsers,
+    topUsers
+  };
+}
+
+// Helper untuk geser tanggal
+function shiftDateString(isoDate: string, days: number): string {
+  const [y, m, d] = isoDate.split('-').map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  date.setUTCDate(date.getUTCDate() + days);
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
+}
+
+// --- RESET DATABASE TOTAL ---
+export async function clearAllDatabase(): Promise<boolean> {
+  try {
+    const { error: errLog } = await supabase.from('log_pesan_wa').delete().neq('id', -1);
+    const { error: errData } = await supabase.from('data_harian').delete().neq('id', -1);
+
+    if (errLog || errData) {
+      console.error('Gagal reset DB:', errLog, errData);
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.error('Error reset DB:', error);
+    return false;
+  }
+}
+
+// --- RESET HARIAN (BERDASARKAN processing_day_key) ---
+export async function clearDatabaseForProcessingDayKey(processingDayKey: string): Promise<boolean> {
+  try {
+    const { error: errLog } = await supabase.from('log_pesan_wa').delete().eq('processing_day_key', processingDayKey);
+    const { error: errData } = await supabase.from('data_harian').delete().eq('processing_day_key', processingDayKey);
+
+    if (errLog || errData) {
+      console.error('Gagal reset harian:', errLog, errData);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Error reset harian:', error);
+    return false;
+  }
+}
+
+export const clearDatabaseForDate = clearDatabaseForProcessingDayKey;
+
+// --- LID -> Phone mapping (untuk akun yang tampil @lid) ---
+export async function getPhoneByLidJid(lidJid: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('lid_phone_map')
+    .select('phone_number')
+    .eq('lid_jid', lidJid)
+    .maybeSingle();
+
+  if (error) {
+    console.error('❌ getPhoneByLidJid error:', error.message);
+    return null;
+  }
+  return (data?.phone_number as string) || null;
+}
+
+export async function getNameFromLidPhoneMap(phoneNumber: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('lid_phone_map')
+    .select('push_name')
+    .eq('phone_number', phoneNumber)
+    .maybeSingle();
+
+  if (error) {
+    return null;
+  }
+  return (data?.push_name as string) || null;
+}
+
+export async function upsertLidPhoneMap(params: {
+  lid_jid: string;
+  phone_number: string;
+  push_name?: string | null;
+}) {
+  // LOGIC BARU: Cek dulu apakah nomor HP ini sudah ada?
+  // Jika sudah ada, PERBARUI NAMA-nya saja (jangan buat row baru dg lid dummy)
+  const existing = await getRegisteredUserByPhone(params.phone_number);
+
+  if (existing && existing.push_name !== params.push_name) {
+      // Update Nama Existing (tanpa mengubah LID JID yg mungkin sudah valid)
+      const { error } = await supabase
+        .from('lid_phone_map')
+        .update({ 
+            push_name: params.push_name,
+            updated_at: new Date().toISOString()
+        })
+        .eq('phone_number', params.phone_number);
+        
+      if (error) console.error('❌ Gagal update nama kontak:', error.message);
+      else {
+          // Update Cache
+          registeredUsersCache.set(params.phone_number, params.push_name || '');
+      }
+      return;
+  }
+
+  // Jika belum ada, atau nama sama, jalankan logika insert/upsert normal by LID
+  const payload = {
+    lid_jid: params.lid_jid,
+    phone_number: params.phone_number,
+    push_name: params.push_name ?? null,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { error } = await supabase
+    .from('lid_phone_map')
+    .upsert(payload, { onConflict: 'lid_jid' });
+
+  if (error) {
+    console.error('❌ upsertLidPhoneMap error:', error.message);
+    // Silent error agar bot tidak crash
+  }
+
+  // Update Cache
+  if (params.phone_number) {
+    registeredUsersCache.set(params.phone_number, params.push_name || '');
+    if (params.lid_jid) {
+        // Update cache LID juga (siapa tahu ini first time insert)
+        lidToPhoneCache.set(params.lid_jid, params.phone_number);
+    }
+  }
+}
+
+export async function deleteLidPhoneMap(phoneNumber: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('lid_phone_map')
+    .delete()
+    .eq('phone_number', phoneNumber);
+
+  if (error) {
+    console.error('❌ deleteLidPhoneMap error:', error.message);
+    return false;
+  }
+
+  // Update Cache
+  registeredUsersCache.delete(phoneNumber);
+  
+  return true;
+}
+
+export async function getAllLidPhoneMap(): Promise<{ phone_number: string; push_name: string | null }[]> {
+  const { data, error } = await supabase
+    .from('lid_phone_map')
+    .select('phone_number, push_name')
+    .order('push_name', { ascending: true, nullsFirst: false });
+
+  if (error) {
+    console.error('❌ getAllLidPhoneMap error:', error.message);
+    return [];
+  }
+  return data || [];
+}
+
+// --- LOOKUP BY PHONE NUMBER (untuk fix setelah ganti nomor bot) ---
+// Cek apakah phone_number sudah terdaftar di database (langsung query, bypass cache)
+export async function getRegisteredUserByPhone(phoneNumber: string): Promise<{ push_name: string | null; lid_jid: string | null } | null> {
+  const { data, error } = await supabase
+    .from('lid_phone_map')
+    .select('push_name, lid_jid')
+    .eq('phone_number', phoneNumber)
+    .maybeSingle();
+
+  if (error) {
+    console.error('❌ getRegisteredUserByPhone error:', error.message);
+    return null;
+  }
+  return data ? { push_name: data.push_name, lid_jid: data.lid_jid } : null;
+}
+
+// Update LID untuk phone number yang sudah terdaftar (ketika bot ganti nomor, LID berubah)
+export async function updateLidForPhone(phoneNumber: string, newLidJid: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('lid_phone_map')
+    .update({ lid_jid: newLidJid, updated_at: new Date().toISOString() })
+    .eq('phone_number', phoneNumber);
+
+  if (error) {
+    console.error('❌ updateLidForPhone error:', error.message);
+    return false;
+  }
+  console.log(`✅ LID updated for ${phoneNumber}: ${newLidJid}`);
+  return true;
+}
