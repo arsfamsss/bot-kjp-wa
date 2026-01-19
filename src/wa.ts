@@ -276,7 +276,6 @@ export async function connectToWhatsApp() {
                 const receivedAt = getMessageDate(msg);
                 const tanggalWib = getWibIsoDate(receivedAt);
 
-                const closed = isSystemClosed(receivedAt);
                 const processingDayKey = getProcessingDayKey(receivedAt);
                 const mAny: any = msg.message as any;
 
