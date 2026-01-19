@@ -16,6 +16,10 @@ Bot ini menggunakan library `@whiskeysockets/baileys` dan database Supabase.
     - Jika duplikat, menampilkan data asli yang sebelumnya sudah terdaftar (Nama & NIK).
     - Pesan error "Same as other" jika nomor tertukar.
 5.  **Tampilan Mewah**: Menu dan pesan balasan menggunakan format rapi dengan emoji dan border.
+6.  **(Planned) Daftar Ulang Cepat**:
+    - Memungkinkan user mendaftar ulang menggunakan data bulan lalu.
+    - User memilih dari list history pendaftarannya sendiri.
+    - Mewajibkan konfirmasi bahwa data KTP & KK masih sama.
 
 ## 📂 Struktur Folder
 

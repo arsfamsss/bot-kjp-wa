@@ -162,7 +162,7 @@ export async function connectToWhatsApp() {
         browser: ['Ubuntu', 'Chrome', '20.0.04'], // Ubah browser info agar support pairing code
         generateHighQualityLinkPreview: true,
     });
-    
+
     // --- PAIRING CODE LOGIC ---
     // --- PAIRING CODE LOGIC (DISABLED - USE QR) ---
     /*
@@ -187,7 +187,7 @@ export async function connectToWhatsApp() {
     // FIX: Load & Save Store agar LID mapping awet (Persistent Store)
     const STORE_FILE = 'baileys_store_multi.json';
     store.readFromFile(STORE_FILE);
-    
+
     // Save store setiap 10 detik agar data tidak hilang saat restart
     setInterval(() => {
         store.writeToFile(STORE_FILE);
@@ -241,15 +241,15 @@ export async function connectToWhatsApp() {
                     // 1) Cek Cache Supabase (LID -> Phone) - FASTEST & MOST ACCURATE
                     const cachedPhone = getPhoneFromLidSync(chatJid);
                     if (cachedPhone) {
-                         senderPhone = cachedPhone;
-                         // console.log(`⚡ Hit Cache LID: ${chatJid} -> ${senderPhone}`);
+                        senderPhone = cachedPhone;
+                        // console.log(`⚡ Hit Cache LID: ${chatJid} -> ${senderPhone}`);
                     } else {
                         // 2) Cek Store Baileys (Fallback)
                         const storePhone = getPhoneFromLid(chatJid);
                         if (storePhone) {
                             senderPhone = storePhone.replace('@s.whatsapp.net', '');
                             // Simpan ke Supabase agar persistent
-                            upsertLidPhoneMap({ lid_jid: chatJid, phone_number: senderPhone, push_name: null }).catch(() => {});
+                            upsertLidPhoneMap({ lid_jid: chatJid, phone_number: senderPhone, push_name: null }).catch(() => { });
                         } else {
                             // 3) Fallback ke Supabase Async (siapa tahu cache belum ke-load sempurna)
                             const mapped = await getPhoneByLidJid(chatJid);
@@ -293,10 +293,11 @@ export async function connectToWhatsApp() {
                     mAny?.templateButtonReplyMessage?.selectedId;
 
                 const rawInput = selectedRowId || selectedButtonId || messageText;
-                
+
                 // Jika pesan adalah gambar/video tanpa caption, beritahu user
                 if (!rawInput && (mAny?.imageMessage || mAny?.videoMessage)) {
-                    await sock.sendMessage(remoteJid, { text: `⚠️ Maaf, saya tidak bisa membaca gambar/foto
+                    await sock.sendMessage(remoteJid, {
+                        text: `⚠️ Maaf, saya tidak bisa membaca gambar/foto
 
 Format yang diterima seperti ini:
 Kirim data dengan urutan 4 baris kebawah:
@@ -328,14 +329,36 @@ Dan seterusnya.
 Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                     continue;
                 }
-                
+
                 if (!rawInput) continue;
+
+                const closed = isSystemClosed(receivedAt);
+
+                // 🛑 CEK JAM TUTUP (PRIORITAS UTAMA)
+                // Jika tutup, langsung tolak (kecuali Admin)
+                if (closed && !isAdmin) {
+                    await sock.sendMessage(remoteJid, {
+                        text: [
+                            '⛔ *MOHON MAAF, SISTEM SEDANG TUTUP*',
+                            '(Maintenance Harian)',
+                            '',
+                            '🕒 Jam Tutup: *04.01 - 06.00 WIB*',
+                            '✅ Buka Kembali: *Pukul 06.01 WIB*',
+                            '',
+                            '📌 Data yang Anda kirim sekarang *tidak akan diproses*.',
+                            'Silakan kirim ulang setelah jam buka untuk pendaftaran besok.',
+                            '',
+                            '_Terima kasih atas pengertiannya._ 🙏'
+                        ].join('\n')
+                    });
+                    continue; // STOP PROCESSING
+                }
 
                 // ✅ KHUSUS AKUN @lid: kalau belum ada mapping nomor, minta user ketik nomor manual
                 // PENTING: Hanya proses jika input SATU BARIS (bukan data sembako multi-baris)
                 const inputLines = String(rawInput).trim().split('\n').filter(l => l.trim());
                 const isSingleLineInput = inputLines.length === 1;
-                
+
                 if (senderIsLid && (!senderPhone || senderPhone === chatJid.replace('@lid', '')) && isSingleLineInput) {
                     // Cek format NAMA#NOMOR atau NAMA NOMOR (Space)
                     let candidatePhone: string | null = null;
@@ -351,13 +374,13 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             // Nomor sudah ada tapi LID berbeda - ini kemungkinan user pindah device/bot ganti nomor
                             // UPDATE LID-nya agar user bisa lanjut pakai
                             await updateLidForPhone(phoneFound, chatJid);
-                            await sock.sendMessage(remoteJid, { 
-                                text: `✅ Selamat datang kembali!\nNomor Anda (${phoneFound}) sudah dikenali.\n\nSilakan kirim pesan lagi (ketik MENU atau langsung kirim data).` 
+                            await sock.sendMessage(remoteJid, {
+                                text: `✅ Selamat datang kembali!\nNomor Anda (${phoneFound}) sudah dikenali.\n\nSilakan kirim pesan lagi (ketik MENU atau langsung kirim data).`
                             });
                             // PENTING: continue di sini, agar pada pesan berikutnya LID sudah ter-mapping
                             continue;
                         }
-                        
+
                         candidatePhone = phoneFound;
                         // Ambil nama: hapus nomor dari text (termasuk format 08xxx dan 628xxx)
                         const phoneOriginal = phoneFound.replace('62', '0'); // 6285xxx -> 085xxx
@@ -406,10 +429,10 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                     if (dbLookup && dbLookup.push_name) {
                         existingName = dbLookup.push_name;
                         console.log(`✅ User ditemukan via DB lookup: ${senderPhone} -> ${existingName}`);
-                        
+
                         // Auto-update LID jika berubah 
                         if (dbLookup.lid_jid && dbLookup.lid_jid !== chatJid && chatJid.includes('@lid')) {
-                             await updateLidForPhone(senderPhone, chatJid);
+                            await updateLidForPhone(senderPhone, chatJid);
                         }
                     }
                 }
@@ -421,50 +444,50 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                 // --- LOGIC VERIFIKASI USER BARU ---
                 // Jika belum terdaftar, cek apakah user kirim Nomor HP untuk verifikasi?
                 if (!existingName) {
-                     // Cek input apakah murni angka/nomor hp?
-                     const possiblePhoneVerify = extractManualPhone(rawTrim.split('\n')[0]);
-                     
-                     // Syarat: Input adalah nomor HP, hanya 1 baris, dan pendek (bukan setoran)
-                     if (possiblePhoneVerify && rawTrim.split('\n').length === 1 && rawTrim.length < 50) {
-                         // Validasi format nomor
-                         if (isValidIdPhone(possiblePhoneVerify)) {
-                             // Cek apakah nomor ini ada di DB?
-                             const targetUser = await getRegisteredUserByPhone(possiblePhoneVerify);
-                             
-                             let finalName = '';
-                             if (targetUser && targetUser.push_name) {
-                                 finalName = targetUser.push_name;
-                                 console.log(`♻️ Verifikasi LID (Existing): ${chatJid} -> ${possiblePhoneVerify} (${finalName})`);
-                             } else {
-                                 finalName = msg.pushName || 'User Baru';
-                                 console.log(`🆕 Verifikasi LID (New): ${chatJid} -> ${possiblePhoneVerify} (Name: ${finalName})`);
-                             }
+                    // Cek input apakah murni angka/nomor hp?
+                    const possiblePhoneVerify = extractManualPhone(rawTrim.split('\n')[0]);
 
-                             // SIMPAN / UPDATE MAPPING
-                             await upsertLidPhoneMap({
-                                 lid_jid: chatJid,
-                                 phone_number: possiblePhoneVerify,
-                                 push_name: finalName
-                             });
+                    // Syarat: Input adalah nomor HP, hanya 1 baris, dan pendek (bukan setoran)
+                    if (possiblePhoneVerify && rawTrim.split('\n').length === 1 && rawTrim.length < 50) {
+                        // Validasi format nomor
+                        if (isValidIdPhone(possiblePhoneVerify)) {
+                            // Cek apakah nomor ini ada di DB?
+                            const targetUser = await getRegisteredUserByPhone(possiblePhoneVerify);
 
-                             // Update Context Saat Ini
-                             senderPhone = possiblePhoneVerify;
-                             existingName = finalName;
+                            let finalName = '';
+                            if (targetUser && targetUser.push_name) {
+                                finalName = targetUser.push_name;
+                                console.log(`♻️ Verifikasi LID (Existing): ${chatJid} -> ${possiblePhoneVerify} (${finalName})`);
+                            } else {
+                                finalName = msg.pushName || 'User Baru';
+                                console.log(`🆕 Verifikasi LID (New): ${chatJid} -> ${possiblePhoneVerify} (Name: ${finalName})`);
+                            }
 
-                             // Reply Sukses & Panduan Input
-                             const exampleFormat = `Budi\n5049488500001111\n3173444455556666\n3173555566667777`;
-                             const exampleFormat2 = `Budi\nKjp 5049488500001111\nKtp 3173444455556666\nKk 3173555566667777`;
+                            // SIMPAN / UPDATE MAPPING
+                            await upsertLidPhoneMap({
+                                lid_jid: chatJid,
+                                phone_number: possiblePhoneVerify,
+                                push_name: finalName
+                            });
 
-                             await sock.sendMessage(remoteJid, { 
-                                 text: `✅ *Nomor kamu sudah dicatat: ${possiblePhoneVerify}*\nSilakan lanjut.\n\n` +
-                                       `📋 *Selanjutnya silakan kirim data yang akan didaftarkan dengan format seperti ini:*\n\n` +
-                                       `1. Nama\n2. Nomor Kartu\n3. Nomor KTP (NIK)\n4. Nomor KK\n\n` +
-                                       `*Contoh 1:*\n${exampleFormat}\n\n` +
-                                       `*Contoh 2:*\n` + exampleFormat2
-                             });
-                             return; // Stop disini agar user baca panduan
-                         }
-                     }
+                            // Update Context Saat Ini
+                            senderPhone = possiblePhoneVerify;
+                            existingName = finalName;
+
+                            // Reply Sukses & Panduan Input
+                            const exampleFormat = `Budi\n5049488500001111\n3173444455556666\n3173555566667777`;
+                            const exampleFormat2 = `Budi\nKjp 5049488500001111\nKtp 3173444455556666\nKk 3173555566667777`;
+
+                            await sock.sendMessage(remoteJid, {
+                                text: `✅ *Nomor kamu sudah dicatat: ${possiblePhoneVerify}*\nSilakan lanjut.\n\n` +
+                                    `📋 *Selanjutnya silakan kirim data yang akan didaftarkan dengan format seperti ini:*\n\n` +
+                                    `1. Nama\n2. Nomor Kartu\n3. Nomor KTP (NIK)\n4. Nomor KK\n\n` +
+                                    `*Contoh 1:*\n${exampleFormat}\n\n` +
+                                    `*Contoh 2:*\n` + exampleFormat2
+                            });
+                            return; // Stop disini agar user baca panduan
+                        }
+                    }
                 }
 
                 // --- AUTO-REGISTER LOGIC (STRICT) ---
@@ -488,7 +511,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                         return; // STOP PROCESSING
                     }
                 }
-                
+
                 let replyText = '';
 
                 // Helper for Date Parsing
@@ -516,7 +539,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                 // --- MENU USER LOGIC ---
                 // Helper to render check data result
                 const renderCheckDataResult = async (targetDate: string, dateLabel: string) => {
-                   try {
+                    try {
                         const { validCount, totalInvalid, detailItems, validItems } = await getTodayRecapForSender(
                             senderPhone,
                             targetDate
@@ -527,10 +550,10 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                         } else {
                             return `📄 *CEK DATA (${dateLabel} ${dDate})*\n\nAnda belum kirim data pada tanggal tersebut.`;
                         }
-                   } catch (err) {
-                       console.error(err);
-                       return '❌ Gagal mengambil data.';
-                   }
+                    } catch (err) {
+                        console.error(err);
+                        return '❌ Gagal mengambil data.';
+                    }
                 };
 
                 const currentUserFlow = userFlowByPhone.get(senderPhone) || 'NONE';
@@ -539,7 +562,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                 if (currentUserFlow !== 'NONE' && (normalized === '0' || isGreetingOrMenu(normalized))) {
                     userFlowByPhone.set(senderPhone, 'NONE');
                     // Lanjut ke handler menu utama di bawah
-                } 
+                }
                 else if (currentUserFlow === 'CHECK_DATA_MENU') {
                     if (normalized === '1') {
                         // CEK HARI INI
@@ -577,19 +600,19 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                     // Logic processing input angka untuk hapus
                     const choice = parseInt(normalized);
                     if (isNaN(choice)) {
-                         replyText = '⚠️ Mohon ketik angka nomor urut yang ingin dihapus. Ketik 0 untuk batal.';
+                        replyText = '⚠️ Mohon ketik angka nomor urut yang ingin dihapus. Ketik 0 untuk batal.';
                     } else if (choice === 0) {
                         userFlowByPhone.set(senderPhone, 'NONE');
                         replyText = '✅ Penghapusan data dibatalkan.';
                     } else {
                         // Coba hapus
-                         const res = await deleteDailyDataByIndex(senderPhone, processingDayKey, choice);
-                         if (res.success) {
-                             replyText = `✅ Sukses menghapus data: *${res.deletedName}*`;
-                             userFlowByPhone.set(senderPhone, 'NONE');
-                         } else {
-                             replyText = '❌ Gagal menghapus. Pastikan nomor urut benar dan coba lagi.';
-                         }
+                        const res = await deleteDailyDataByIndex(senderPhone, processingDayKey, choice);
+                        if (res.success) {
+                            replyText = `✅ Sukses menghapus data: *${res.deletedName}*`;
+                            userFlowByPhone.set(senderPhone, 'NONE');
+                        } else {
+                            replyText = '❌ Gagal menghapus. Pastikan nomor urut benar dan coba lagi.';
+                        }
                     }
                     if (replyText) {
                         await sock.sendMessage(remoteJid, { text: replyText });
@@ -637,7 +660,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
 
                 // --- MENU ADMIN ---
                 const dmyExample = processingDayKey.split('-').reverse().join('-');
-                
+
                 const getPastKey = (daysBack: number) => shiftIsoDate(processingDayKey, -daysBack);
                 const currentAdminFlow = adminFlowByPhone.get(senderPhone) ?? 'NONE';
 
@@ -690,10 +713,10 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                         } else if (normalized === '10') {
                             adminFlowByPhone.set(senderPhone, 'DELETE_CONTACT');
                             const allContacts = await getAllLidPhoneMap();
-                            
+
                             // SIMPAN SNAPSHOT KE CACHE
                             adminContactCache.set(senderPhone, allContacts);
-                            
+
                             if (allContacts.length === 0) {
                                 replyText = '📂 Tidak ada kontak untuk dihapus.';
                                 adminFlowByPhone.set(senderPhone, 'MENU');
@@ -731,12 +754,12 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                 replyText = '📂 Belum ada kontak terdaftar.';
                             } else {
                                 await sock.sendMessage(remoteJid, { text: `📂 *DAFTAR SEMUA KONTAK (${allContacts.length})*` });
-                                
+
                                 let currentMsg = '';
                                 for (let i = 0; i < allContacts.length; i++) {
                                     const c = allContacts[i];
                                     const line = `${i + 1}. ${c.push_name || '(Tanpa Nama)'} (${c.phone_number})\n`;
-                                    
+
                                     if (currentMsg.length + line.length > 3000) {
                                         await sock.sendMessage(remoteJid, { text: currentMsg });
                                         currentMsg = '';
@@ -753,7 +776,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             // FEATURE: STATISTIK DASHBOARD
                             const stats = await getStatistics(processingDayKey);
                             const displayDate = processingDayKey.split('-').reverse().join('-');
-                            
+
                             const lines = [
                                 '📊 *STATISTIK DASHBOARD*',
                                 `📅 Per Tanggal: ${displayDate}`,
@@ -768,7 +791,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                 `├ 7 Hari Terakhir: *${stats.activeUsersWeek}* orang`,
                                 `└ Total Terdaftar: *${stats.totalRegisteredUsers}* orang`,
                             ];
-                            
+
                             if (stats.topUsers.length > 0) {
                                 lines.push('');
                                 lines.push('🏆 *TOP 10 PENGIRIM HARI INI:*');
@@ -777,7 +800,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                     lines.push(`${medal} ${i + 1}. ${u.name} (${u.count} data)`);
                                 });
                             }
-                            
+
                             replyText = lines.join('\n');
                         } else if (normalized === '14') {
                             // FEATURE: CARI DATA
@@ -802,7 +825,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                 .eq('processing_day_key', processingDayKey)
                                 .order('received_at', { ascending: false })
                                 .limit(50);
-                            
+
                             if (error || !logs || logs.length === 0) {
                                 replyText = '📋 Belum ada aktivitas hari ini.';
                             } else {
@@ -813,39 +836,39 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                     `📊 Menampilkan: ${logs.length} aktivitas terakhir`,
                                     ''
                                 ];
-                                
+
                                 (logs as any[]).forEach((log, i) => {
-                                    const timeStr = new Date(log.received_at).toLocaleTimeString('id-ID', { 
-                                        hour: '2-digit', 
+                                    const timeStr = new Date(log.received_at).toLocaleTimeString('id-ID', {
+                                        hour: '2-digit',
                                         minute: '2-digit',
                                         timeZone: 'Asia/Jakarta'
                                     });
                                     const senderName = getRegisteredUserNameSync(log.sender_phone) || log.sender_phone;
-                                    
+
                                     // FIX: Ambil dari kolom database langsung, bukan dari property .stats yang mungkin tidak ada di level root row
                                     const okCount = log.stats_ok_count ?? 0;
                                     const totalBlocks = log.stats_total_blocks ?? 0;
                                     const failCount = totalBlocks - okCount;
-                                    
+
                                     let statusIcon = '✅';
                                     if (failCount > 0 && okCount === 0) statusIcon = '❌';
                                     else if (failCount > 0) statusIcon = '⚠️';
-                                    
+
                                     lines.push(`${i + 1}. ${statusIcon} *${senderName}* (${timeStr})`);
                                     lines.push(`   📥 ${totalBlocks} data | ✅ ${okCount} OK | ❌ ${failCount} Gagal`);
                                 });
-                                
+
                                 replyText = lines.join('\n');
                             }
                         } else if (normalized === '16') {
                             // FEATURE: EXPORT DATA (CSV & TXT)
                             await sock.sendMessage(remoteJid, { text: '⏳ Sedang menyiapkan file export...' });
-                            
+
                             // Helper untuk lookup nama (bisa pakai registeredUsersCache)
                             const lookupName = (ph: string) => getRegisteredUserNameSync(ph) || undefined;
-                            
+
                             const exportResult = await generateExportData(processingDayKey, lookupName);
-                            
+
                             if (!exportResult || exportResult.count === 0) {
                                 replyText = '📂 Belum ada data pendaftaran hari ini untuk diexport.';
                             } else {
@@ -857,7 +880,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                     fileName: `${exportResult.filenameBase}.csv`,
                                     caption: `📊 Export CSV (${exportResult.count} data)`
                                 });
-                                
+
                                 // Kirim TXT
                                 const txtBuffer = Buffer.from(exportResult.txt, 'utf-8');
                                 await sock.sendMessage(remoteJid, {
@@ -866,7 +889,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                     fileName: `${exportResult.filenameBase}.txt`,
                                     caption: `📄 Export TXT (${exportResult.count} data)`
                                 });
-                                
+
                                 replyText = '✅ Export data selesai.';
                             }
                         } else replyText = '⚠️ Pilihan tidak dikenali.';
@@ -875,7 +898,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                         const q = rawTrim;
                         const qUpper = q.toUpperCase();
                         const digits = q.replace(/\D/g, '');
-                        
+
                         // Cari nomor HP dari nama kontak WA yang cocok
                         const matchedPhones: string[] = [];
                         const allContacts = await getAllLidPhoneMap();
@@ -884,13 +907,13 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                 matchedPhones.push(c.phone_number);
                             }
                         });
-                        
+
                         let query = supabase
                             .from('data_harian')
                             .select('*')
                             .order('received_at', { ascending: false })
                             .limit(30);
-                        
+
                         // Build OR condition
                         const orParts: string[] = [];
                         if (q.length >= 2) orParts.push(`nama.ilike.%${qUpper}%`);
@@ -903,12 +926,12 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                         matchedPhones.forEach(phone => {
                             orParts.push(`sender_phone.eq.${phone}`);
                         });
-                        
+
                         if (orParts.length === 0) {
                             replyText = '⚠️ Keyword terlalu pendek. Minimal 2 huruf atau 4 digit.';
                         } else {
                             const { data, error } = await query.or(orParts.join(','));
-                            
+
                             if (error || !data || data.length === 0) {
                                 replyText = `❌ *DATA TIDAK DITEMUKAN*\nKeyword: "${q}"`;
                             } else {
@@ -917,7 +940,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                     `📊 Ditemukan: ${data.length} data (max 30)`,
                                     ''
                                 ];
-                                
+
                                 (data as any[]).forEach((row, i) => {
                                     const dateDisplay = String(row.processing_day_key).split('-').reverse().join('-');
                                     const senderName = getRegisteredUserNameSync(row.sender_phone) || row.sender_phone;
@@ -926,7 +949,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                     lines.push(`   📱 Pengirim: ${senderName}`);
                                     lines.push('');
                                 });
-                                
+
                                 replyText = lines.join('\n');
                             }
                         }
@@ -991,7 +1014,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             // Coba parse index: "1, 2, 5" atau "1 2 5"
                             const parts = rawTrim.split(/[,\s]+/);
                             const indices = parts.map((p: string) => parseInt(p.trim())).filter((n: number) => !isNaN(n) && n > 0);
-                            
+
                             // Jika input terlihat seperti daftar angka (index), gunakan logic delete by index
                             // Syarat: minimal 1 angka valid dan input tidak terlalu panjang (bukan nomor HP)
                             const looksLikeIndex = indices.length > 0 && (indices.length > 1 || String(indices[0]).length < 5);
@@ -999,15 +1022,15 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             if (looksLikeIndex) {
                                 // AMBIL DARI CACHE (SNAPSHOT) AGAR INDEX TIDAK BERGESER
                                 let contactsList = adminContactCache.get(senderPhone);
-                                
+
                                 // Fallback: Jika cache kosong (misal bot restart), fetch baru
                                 if (!contactsList || contactsList.length === 0) {
                                     contactsList = await getAllLidPhoneMap();
                                 }
-                                
+
                                 let successCount = 0;
                                 let deletedNames: string[] = [];
-                                
+
                                 for (const idx of indices) {
                                     const target = contactsList[idx - 1]; // 0-based
                                     if (target) {
@@ -1019,13 +1042,13 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                         }
                                     }
                                 }
-                                
+
                                 if (successCount > 0) {
                                     replyText = `✅ Berhasil menghapus ${successCount} kontak:\n- ${deletedNames.join('\n- ')}`;
                                 } else {
                                     replyText = '❌ Gagal menghapus atau nomor urut salah/sudah terhapus.';
                                 }
-                                
+
                                 // Bersihkan cache setelah selesai
                                 adminContactCache.delete(senderPhone);
                                 adminFlowByPhone.set(senderPhone, 'MENU');
@@ -1044,7 +1067,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                     } else if (currentAdminFlow === 'BROADCAST_SELECT') {
                         if (normalized === '1') {
                             // SEMUA kontak
-                            broadcastDraftMap.set(senderPhone, { targets: [], message: '' }); 
+                            broadcastDraftMap.set(senderPhone, { targets: [], message: '' });
                             adminFlowByPhone.set(senderPhone, 'BROADCAST_MSG');
                             replyText = ['📢 *BROADCAST KE SEMUA*', '', 'Ketik pesan yang akan dikirim:', '', '_(Ketik 0 untuk batal)_'].join('\n');
                         } else if (normalized === '2') {
@@ -1070,7 +1093,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             replyText = '⚠️ Pesan terlalu pendek. Batal broadcast tekan 0.';
                         } else {
                             const draft = broadcastDraftMap.get(senderPhone) || { targets: [], message: '' };
-                            
+
                             let targetsToSend: string[] = [];
                             let messageToSend = rawTrim;
 
@@ -1079,20 +1102,20 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                 // User kirim "Nomor\nPesan"
                                 const lines = rawTrim.split('\n');
                                 const firstLine = lines[0] || '';
-                                
+
                                 const phoneMatches = firstLine.match(/(?:\+?62|0)\s*8[\d\s\-\.]{8,15}/g) || [];
                                 const normalizedPhones = phoneMatches.map((p: string) => {
                                     let s = p.replace(/[^\d]/g, '');
                                     if (s.startsWith('0')) s = '62' + s.slice(1);
                                     return s;
                                 }).filter((p: string) => p.length >= 10);
-                                
+
                                 if (normalizedPhones.length === 0) {
                                     replyText = '⚠️ Nomor HP tidak ditemukan. Ulangi format:\n08123, 08234\nPesan Anda...';
                                     await sock.sendMessage(remoteJid, { text: replyText });
                                     continue;
                                 }
-                                
+
                                 targetsToSend = normalizedPhones;
                                 messageToSend = lines.slice(1).join('\n').trim();
                             } else {
@@ -1111,12 +1134,12 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             // UPDATE DRAFT
                             draft.targets = targetsToSend;
                             draft.message = messageToSend;
-                            draft.isPendingNumbers = false; 
+                            draft.isPendingNumbers = false;
                             broadcastDraftMap.set(senderPhone, draft);
 
                             // SHOW PREVIEW
                             adminFlowByPhone.set(senderPhone, 'BROADCAST_PREVIEW');
-                            
+
                             replyText = [
                                 '🔍 *PREVIEW BROADCAST*',
                                 '',
@@ -1132,30 +1155,30 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             ].join('\n');
                         }
                     } else if (currentAdminFlow === 'BROADCAST_PREVIEW') {
-                         const draft = broadcastDraftMap.get(senderPhone);
-                         if (!draft || draft.targets.length === 0) {
-                             replyText = '❌ Data broadcast hilang. Silakan ulangi.';
-                             adminFlowByPhone.set(senderPhone, 'MENU');
-                         } else if (normalized === '1') {
-                             // --- KIRIM SEKARANG ---
-                             await executeBroadcast(sock, draft, remoteJid, senderPhone);
-                             adminFlowByPhone.set(senderPhone, 'MENU');
-                         } else if (normalized === '2') {
-                             // --- JADWALKAN ---
-                             replyText = '📅 Masukkan Tanggal & Jam (Format: DD-MM-YYYY HH:mm)\nContoh: 15-01-2026 08:30';
-                             adminFlowByPhone.set(senderPhone, 'BROADCAST_SCHEDULE');
-                         } else {
-                             replyText = '❌ Broadcast dibatalkan.';
-                             adminFlowByPhone.set(senderPhone, 'MENU');
-                             broadcastDraftMap.delete(senderPhone);
-                         }
+                        const draft = broadcastDraftMap.get(senderPhone);
+                        if (!draft || draft.targets.length === 0) {
+                            replyText = '❌ Data broadcast hilang. Silakan ulangi.';
+                            adminFlowByPhone.set(senderPhone, 'MENU');
+                        } else if (normalized === '1') {
+                            // --- KIRIM SEKARANG ---
+                            await executeBroadcast(sock, draft, remoteJid, senderPhone);
+                            adminFlowByPhone.set(senderPhone, 'MENU');
+                        } else if (normalized === '2') {
+                            // --- JADWALKAN ---
+                            replyText = '📅 Masukkan Tanggal & Jam (Format: DD-MM-YYYY HH:mm)\nContoh: 15-01-2026 08:30';
+                            adminFlowByPhone.set(senderPhone, 'BROADCAST_SCHEDULE');
+                        } else {
+                            replyText = '❌ Broadcast dibatalkan.';
+                            adminFlowByPhone.set(senderPhone, 'MENU');
+                            broadcastDraftMap.delete(senderPhone);
+                        }
                     } else if (currentAdminFlow === 'BROADCAST_SCHEDULE') {
                         // Parse Time
                         const targetTimeStr = rawTrim; // DD-MM-YYYY HH:mm
                         try {
                             const [datePart, timePart] = targetTimeStr.split(' ');
                             if (!datePart || !timePart) throw new Error('Format salah');
-                            
+
                             // Convert DD-MM-YYYY to YYYY-MM-DD
                             const [dd, mm, yyyy] = datePart.split('-');
                             if (!dd || !mm || !yyyy) throw new Error('Date format');
@@ -1175,7 +1198,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                 if (draft) {
                                     // Set Timeout
                                     replyText = `✅ Broadcast dijadwalkan pada *${targetTimeStr}*.\n\n⚠️ _(PERHATIAN: Jadwal akan hilang jika Bot restart)_`;
-                                    
+
                                     setTimeout(() => {
                                         executeBroadcast(sock, draft, remoteJid, senderPhone).catch(console.error);
                                     }, delay);
@@ -1254,9 +1277,9 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                 } else if (normalized === '3' || normalized.includes('HAPUS DATA')) {
                     pendingDelete.delete(senderPhone); // disable old logic
                     const { validCount, validItems } = await getTodayRecapForSender(senderPhone, processingDayKey);
-                    
+
                     if (validCount === 0) {
-                         replyText = '⚠️ Anda belum mengirim data pendaftaran hari ini.';
+                        replyText = '⚠️ Anda belum mengirim data pendaftaran hari ini.';
                     } else {
                         userFlowByPhone.set(senderPhone, 'DELETE_DATA');
                         const list = validItems.map((item, idx) => `${idx + 1}. ${item.nama} (${item.no_kjp})`).join('\n');
@@ -1273,7 +1296,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                 } else if (normalized === 'BATAL' || normalized === 'CANCEL' || normalized === 'UNDO') {
                     // FITUR BATAL: Hapus data terakhir dalam 30 menit
                     const result = await deleteLastSubmission(senderPhone, processingDayKey, 30);
-                    
+
                     if (result.success && result.count > 0) {
                         const namesStr = result.names.join(', ');
                         replyText = [
@@ -1304,21 +1327,6 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                     // Parser akan memisahkan valid blocks dan remainder.
                     const lines = parseRawMessageToLines(messageText);
                     if (lines.length >= 4) {
-                        if (closed && !isAdmin) {
-                            await sock.sendMessage(remoteJid, { text: [
-                                '⛔ *MOHON MAAF, SISTEM SEDANG TUTUP*',
-                                '(Maintenance Harian)',
-                                '',
-                                '🕒 Jam Tutup: *04.01 - 06.00 WIB*',
-                                '✅ Buka Kembali: *Pukul 06.01 WIB*',
-                                '',
-                                '📌 Data yang Anda kirim sekarang *tidak akan diproses*.',
-                                'Silakan kirim ulang setelah jam buka untuk pendaftaran besok.',
-                                '',
-                                '_Terima kasih atas pengertiannya._ 🙏'
-                            ].join('\n') });
-                            continue;
-                        }
                         const logJson = await processRawMessageToLogJson({
                             text: messageText,
                             senderPhone,
@@ -1327,13 +1335,13 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             tanggal: tanggalWib,
                             processingDayKey,
                         });
-                        
+
                         // INJECT SENDER NAME (untuk disimpan di tabe data_harian)
                         logJson.sender_name = existingName || undefined;
 
                         if (logJson.stats.total_blocks > 0 || (logJson.failed_remainder_lines && logJson.failed_remainder_lines.length > 0)) {
                             await saveLogAndOkItems(logJson, messageText);
-                            
+
                             // Hitung total data hari ini SETELAH data disimpan
                             const totalDataToday = await getTotalDataTodayForSender(senderPhone, processingDayKey);
                             replyText = buildReplyForNewData(logJson, totalDataToday);
@@ -1353,7 +1361,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                     } else {
                         // Cek apakah ini percobaan kirim data dengan format salah
                         const inputLineCount = parseRawMessageToLines(messageText).length;
-                        
+
                         if (inputLineCount >= 1 && inputLineCount <= 3) {
                             // 1-3 baris = format salah
                             const formatGuide = `⚠️ *FORMAT SALAH*
