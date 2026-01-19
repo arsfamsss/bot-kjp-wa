@@ -124,19 +124,31 @@ export function buildReplyForTodayRecap(
   const displayDate = processingDayKey.split('-').reverse().join('-');
 
   const lines: string[] = [];
+  lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   lines.push(`🔎 *STATUS DATA HARI INI*`);
-  lines.push(`📅 Periode: ${displayDate} (06.01–04.00 WIB)`);
+  lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  lines.push('');
+  lines.push(`📅 Periode: *${displayDate}* (06.01–04.00 WIB)`);
   lines.push('');
   lines.push(`✅ *Data Terdaftar: ${validCount} Orang*`);
 
   if (validItems.length > 0) {
+    lines.push('');
     validItems.forEach((item, i) => {
-      lines.push(`   ${i + 1}. ${item.nama}`);
-      lines.push(`      No Kartu ${item.no_kjp}`);
-      lines.push(`      No Ktp ${item.no_ktp}`);
-      lines.push(`      No Kk  ${item.no_kk}`);
+      lines.push(`┌── ${i + 1}. *${item.nama}*`);
+      lines.push(`│   📇 Kartu : ${item.no_kjp}`);
+      lines.push(`│   🪪 KTP   : ${item.no_ktp}`);
+      lines.push(`└── 🏠 KK    : ${item.no_kk}`);
+      if (i < validItems.length - 1) lines.push('');
     });
+  } else {
+    lines.push('');
+    lines.push('_Belum ada data terdaftar hari ini._');
   }
+
+  lines.push('');
+  lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  lines.push('💡 _Ketik *MENU* untuk kembali._');
 
   return lines.join('\n');
 }
