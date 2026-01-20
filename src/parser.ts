@@ -75,8 +75,9 @@ export function parseRawMessageToLines(text: string): string[] {
       // FIX: Jangan split jika Text bagian depan sepertinya adalah LABEL umum
       // Contoh: "NIK 3173..." -> Jangan split jadi "NIK" dan "3173..."
       const candidateName = match[1].trim();
-      // Expanded label aliases: KTP/NIK, NOMER, NOMOR, NO, dll.
-      const isLabel = /^(NIK|KTP|KK|KJP|KARTU|NO\s*(?:KTP|NIK|KK|KJP|KARTU)|NOMER\s*(?:KTP|NIK|KK|KJP|KARTU)|NOMOR\s*(?:KTP|NIK|KK|KJP|KARTU)|KTP\/NIK|KTP\/NO|NIK\/KTP)[:\s]*$/i.test(candidateName);
+      // Cek apakah candidateName MENGANDUNG kata kunci label umum (lebih fleksibel)
+      // Termasuk: ATM, KTP, NIK, KK, KJP, KARTU, KELUARGA, NO, NOMOR, NOMER
+      const isLabel = /\b(NIK|KTP|KK|KJP|KARTU|KELUARGA|ATM|NO|NOMOR|NOMER)\b/i.test(candidateName);
 
       if (isLabel) {
         // Ini kemungkinan format "NIK 123456...", jangan displit
