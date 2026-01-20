@@ -24,30 +24,16 @@ function cleanName(text: string): string {
 
 /**
  * Membersihkan nomor:
- * - Hapus label umum (No KTP, NIK, KJP, KK, Nama, dll) DULU
  * - Baru konversi huruf O/o menjadi 0 (hanya di bagian angka)
  * - Hanya ambil ANGKA (0-9)
  */
 export function extractDigits(input: string): string {
   if (!input) return '';
-  
-  // 1. Hapus label umum DULU sebelum konversi O→0
-  //    Ini mencegah huruf "O" dari "No KTP", "NOMOR", dll ikut jadi angka 0
-  let cleaned = input
-    // Label dengan "No/Nomor/Nomer" + kata kunci
-    .replace(/^[\s]*(no\.?|nomor|nomer)[\s]*:?[\s]*/gi, '')
-    // Label tunggal: KTP, NIK, KK, KJP, KARTU, NAMA (dengan optional : atau spasi)
-    .replace(/^[\s]*(ktp|nik|kk|kjp|kartu|nama|ktp\/nik|nik\/ktp)[\s]*:?[\s]*/gi, '')
-    // Kombinasi label (No KTP, No NIK, dll)
-    .replace(/^[\s]*(no\.?|nomor|nomer)[\s]*(ktp|nik|kk|kjp|kartu)[\s]*:?[\s]*/gi, '');
-  
-  // 2. Strip semua spasi
-  cleaned = cleaned.replace(/\s+/g, '');
-  
-  // 3. Ganti huruf O/o dengan angka 0 (sekarang aman karena label sudah dihapus)
-  cleaned = cleaned.replace(/[Oo]/g, '0');
-  
-  // 4. Ambil hanya angka
+
+  // Ganti huruf O/o dengan angka 0 terlebih dahulu
+  let cleaned = input.replace(/[Oo]/g, '0');
+
+  // Ambil HANYA angka, abaikan semua huruf/label/tanda baca apapun
   return (cleaned.match(/\d+/g) || []).join('');
 }
 
@@ -81,24 +67,24 @@ export function parseRawMessageToLines(text: string): string[] {
     // Cek apakah baris ini "Name + KJP" yang nempel?
     // Contoh: "Agus Dalimin 5049488500001111"
     const match = line.match(mergedRegex);
-    
+
     // Tapi hati-hati, jangan split jika itu cuma angka (misal user kirim angka doang tapi ada spasi di depan)
     // Pastikan grup 1 (Nama) mengandung huruf minimal 2
     if (match && /[a-zA-Z]{2,}/.test(match[1])) {
-      
+
       // FIX: Jangan split jika Text bagian depan sepertinya adalah LABEL umum
       // Contoh: "NIK 3173..." -> Jangan split jadi "NIK" dan "3173..."
       const candidateName = match[1].trim();
       // Expanded label aliases: KTP/NIK, NOMER, NOMOR, NO, dll.
       const isLabel = /^(NIK|KTP|KK|KJP|KARTU|NO\s*(?:KTP|NIK|KK|KJP|KARTU)|NOMER\s*(?:KTP|NIK|KK|KJP|KARTU)|NOMOR\s*(?:KTP|NIK|KK|KJP|KARTU)|KTP\/NIK|KTP\/NO|NIK\/KTP)[:\s]*$/i.test(candidateName);
-      
+
       if (isLabel) {
-         // Ini kemungkinan format "NIK 123456...", jangan displit
-         finalLines.push(line);
+        // Ini kemungkinan format "NIK 123456...", jangan displit
+        finalLines.push(line);
       } else {
-         // Beneran nama nempel
-         finalLines.push(candidateName); 
-         finalLines.push(match[2].trim()); // Nomor
+        // Beneran nama nempel
+        finalLines.push(candidateName);
+        finalLines.push(match[2].trim()); // Nomor
       }
     } else {
       finalLines.push(line);
@@ -111,7 +97,7 @@ export function parseRawMessageToLines(text: string): string[] {
 export function groupLinesToBlocks(lines: string[]): { blocks: string[][]; remainder: string[] } {
   const blocks: string[][] = [];
   const validChunkCount = Math.floor(lines.length / 4);
-  
+
   for (let i = 0; i < validChunkCount; i++) {
     const chunk = lines.slice(i * 4, (i * 4) + 4);
     blocks.push(chunk);
@@ -119,7 +105,7 @@ export function groupLinesToBlocks(lines: string[]): { blocks: string[][]; remai
 
   // Sisa baris yang tidak cukup 4 (gantung)
   const remainder = lines.slice(validChunkCount * 4);
-  
+
   return { blocks, remainder };
 }
 
@@ -175,6 +161,21 @@ export function validateBlockToItem(block: string[], index: number): LogItem {
     });
   }
 
+  // VALIDASI: Deteksi urutan terbalik (KK di baris 3, KTP di baris 4)
+  // Cek apakah baris 3 mengandung label "KK" dan baris 4 mengandung label "KTP"
+  const line3 = block[2]?.toLowerCase() || '';
+  const line4 = block[3]?.toLowerCase() || '';
+  const line3HasKK = /\b(kk|kartu\s*keluarga)\b/.test(line3);
+  const line4HasKTP = /\b(ktp|nik)\b/.test(line4);
+
+  if (line3HasKK && line4HasKTP) {
+    errors.push({
+      field: 'no_ktp',
+      type: 'wrong_order',
+      detail: 'Urutan salah! Baris 3 harus KTP, baris 4 harus KK. Kirim ulang dengan urutan: Nama → Kartu → KTP → KK.',
+    });
+  }
+
   // VALIDASI BARU: Cek apakah nomor dalam 1 blok ada yang sama
   // No Kartu, No KTP, No KK harus UNIK (berbeda satu sama lain)
   if (parsed.no_kjp && parsed.no_ktp && parsed.no_kjp === parsed.no_ktp) {
@@ -223,7 +224,7 @@ export async function processRawMessageToLogJson(params: {
 
   const receivedAtIso = receivedAt.toISOString();
   const lines = parseRawMessageToLines(text);
-  
+
   // 1) Grouping dengan Partial Success Logic
   const { blocks, remainder } = groupLinesToBlocks(lines);
 

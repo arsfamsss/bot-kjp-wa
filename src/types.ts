@@ -12,11 +12,12 @@ export interface ParsedFields {
 export interface ItemError {
   field: "nama" | "no_kjp" | "no_ktp" | "no_kk";
   type:
-    | "required"
-    | "invalid_length"
-    | "duplicate"
-    | "duplicate_in_message"
-    | "same_as_other";
+  | "required"
+  | "invalid_length"
+  | "duplicate"
+  | "duplicate_in_message"
+  | "same_as_other"
+  | "wrong_order";
   detail: string;
 }
 
