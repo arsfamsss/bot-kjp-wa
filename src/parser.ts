@@ -24,14 +24,15 @@ function cleanName(text: string): string {
 
 /**
  * Membersihkan nomor:
- * - Baru konversi huruf O/o menjadi 0 (hanya di bagian angka)
+ * - Konversi huruf O/o menjadi 0 HANYA jika dikelilingi angka (menghindari "No" jadi "N0")
  * - Hanya ambil ANGKA (0-9)
  */
 export function extractDigits(input: string): string {
   if (!input) return '';
 
-  // Ganti huruf O/o dengan angka 0 terlebih dahulu
-  let cleaned = input.replace(/[Oo]/g, '0');
+  // Hanya konversi O/o ke 0 jika dikelilingi angka (contoh: 50494O85 → 50494085)
+  // TIDAK mengkonversi O di "No", "Nomor", dll
+  let cleaned = input.replace(/(\d)[Oo](\d)/g, '$1 0$2');
 
   // Ambil HANYA angka, abaikan semua huruf/label/tanda baca apapun
   return (cleaned.match(/\d+/g) || []).join('');
