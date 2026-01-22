@@ -261,23 +261,57 @@ export async function getGlobalRecap(
         lines.push(`----------------------------------------`);
         lines.push(`👤 *PENGIRIM ${idx + 1}:${nameDisplay} WA ${phone}*`);
         lines.push(`📥 Jumlah Data: ${items.length}`);
-        lines.push('');
 
-        items.forEach((item, i) => {
-            const itemKey = endKey ? ` (${String(item.processing_day_key).split('-').reverse().join('-')})` : '';
-            lines.push(`${i + 1}. ${item.nama}${itemKey}`);
-            lines.push(`   KJP ${item.no_kjp}`);
-            lines.push(`   KTP ${item.no_ktp}`);
-            lines.push(`   KK  ${item.no_kk}`);
-            lines.push('');
-        });
+        // --- GROUPING PER LOKASI ---
+        const dharmajayaItems = items.filter((i: any) => i.lokasi === 'DHARMAJAYA' || !i.lokasi);
+        const pasarjayaItems = items.filter((i: any) => i.lokasi === 'PASARJAYA');
+
+        let globalIndex = 1;
+
+        // Tampilkan Dharmajaya terlebih dahulu
+        if (dharmajayaItems.length > 0) {
+            lines.push(`*Dharmajaya Duri Kosambi* : ${dharmajayaItems.length}`);
+            dharmajayaItems.forEach((item: any) => {
+                const itemKey = endKey ? ` (${String(item.processing_day_key).split('-').reverse().join('-')})` : '';
+                lines.push(`   ${globalIndex}. ${item.nama}${itemKey}`);
+                lines.push(`   KJP ${item.no_kjp}`);
+                lines.push(`   KTP ${item.no_ktp}`);
+                lines.push(`   KK  ${item.no_kk}`);
+                lines.push('');
+                globalIndex++;
+            });
+        }
+
+        // Tampilkan Pasarjaya
+        if (pasarjayaItems.length > 0) {
+            lines.push(`*Pasarjaya Kedoya/Cengkareng* : ${pasarjayaItems.length}`);
+            pasarjayaItems.forEach((item: any) => {
+                const itemKey = endKey ? ` (${String(item.processing_day_key).split('-').reverse().join('-')})` : '';
+                const tglLahir = item.tanggal_lahir ? formatDateDMY(item.tanggal_lahir) : '';
+                lines.push(`   ${globalIndex}. ${item.nama}${itemKey}`);
+                lines.push(`   KK  ${item.no_kk}`);
+                lines.push(`   KTP ${item.no_ktp}`);
+                lines.push(`   KJP ${item.no_kjp}`);
+                if (tglLahir) lines.push(`   ${tglLahir}`);
+                lines.push('');
+                globalIndex++;
+            });
+        }
     });
 
     lines.push(`_Akhir laporan (${data.length} data)_`);
     return lines.join('\n');
 }
 
-// --- GENERATE EXPORT DATA (TXT ONLY - Format Laporan Detail Per Pengirim) ---
+// Helper: Format tanggal dari YYYY-MM-DD ke DD-MM-YYYY
+function formatDateDMY(isoDate: string | null): string {
+    if (!isoDate) return '';
+    const parts = isoDate.split('-');
+    if (parts.length !== 3) return isoDate;
+    return `${parts[2]}-${parts[1]}-${parts[0]}`;
+}
+
+// --- GENERATE EXPORT DATA (TXT ONLY - Format Laporan Detail Per Pengirim + Lokasi) ---
 export async function generateExportData(
     processingDayKey: string,
     nameLookup?: (phone: string) => string | undefined
@@ -323,7 +357,7 @@ export async function generateExportData(
 
     const displayDate = processingDayKey.split('-').reverse().join('-');
 
-    // --- Generate TXT (Format Laporan Detail Per Pengirim) ---
+    // --- Generate TXT (Format Laporan Detail Per Pengirim + Lokasi) ---
     const txtRows: string[] = [];
     txtRows.push('👑 *LAPORAN DETAIL DATA*');
     txtRows.push(`📅 Periode: ${displayDate} (06.01–04.00 WIB)`);
@@ -345,17 +379,40 @@ export async function generateExportData(
         txtRows.push(`👤 *PENGIRIM ${idx + 1}: ${senderName || 'Unknown'}*`);
         txtRows.push(`📱 WA: ${phone}`);
         txtRows.push(`📥 Jumlah Data: ${items.length}`);
-        txtRows.push('');
 
-        items.forEach((item: any) => {
-            // Format nama dengan nama pengirim di depan jika ada
-            const displayName = senderName ? `${senderName} (${item.nama})` : item.nama;
-            txtRows.push(displayName);
-            txtRows.push(`   📇 KJP ${item.no_kjp}`);
-            txtRows.push(`   🪪 KTP ${item.no_ktp}`);
-            txtRows.push(`   🏠 KK  ${item.no_kk}`);
-            txtRows.push('');
-        });
+        // --- GROUPING PER LOKASI ---
+        const dharmajayaItems = items.filter((i: any) => i.lokasi === 'DHARMAJAYA' || !i.lokasi);
+        const pasarjayaItems = items.filter((i: any) => i.lokasi === 'PASARJAYA');
+
+        let globalIndex = 1;
+
+        // Tampilkan Dharmajaya terlebih dahulu
+        if (dharmajayaItems.length > 0) {
+            txtRows.push(`*Dharmajaya Duri Kosambi* : ${dharmajayaItems.length}`);
+            dharmajayaItems.forEach((item: any) => {
+                txtRows.push(`   ${globalIndex}. ${item.nama}`);
+                txtRows.push(`   KJP ${item.no_kjp}`);
+                txtRows.push(`   KTP ${item.no_ktp}`);
+                txtRows.push(`   KK  ${item.no_kk}`);
+                txtRows.push('');
+                globalIndex++;
+            });
+        }
+
+        // Tampilkan Pasarjaya
+        if (pasarjayaItems.length > 0) {
+            txtRows.push(`*Pasarjaya Kedoya/Cengkareng* : ${pasarjayaItems.length}`);
+            pasarjayaItems.forEach((item: any) => {
+                const tglLahir = item.tanggal_lahir ? formatDateDMY(item.tanggal_lahir) : '';
+                txtRows.push(`   ${globalIndex}. ${item.nama}`);
+                txtRows.push(`   KK  ${item.no_kk}`);
+                txtRows.push(`   KTP ${item.no_ktp}`);
+                txtRows.push(`   KJP ${item.no_kjp}`);
+                if (tglLahir) txtRows.push(`   ${tglLahir}`);
+                txtRows.push('');
+                globalIndex++;
+            });
+        }
 
         txtRows.push('────────────────────────────────────');
     });

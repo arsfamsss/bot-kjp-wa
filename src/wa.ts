@@ -1636,7 +1636,52 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
 
                     const lines = parseRawMessageToLines(messageText);
 
-                    if (lines.length >= minLines) {
+                    // --- DETEKSI FORMAT SALAH: Data mengandung kata "lahir" tapi dikirim sebagai 4 baris (Dharmajaya) ---
+                    // Jika user pilih Dharmajaya tapi pesannya mengandung kata lahir, kemungkinan salah format
+                    const messageTextLower = messageText.toLowerCase();
+                    const containsBirthKeyword = /\b(tgl\s*lahir|tanggal\s*lahir|lahir)\b/i.test(messageTextLower);
+
+                    if (userLocation === 'DHARMAJAYA' && containsBirthKeyword && lines.length >= 4) {
+                        // Tolak karena kemungkinan user salah pilih lokasi atau format salah
+                        replyText = [
+                            '❌ *Format yang Anda kirim Salah.*',
+                            '',
+                            'Pesan Anda mengandung kata "tanggal lahir" yang hanya digunakan untuk format *Pasarjaya*.',
+                            '',
+                            'Silahkan kirim data sesuai format yang berlaku:',
+                            '',
+                            '📋 *FORMAT DHARMAJAYA (4 BARIS):*',
+                            '1. Nama',
+                            '2. Nomor Kartu (16-18 digit)',
+                            '3. Nomor KTP (16 digit)',
+                            '4. Nomor KK (16 digit)',
+                            '',
+                            '*Contoh:*',
+                            'Budi Santoso',
+                            '5049488500001111',
+                            '3173444455556666',
+                            '3173555566667777',
+                            '',
+                            '────────────────────────────────',
+                            '',
+                            '📋 *FORMAT PASARJAYA (5 BARIS):*',
+                            '1. Nama',
+                            '2. Nomor KK (16 digit)',
+                            '3. Nomor KTP (16 digit)',
+                            '4. Nomor Kartu (16-18 digit)',
+                            '5. Tanggal Lahir (DD-MM-YYYY)',
+                            '',
+                            '*Contoh:*',
+                            'Budi Santoso',
+                            '3173555566667777',
+                            '3173444455556666',
+                            '5049488500001111',
+                            '15-08-1985',
+                            '',
+                            '💡 Ketik *1* di Menu utama untuk memilih lokasi pendaftaran yang benar.',
+                            'Terima kasih. 🙏'
+                        ].join('\n');
+                    } else if (lines.length >= minLines) {
                         const logJson = await processRawMessageToLogJson({
                             text: messageText,
                             senderPhone,
