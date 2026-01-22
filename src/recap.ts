@@ -5,342 +5,370 @@ import type { ItemStatus, LogItem, LogJson } from './types';
 import { getContactName } from './contacts_data';
 
 export type TodayInvalidItem = {
-  index: number;
-  nama: string;
-  status: ItemStatus;
-  reason: string;
+    index: number;
+    nama: string;
+    status: ItemStatus;
+    reason: string;
 };
 
 export type ValidItemDetail = {
-  nama: string;
-  no_kjp: string;
-  no_ktp: string;
-  no_kk: string;
+    nama: string;
+    no_kjp: string;
+    no_ktp: string;
+    no_kk: string;
 };
 
 const MAX_DETAIL_ITEMS = 50;
 
 export type TodayRecapResult = {
-  validCount: number;
-  validItems: ValidItemDetail[];
-  totalInvalid: number;
-  detailItems: TodayInvalidItem[];
+    validCount: number;
+    validItems: ValidItemDetail[];
+    totalInvalid: number;
+    detailItems: TodayInvalidItem[];
 };
 
 // --- BAGIAN 1: REKAP PRIBADI (BERDASARKAN processing_day_key) ---
 export async function getTodayRecapForSender(
-  senderPhone: string,
-  processingDayKey: string
+    senderPhone: string,
+    processingDayKey: string
 ): Promise<TodayRecapResult> {
-  // 1. Ambil data VALID (semua detail)
-  const { data: validData, count: validCount, error: countError } = await supabase
-    .from('data_harian')
-    .select('nama, no_kjp, no_ktp, no_kk', { count: 'exact' })
-    .eq('sender_phone', senderPhone)
-    .eq('processing_day_key', processingDayKey)
-    .order('received_at', { ascending: true });
+    // 1. Ambil data VALID (semua detail)
+    const { data: validData, count: validCount, error: countError } = await supabase
+        .from('data_harian')
+        .select('nama, no_kjp, no_ktp, no_kk', { count: 'exact' })
+        .eq('sender_phone', senderPhone)
+        .eq('processing_day_key', processingDayKey)
+        .order('received_at', { ascending: true });
 
-  if (countError) throw countError;
+    if (countError) throw countError;
 
-  const validItems: ValidItemDetail[] = validData ? (validData as any[]).map(d => ({
-    nama: d.nama,
-    no_kjp: d.no_kjp,
-    no_ktp: d.no_ktp,
-    no_kk: d.no_kk
-  })) : [];
+    const validItems: ValidItemDetail[] = validData ? (validData as any[]).map(d => ({
+        nama: d.nama,
+        no_kjp: d.no_kjp,
+        no_ktp: d.no_ktp,
+        no_kk: d.no_kk
+    })) : [];
 
-  // 2. Ambil data INVALID dari log
-  const { data: logs, error: logsError } = await supabase
-    .from('log_pesan_wa')
-    .select('log_json')
-    .eq('sender_phone', senderPhone)
-    .eq('processing_day_key', processingDayKey);
+    // 2. Ambil data INVALID dari log
+    const { data: logs, error: logsError } = await supabase
+        .from('log_pesan_wa')
+        .select('log_json')
+        .eq('sender_phone', senderPhone)
+        .eq('processing_day_key', processingDayKey);
 
-  if (logsError) throw logsError;
+    if (logsError) throw logsError;
 
-  const rawInvalidItems: TodayInvalidItem[] = [];
-  if (logs && logs.length > 0) {
-    for (const row of logs as any[]) {
-      const log = row.log_json as LogJson | null;
-      if (!log || !log.items) continue;
+    const rawInvalidItems: TodayInvalidItem[] = [];
+    if (logs && logs.length > 0) {
+        for (const row of logs as any[]) {
+            const log = row.log_json as LogJson | null;
+            if (!log || !log.items) continue;
 
-      for (const item of log.items) {
-        if (item.status === 'SKIP_FORMAT' || item.status === 'SKIP_DUPLICATE') {
-          rawInvalidItems.push({
-            index: item.index,
-            nama: item.parsed?.nama ?? '(tanpa nama)',
-            status: item.status,
-            reason: buildReasonForInvalidItem(item),
-          });
+            for (const item of log.items) {
+                if (item.status === 'SKIP_FORMAT' || item.status === 'SKIP_DUPLICATE') {
+                    rawInvalidItems.push({
+                        index: item.index,
+                        nama: item.parsed?.nama ?? '(tanpa nama)',
+                        status: item.status,
+                        reason: buildReasonForInvalidItem(item),
+                    });
+                }
+            }
         }
-      }
     }
-  }
 
-  const detailItems = dedupInvalidItems(rawInvalidItems)
-    .sort((a, b) => a.index - b.index)
-    .slice(0, MAX_DETAIL_ITEMS);
+    const detailItems = dedupInvalidItems(rawInvalidItems)
+        .sort((a, b) => a.index - b.index)
+        .slice(0, MAX_DETAIL_ITEMS);
 
-  return {
-    validCount: validCount ?? 0,
-    validItems,
-    totalInvalid: rawInvalidItems.length,
-    detailItems,
-  };
+    return {
+        validCount: validCount ?? 0,
+        validItems,
+        totalInvalid: rawInvalidItems.length,
+        detailItems,
+    };
 }
 
 function dedupInvalidItems(items: TodayInvalidItem[]): TodayInvalidItem[] {
-  const seen = new Set<string>();
-  const result: TodayInvalidItem[] = [];
-  for (const item of items) {
-    const key = `${item.index}||${item.nama}||${item.status}||${item.reason}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      result.push(item);
+    const seen = new Set<string>();
+    const result: TodayInvalidItem[] = [];
+    for (const item of items) {
+        const key = `${item.index}||${item.nama}||${item.status}||${item.reason}`;
+        if (!seen.has(key)) {
+            seen.add(key);
+            result.push(item);
+        }
     }
-  }
-  return result;
+    return result;
 }
 
 function buildReasonForInvalidItem(item: LogItem): string {
-  if (item.status === 'SKIP_FORMAT') {
-    if (item.errors && item.errors.length > 0) return item.errors[0].detail;
-    return 'Format salah.';
-  }
+    if (item.status === 'SKIP_FORMAT') {
+        if (item.errors && item.errors.length > 0) return item.errors[0].detail;
+        return 'Format salah.';
+    }
 
-  if (item.status === 'SKIP_DUPLICATE') {
-    return item.duplicate_info?.safe_message ?? 'Data duplikat (sudah terdaftar hari ini).';
-  }
+    if (item.status === 'SKIP_DUPLICATE') {
+        return item.duplicate_info?.safe_message ?? 'Data duplikat (sudah terdaftar hari ini).';
+    }
 
-  return 'Gagal.';
+    return 'Gagal.';
 }
 
 export function buildReplyForTodayRecap(
-  validCount: number,
-  totalInvalid: number,
-  validItems: ValidItemDetail[],
-  processingDayKey: string
+    validCount: number,
+    totalInvalid: number,
+    validItems: ValidItemDetail[],
+    processingDayKey: string
 ): string {
-  const displayDate = processingDayKey.split('-').reverse().join('-');
+    const displayDate = processingDayKey.split('-').reverse().join('-');
 
-  const lines: string[] = [];
-  lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  lines.push(`🔎 *STATUS DATA HARI INI*`);
-  lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  lines.push('');
-  lines.push(`📅 Periode: *${displayDate}* (06.01–04.00 WIB)`);
-  lines.push('');
-  lines.push(`✅ *Data Terdaftar: ${validCount} Orang*`);
-
-  if (validItems.length > 0) {
+    const lines: string[] = [];
+    lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    lines.push(`🔎 *STATUS DATA HARI INI*`);
+    lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     lines.push('');
-    validItems.forEach((item, i) => {
-      lines.push(`┌── ${i + 1}. *${item.nama}*`);
-      lines.push(`│   📇 Kartu : ${item.no_kjp}`);
-      lines.push(`│   🪪 KTP   : ${item.no_ktp}`);
-      lines.push(`└── 🏠 KK    : ${item.no_kk}`);
-      if (i < validItems.length - 1) lines.push('');
-    });
-  } else {
+    lines.push(`📅 Periode: *${displayDate}* (06.01–04.00 WIB)`);
     lines.push('');
-    lines.push('_Belum ada data terdaftar hari ini._');
-  }
+    lines.push(`✅ *Data Terdaftar: ${validCount} Orang*`);
 
-  lines.push('');
-  lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  lines.push('💡 _Ketik *MENU* untuk kembali._');
+    if (validItems.length > 0) {
+        lines.push('');
+        validItems.forEach((item, i) => {
+            lines.push(`┌── ${i + 1}. *${item.nama}*`);
+            lines.push(`│   📇 Kartu : ${item.no_kjp}`);
+            lines.push(`│   🪪 KTP   : ${item.no_ktp}`);
+            lines.push(`└── 🏠 KK    : ${item.no_kk}`);
+            if (i < validItems.length - 1) lines.push('');
+        });
+    } else {
+        lines.push('');
+        lines.push('_Belum ada data terdaftar hari ini._');
+    }
 
-  return lines.join('\n');
+    lines.push('');
+    lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    lines.push('💡 _Ketik *MENU* untuk kembali._');
+
+    return lines.join('\n');
 }
 
 export function buildReplyForInvalidDetails(
-  detailItems: TodayInvalidItem[]
+    detailItems: TodayInvalidItem[]
 ): string {
-  const lines: string[] = [];
-  lines.push(`_Rincian gagal (max ${MAX_DETAIL_ITEMS}):_`);
-  if (detailItems.length === 0) {
-    lines.push('- Tidak ada data gagal.');
-  } else {
-    for (const item of detailItems) {
-      lines.push(`- ${item.nama} → ${item.reason}`);
+    const lines: string[] = [];
+    lines.push(`_Rincian gagal (max ${MAX_DETAIL_ITEMS}):_`);
+    if (detailItems.length === 0) {
+        lines.push('- Tidak ada data gagal.');
+    } else {
+        for (const item of detailItems) {
+            lines.push(`- ${item.nama} → ${item.reason}`);
+        }
     }
-  }
-  return lines.join('\n');
+    return lines.join('\n');
 }
 
 // --- BAGIAN 2: REKAP GLOBAL ADMIN (BERDASARKAN processing_day_key) ---
 export async function getGlobalRecap(
-  startKey: string,
-  endKey?: string,
-  nameLookup?: (phone: string) => string | null | undefined
+    startKey: string,
+    endKey?: string,
+    nameLookup?: (phone: string) => string | null | undefined
 ): Promise<string> {
-  const displayStart = startKey.split('-').reverse().join('-');
-  const displayEnd = endKey ? endKey.split('-').reverse().join('-') : null;
-  const dateLabel = displayEnd ? `${displayStart} s/d ${displayEnd}` : displayStart;
+    const displayStart = startKey.split('-').reverse().join('-');
+    const displayEnd = endKey ? endKey.split('-').reverse().join('-') : null;
+    const dateLabel = displayEnd ? `${displayStart} s/d ${displayEnd}` : displayStart;
 
-  let query = supabase
-    .from('data_harian')
-    .select('*')
-    .order('processing_day_key', { ascending: true })
-    .order('sender_phone', { ascending: true })
-    .order('received_at', { ascending: true });
+    let query = supabase
+        .from('data_harian')
+        .select('*')
+        .order('processing_day_key', { ascending: true })
+        .order('sender_phone', { ascending: true })
+        .order('received_at', { ascending: true });
 
-  if (endKey) {
-    query = query.gte('processing_day_key', startKey).lte('processing_day_key', endKey);
-  } else {
-    query = query.eq('processing_day_key', startKey);
-  }
+    if (endKey) {
+        query = query.gte('processing_day_key', startKey).lte('processing_day_key', endKey);
+    } else {
+        query = query.eq('processing_day_key', startKey);
+    }
 
-  const { data, error } = await query;
+    const { data, error } = await query;
 
-  if (error || !data) {
-    console.error('Error recap global:', error);
-    return '❌ Gagal mengambil data database.';
-  }
+    if (error || !data) {
+        console.error('Error recap global:', error);
+        return '❌ Gagal mengambil data database.';
+    }
 
-  if (data.length === 0) {
-    return `📅 Periode: ${dateLabel}\n📊 Belum ada data masuk pada periode ini.`;
-  }
+    if (data.length === 0) {
+        return `📅 Periode: ${dateLabel}\n📊 Belum ada data masuk pada periode ini.`;
+    }
 
-  const grouped: Record<string, any[]> = {};
-  for (const row of data as any[]) {
-    const phone = row.sender_phone;
-    if (!grouped[phone]) grouped[phone] = [];
-    grouped[phone].push(row);
-  }
+    const grouped: Record<string, any[]> = {};
+    for (const row of data as any[]) {
+        const phone = row.sender_phone;
+        if (!grouped[phone]) grouped[phone] = [];
+        grouped[phone].push(row);
+    }
 
-  // --- AMBIL NAMA DARI DB (LID MAP) ---
-  // Kita kumpulkan semua nomor yg ada di rekap
-  const allPhones = Object.keys(grouped);
-  const dbNamesMap = new Map<string, string>();
+    // --- AMBIL NAMA DARI DB (LID MAP) ---
+    // Kita kumpulkan semua nomor yg ada di rekap
+    const allPhones = Object.keys(grouped);
+    const dbNamesMap = new Map<string, string>();
 
-  if (allPhones.length > 0) {
-    const { data: mapData } = await supabase
-      .from('lid_phone_map')
-      .select('phone_number, push_name')
-      .in('phone_number', allPhones);
+    if (allPhones.length > 0) {
+        const { data: mapData } = await supabase
+            .from('lid_phone_map')
+            .select('phone_number, push_name')
+            .in('phone_number', allPhones);
 
-    if (mapData) {
-      mapData.forEach((row: any) => {
-        if (row.phone_number && row.push_name) {
-          dbNamesMap.set(row.phone_number, row.push_name);
+        if (mapData) {
+            mapData.forEach((row: any) => {
+                if (row.phone_number && row.push_name) {
+                    dbNamesMap.set(row.phone_number, row.push_name);
+                }
+            });
         }
-      });
-    }
-  }
-
-  const lines: string[] = [];
-  lines.push(`👑 *LAPORAN DETAIL DATA*`);
-  lines.push(`📅 Periode: ${dateLabel} (06.01–04.00 WIB)`);
-  lines.push(`📊 Total Keseluruhan: *${data.length}* Data`);
-  lines.push('');
-  lines.push('👇 *RINCIAN DATA MASUK:*');
-
-  Object.keys(grouped).forEach((phone, idx) => {
-    const items = grouped[phone];
-
-    // Lookup name logic:
-    // 1. Dari Hardcoded contacts_data.ts (Daftar manual) -> PRIORITAS
-    // 2. Dari Store (via callback nameLookup) -> PushName WA
-    // 3. Dari DB lid_phone_map
-
-    let contactName: string | null | undefined = getContactName(phone);
-
-    // 2. Cek DB jika tidak ada di kontak manual
-    if (!contactName) {
-      contactName = dbNamesMap.get(phone) || null;
     }
 
-    // 3. Cek Store WA jika tidak ada di DB
-    if (!contactName && nameLookup) {
-      contactName = nameLookup(phone);
-    }
-
-    const nameDisplay = contactName ? ` ${contactName}` : '';
-
-    lines.push(`----------------------------------------`);
-    lines.push(`👤 *PENGIRIM ${idx + 1}:${nameDisplay} WA ${phone}*`);
-    lines.push(`📥 Jumlah Data: ${items.length}`);
+    const lines: string[] = [];
+    lines.push(`👑 *LAPORAN DETAIL DATA*`);
+    lines.push(`📅 Periode: ${dateLabel} (06.01–04.00 WIB)`);
+    lines.push(`📊 Total Keseluruhan: *${data.length}* Data`);
     lines.push('');
+    lines.push('👇 *RINCIAN DATA MASUK:*');
 
-    items.forEach((item, i) => {
-      const itemKey = endKey ? ` (${String(item.processing_day_key).split('-').reverse().join('-')})` : '';
-      lines.push(`${i + 1}. ${item.nama}${itemKey}`);
-      lines.push(`   KJP ${item.no_kjp}`);
-      lines.push(`   KTP ${item.no_ktp}`);
-      lines.push(`   KK  ${item.no_kk}`);
-      lines.push('');
+    Object.keys(grouped).forEach((phone, idx) => {
+        const items = grouped[phone];
+
+        // Lookup name logic:
+        // 1. Dari Hardcoded contacts_data.ts (Daftar manual) -> PRIORITAS
+        // 2. Dari Store (via callback nameLookup) -> PushName WA
+        // 3. Dari DB lid_phone_map
+
+        let contactName: string | null | undefined = getContactName(phone);
+
+        // 2. Cek DB jika tidak ada di kontak manual
+        if (!contactName) {
+            contactName = dbNamesMap.get(phone) || null;
+        }
+
+        // 3. Cek Store WA jika tidak ada di DB
+        if (!contactName && nameLookup) {
+            contactName = nameLookup(phone);
+        }
+
+        const nameDisplay = contactName ? ` ${contactName}` : '';
+
+        lines.push(`----------------------------------------`);
+        lines.push(`👤 *PENGIRIM ${idx + 1}:${nameDisplay} WA ${phone}*`);
+        lines.push(`📥 Jumlah Data: ${items.length}`);
+        lines.push('');
+
+        items.forEach((item, i) => {
+            const itemKey = endKey ? ` (${String(item.processing_day_key).split('-').reverse().join('-')})` : '';
+            lines.push(`${i + 1}. ${item.nama}${itemKey}`);
+            lines.push(`   KJP ${item.no_kjp}`);
+            lines.push(`   KTP ${item.no_ktp}`);
+            lines.push(`   KK  ${item.no_kk}`);
+            lines.push('');
+        });
     });
-  });
 
-  lines.push(`_Akhir laporan (${data.length} data)_`);
-  return lines.join('\n');
+    lines.push(`_Akhir laporan (${data.length} data)_`);
+    return lines.join('\n');
 }
 
-// --- GENERATE EXPORT DATA (CSV & TXT) ---
+// --- GENERATE EXPORT DATA (TXT ONLY - Format Laporan Detail Per Pengirim) ---
 export async function generateExportData(
-  processingDayKey: string,
-  nameLookup?: (phone: string) => string | undefined
-): Promise<{ csv: string; txt: string; filenameBase: string; count: number } | null> {
-  // Ambil data hari ini
-  const { data, error } = await supabase
-    .from('data_harian')
-    .select('*')
-    .eq('processing_day_key', processingDayKey)
-    .order('received_at', { ascending: true }); // Urutkan dari pagi ke sore
+    processingDayKey: string,
+    nameLookup?: (phone: string) => string | undefined
+): Promise<{ txt: string; filenameBase: string; count: number } | null> {
+    // Ambil data hari ini
+    const { data, error } = await supabase
+        .from('data_harian')
+        .select('*')
+        .eq('processing_day_key', processingDayKey)
+        .order('sender_phone', { ascending: true })
+        .order('received_at', { ascending: true });
 
-  if (error || !data || data.length === 0) {
-    return null;
-  }
+    if (error || !data || data.length === 0) {
+        return null;
+    }
 
-  // --- 1. Generate CSV ---
-  // Header CSV
-  const csvRows = ['No,Nama,No Kartu (KJP),NIK (KTP),No KK,Pengirim WA,Nama Pengirim,Waktu Input'];
-  
-  // Isi CSV
-  data.forEach((row: any, index: number) => {
-    const senderName = nameLookup ? (nameLookup(row.sender_phone) || '') : '';
-    const timeStr = new Date(row.received_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' });
-    
-    // Escape koma dengan tanda kutip jika ada
-    const safeNama = `"${(row.nama || '').replace(/"/g, '""')}"`;
-    const safeKjp = `"'${row.no_kjp || ''}"`; // Tambah kutip satu biar Excel baca sebagai teks (tidak jadi ilmiah E+)
-    const safeKtp = `"'${row.no_ktp || ''}"`;
-    const safeKk = `"'${row.no_kk || ''}"`;
-    
-    csvRows.push(`${index + 1},${safeNama},${safeKjp},${safeKtp},${safeKk},${row.sender_phone},"${senderName}",${timeStr}`);
-  });
-  
-  const csvContent = csvRows.join('\n');
+    // Group by sender_phone
+    const grouped: Record<string, any[]> = {};
+    for (const row of data as any[]) {
+        const phone = row.sender_phone;
+        if (!grouped[phone]) grouped[phone] = [];
+        grouped[phone].push(row);
+    }
 
-  // --- 2. Generate TXT (Format Laporan Sederhana) ---
-  const txtRows = [
-    `DATA PENDAFTARAN SEMBAKO - ${processingDayKey.split('-').reverse().join('-')}`,
-    `Total Data: ${data.length}`,
-    '==================================================',
-    ''
-  ];
+    // Ambil nama dari database
+    const allPhones = Object.keys(grouped);
+    const dbNamesMap = new Map<string, string>();
 
-  data.forEach((row: any, index: number) => {
-    const senderName = nameLookup ? (nameLookup(row.sender_phone) || '') : '';
-    const senderLabel = senderName ? `${senderName} (${row.sender_phone})` : row.sender_phone;
-    
-    txtRows.push(`Data ke-${index + 1}`);
-    txtRows.push(`Nama    : ${row.nama}`);
-    txtRows.push(`No Kartu: ${row.no_kjp}`);
-    txtRows.push(`NIK     : ${row.no_ktp}`);
-    txtRows.push(`No KK   : ${row.no_kk}`);
-    txtRows.push(`Pengirim: ${senderLabel}`);
-    txtRows.push('--------------------------------------------------');
-  });
+    if (allPhones.length > 0) {
+        const { data: mapData } = await supabase
+            .from('lid_phone_map')
+            .select('phone_number, push_name')
+            .in('phone_number', allPhones);
 
-  const txtContent = txtRows.join('\n');
-  const filenameBase = `Data_Sembako_${processingDayKey.split('-').reverse().join('')}`;
+        if (mapData) {
+            mapData.forEach((row: any) => {
+                if (row.phone_number && row.push_name) {
+                    dbNamesMap.set(row.phone_number, row.push_name);
+                }
+            });
+        }
+    }
 
-  return {
-    csv: csvContent,
-    txt: txtContent,
-    filenameBase,
-    count: data.length
-  };
+    const displayDate = processingDayKey.split('-').reverse().join('-');
+
+    // --- Generate TXT (Format Laporan Detail Per Pengirim) ---
+    const txtRows: string[] = [];
+    txtRows.push('👑 *LAPORAN DETAIL DATA*');
+    txtRows.push(`📅 Periode: ${displayDate} (06.01–04.00 WIB)`);
+    txtRows.push(`📊 Total Keseluruhan: *${data.length}* Data`);
+    txtRows.push('');
+    txtRows.push('👇 *RINCIAN DATA MASUK:*');
+    txtRows.push('────────────────────────────────────');
+
+    Object.keys(grouped).forEach((phone, idx) => {
+        const items = grouped[phone];
+
+        // Lookup nama pengirim
+        let senderName = dbNamesMap.get(phone) || null;
+        if (!senderName && nameLookup) {
+            senderName = nameLookup(phone) || null;
+        }
+
+        txtRows.push('');
+        txtRows.push(`👤 *PENGIRIM ${idx + 1}: ${senderName || 'Unknown'}*`);
+        txtRows.push(`📱 WA: ${phone}`);
+        txtRows.push(`📥 Jumlah Data: ${items.length}`);
+        txtRows.push('');
+
+        items.forEach((item: any) => {
+            // Format nama dengan nama pengirim di depan jika ada
+            const displayName = senderName ? `${senderName} (${item.nama})` : item.nama;
+            txtRows.push(displayName);
+            txtRows.push(`   📇 KJP ${item.no_kjp}`);
+            txtRows.push(`   🪪 KTP ${item.no_ktp}`);
+            txtRows.push(`   🏠 KK  ${item.no_kk}`);
+            txtRows.push('');
+        });
+
+        txtRows.push('────────────────────────────────────');
+    });
+
+    txtRows.push('');
+    txtRows.push('✅ *Laporan selesai.*');
+
+    const txtContent = txtRows.join('\n');
+    const filenameBase = `Laporan_Data_${processingDayKey.split('-').reverse().join('')}`;
+
+    return {
+        txt: txtContent,
+        filenameBase,
+        count: data.length
+    };
 }

@@ -996,10 +996,10 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                 replyText = lines.join('\n');
                             }
                         } else if (normalized === '12') {
-                            // FEATURE: EXPORT DATA (TXT only)
+                            // FEATURE: EXPORT DATA (TXT only - Laporan Detail Per Pengirim)
                             await sock.sendMessage(remoteJid, { text: '⏳ Sedang menyiapkan file export...' });
 
-                            // Helper untuk lookup nama (bisa pakai registeredUsersCache)
+                            // Helper untuk lookup nama
                             const lookupName = (ph: string) => getRegisteredUserNameSync(ph) || undefined;
 
                             const exportResult = await generateExportData(processingDayKey, lookupName);
@@ -1007,22 +1007,13 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             if (!exportResult || exportResult.count === 0) {
                                 replyText = '📂 Belum ada data pendaftaran hari ini untuk diexport.';
                             } else {
-                                // Kirim CSV
-                                const csvBuffer = Buffer.from(exportResult.csv, 'utf-8');
-                                await sock.sendMessage(remoteJid, {
-                                    document: csvBuffer,
-                                    mimetype: 'text/csv',
-                                    fileName: `${exportResult.filenameBase}.csv`,
-                                    caption: `📊 Export CSV (${exportResult.count} data)`
-                                });
-
-                                // Kirim TXT
+                                // Kirim TXT (Laporan Detail Per Pengirim)
                                 const txtBuffer = Buffer.from(exportResult.txt, 'utf-8');
                                 await sock.sendMessage(remoteJid, {
                                     document: txtBuffer,
                                     mimetype: 'text/plain',
                                     fileName: `${exportResult.filenameBase}.txt`,
-                                    caption: `📄 Export TXT (${exportResult.count} data)`
+                                    caption: `📄 Laporan Detail Data (${exportResult.count} data)`
                                 });
 
                                 replyText = '✅ Export data selesai.';
@@ -1586,15 +1577,20 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                         replyText = '⚠️ Anda belum mengirim data pendaftaran hari ini.';
                     } else {
                         userFlowByPhone.set(senderPhone, 'DELETE_DATA');
-                        const list = validItems.map((item, idx) => `${idx + 1}. ${item.nama} (${item.no_kjp})`).join('\n');
+                        const list = validItems.map((item, idx) => `${idx + 1}. ${item.nama} (Kartu: ...${item.no_kjp.slice(-4)})`).join('\n');
                         replyText = [
-                            '🗑️ *HAPUS DATA*',
+                            '🗑️ *HAPUS DATA PENDAFTARAN*',
                             '',
-                            'Ketik nomor urut untuk menghapus data:',
+                            '📋 Pilih data yang ingin dihapus:',
                             '',
                             list,
                             '',
-                            'Ketik 0 untuk batal.'
+                            '👇 *Cara hapus:*',
+                            '• Ketik *1* untuk hapus satu data',
+                            '• Ketik *1,2,3* untuk hapus beberapa sekaligus',
+                            '• Ketik *0* untuk batal',
+                            '',
+                            '_Contoh: Ketik 2 untuk hapus data nomor 2_'
                         ].join('\n');
                     }
                 } else if (normalized === 'BATAL' || normalized === 'CANCEL' || normalized === 'UNDO') {
