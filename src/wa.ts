@@ -1363,10 +1363,10 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             // Simpan user yg dipilih dan tampilkan datanya
                             adminUserListCache.set(senderPhone + '_selected', [selectedUser]);
 
-                            // Ambil data detail user tersebut
+                            // Ambil data detail user tersebut (LENGKAP)
                             const { data: userData } = await supabase
                                 .from('data_harian')
-                                .select('id, nama, no_kjp')
+                                .select('id, nama, no_kjp, no_ktp, no_kk')
                                 .eq('processing_day_key', processingDayKey)
                                 .eq('sender_phone', selectedUser.phone)
                                 .order('received_at', { ascending: true });
@@ -1381,11 +1381,17 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                     push_name: d.nama
                                 })));
 
-                                let msg = `🗑️ *DATA MILIK: ${selectedUser.name}*\n\n`;
+                                let msg = `🗑️ *DATA MILIK: ${selectedUser.name}*\n`;
+                                msg += `📅 Tanggal: ${dmyExample}\n\n`;
                                 userData.forEach((d: any, i: number) => {
-                                    msg += `${i + 1}. ${d.nama} (${d.no_kjp})\n`;
+                                    msg += `┌── ${i + 1}. *${d.nama}*\n`;
+                                    msg += `│   💳 Kartu: ${d.no_kjp}\n`;
+                                    msg += `│   🪪 KTP  : ${d.no_ktp}\n`;
+                                    msg += `└── 🏠 KK   : ${d.no_kk}\n\n`;
                                 });
-                                msg += '\n👇 Ketik nomor data yang mau dihapus (bisa banyak, pisah koma).\nContoh: 1, 3, 5\n\n_Ketik 0 untuk batal._';
+                                msg += '👇 Ketik nomor data yang mau dihapus.\n';
+                                msg += 'Contoh: *1* atau *1,3,5*\n\n';
+                                msg += '_Ketik 0 untuk batal._';
                                 replyText = msg;
                                 adminFlowByPhone.set(senderPhone, 'ADMIN_DELETE_USER_DATA');
                             }
