@@ -22,7 +22,9 @@ export type AdminFlowState =
     | 'BROADCAST_PREVIEW'
     | 'BROADCAST_SCHEDULE'
     | 'SEARCH_DATA'
-    | 'CHECK_DATA_PERIOD';
+    | 'CHECK_DATA_PERIOD'
+    | 'ADMIN_DELETE_SELECT_USER'
+    | 'ADMIN_DELETE_USER_DATA';
 
 // Draft broadcast untuk penjadwalan/preview
 export type BroadcastDraft = {
@@ -50,3 +52,6 @@ export const broadcastDraftMap = new Map<string, BroadcastDraft>();
 
 // Cache snapshot kontak saat admin membuka menu hapus (mencegah race condition)
 export const adminContactCache = new Map<string, { phone_number: string; push_name: string | null }[]>();
+
+// Cache user list untuk admin delete data harian
+export const adminUserListCache = new Map<string, { phone: string; name: string; count: number }[]>();

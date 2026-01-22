@@ -67,6 +67,7 @@ import {
     pendingDelete,
     broadcastDraftMap,
     adminContactCache,
+    adminUserListCache,
 } from './state';
 
 const AUTH_FOLDER = 'auth_info_baileys';
@@ -761,66 +762,84 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                     };
 
                     if (currentAdminFlow === 'MENU') {
-                        if (normalized === '1') replyText = await getGlobalRecap(processingDayKey, undefined, lookupName);
-                        else if (normalized === '2') replyText = await getGlobalRecap(getPastKey(6), processingDayKey, lookupName);
-                        else if (normalized === '3') replyText = await getGlobalRecap(getPastKey(29), processingDayKey, lookupName);
-                        else if (normalized === '4') {
-                            adminFlowByPhone.set(senderPhone, 'ASK_DATE');
-                            replyText = ['📅 *REKAP TANGGAL*', '', `Contoh: *${dmyExample}*`, '', '_Ketik 0 untuk kembali._'].join('\n');
-                        } else if (normalized === '5') {
-                            adminFlowByPhone.set(senderPhone, 'ASK_RANGE');
-                            replyText = ['📅 *REKAP RENTANG*', '', `Contoh: *01-01-2026 ${dmyExample}*`, '', '_Ketik 0 untuk kembali._'].join('\n');
-                        } else if (normalized === '6') {
-                            adminFlowByPhone.set(senderPhone, 'RESET_CONFIRM');
-                            replyText = ['⚠️ *KONFIRMASI RESET*', '', `Periode: *${dmyExample}*`, '1️⃣ Ya, Hapus', '2️⃣ Batal'].join('\n');
-                        } else if (normalized === '7') {
-                            adminFlowByPhone.set(senderPhone, 'ADD_CONTACT');
-                            replyText = ['➕ *TAMBAH KONTAK*', 'Ketik: Nama NomorHP', 'Contoh: Budi 0812345'].join('\n');
-                        } else if (normalized === '8') {
-                            adminFlowByPhone.set(senderPhone, 'CHECK_CONTACT');
-                            replyText = ['🔍 *CEK KONTAK*', 'Ketik: Nomor HP', 'Contoh: 0812345'].join('\n');
-                        } else if (normalized === '9') {
-                            adminFlowByPhone.set(senderPhone, 'EDIT_CONTACT');
-                            replyText = ['✏️ *EDIT KONTAK*', 'Ketik: NamaBaru NomorHP', 'Contoh: BudiRevisi 0812345'].join('\n');
-                        } else if (normalized === '10') {
-                            adminFlowByPhone.set(senderPhone, 'DELETE_CONTACT');
-                            const allContacts = await getAllLidPhoneMap();
+                        // MENU ADMIN BARU:
+                        // 1 = Hapus Data User (per orang)
+                        // 2 = Rekap Hari Ini
+                        // 3 = Rekap Tanggal Tertentu
+                        // 4 = Rekap Rentang Tanggal
+                        // 5 = List Semua Kontak
+                        // 6 = Edit Kontak
+                        // 7 = Hapus Kontak
+                        // 8 = Broadcast Informasi
+                        // 9 = Statistik Dashboard
+                        // 10 = Cari Data
+                        // 11 = Log Aktivitas
+                        // 12 = Export Data (TXT)
 
-                            // SIMPAN SNAPSHOT KE CACHE
-                            adminContactCache.set(senderPhone, allContacts);
+                        if (normalized === '1') {
+                            // HAPUS DATA USER - Tampilkan daftar user yang kirim data hari ini
+                            adminFlowByPhone.set(senderPhone, 'ADMIN_DELETE_SELECT_USER');
+                            const recap = await getGlobalRecap(processingDayKey, undefined, lookupName);
 
-                            if (allContacts.length === 0) {
-                                replyText = '📂 Tidak ada kontak untuk dihapus.';
+                            // Ambil daftar user unik yang kirim data hari ini
+                            const { data: users } = await supabase
+                                .from('data_harian')
+                                .select('sender_phone, sender_name')
+                                .eq('processing_day_key', processingDayKey)
+                                .order('sender_phone');
+
+                            if (!users || users.length === 0) {
+                                replyText = '📂 Belum ada data hari ini.';
                                 adminFlowByPhone.set(senderPhone, 'MENU');
                             } else {
-                                let msg = '🗑️ *HAPUS KONTAK*\n\n';
-                                // Tampilkan max 50 agar tidak kepanjangan (atau full jika user mau risiko)
-                                // Kita batasi display text agar tidak error WA
-                                for (let i = 0; i < allContacts.length; i++) {
-                                    const c = allContacts[i];
-                                    msg += `${i + 1}. ${c.push_name || '(Tanpa Nama)'} (${c.phone_number})\n`;
-                                    if (msg.length > 3500) {
-                                        msg += '\n...(List dipotong, terlalu panjang)...';
-                                        break;
+                                // Group by sender_phone
+                                const userMap = new Map<string, { name: string; count: number }>();
+                                users.forEach((u: any) => {
+                                    const existing = userMap.get(u.sender_phone);
+                                    if (existing) {
+                                        existing.count++;
+                                    } else {
+                                        userMap.set(u.sender_phone, {
+                                            name: u.sender_name || getRegisteredUserNameSync(u.sender_phone) || u.sender_phone,
+                                            count: 1
+                                        });
                                     }
-                                }
-                                msg += '\n👇 *Ketik nomor urut yg ingin dihapus (bisa banyak, pisah koma/spasi)*\nContoh: 1, 3, 5\n\n_Ketik 0 untuk batal._';
+                                });
+
+                                // Cache untuk digunakan di flow berikutnya
+                                const userList = Array.from(userMap.entries()).map(([phone, info]) => ({
+                                    phone,
+                                    name: info.name,
+                                    count: info.count
+                                }));
+                                adminUserListCache.set(senderPhone, userList);
+
+                                let msg = '🗑️ *HAPUS DATA USER*\n\n';
+                                msg += `📅 Tanggal: ${dmyExample}\n\n`;
+                                msg += 'Pilih user yang datanya ingin dihapus:\n\n';
+                                userList.forEach((u, i) => {
+                                    msg += `${i + 1}. ${u.name} (${u.count} data)\n`;
+                                });
+                                msg += '\n👇 Ketik nomor urut user.\n_Ketik 0 untuk batal._';
                                 replyText = msg;
                             }
-                        } else if (normalized === '11') {
-                            adminFlowByPhone.set(senderPhone, 'BROADCAST_SELECT');
-                            replyText = [
-                                '📢 *BROADCAST INFO*',
-                                '',
-                                'Pilih target pengiriman:',
-                                '',
-                                '1️⃣ Kirim ke SEMUA kontak',
-                                '2️⃣ Kirim ke nomor tertentu',
-                                '',
-                                '_Ketik 0 untuk batal._'
-                            ].join('\n');
-                        } else if (normalized === '12') {
-                            // FEATURE: LIST SEMUA KONTAK (langsung tampilkan)
+                        }
+                        else if (normalized === '2') {
+                            // Rekap Hari Ini
+                            replyText = await getGlobalRecap(processingDayKey, undefined, lookupName);
+                        }
+                        else if (normalized === '3') {
+                            // Rekap Tanggal Tertentu
+                            adminFlowByPhone.set(senderPhone, 'ASK_DATE');
+                            replyText = ['📅 *REKAP TANGGAL*', '', `Contoh: *${dmyExample}*`, '', '_Ketik 0 untuk kembali._'].join('\n');
+                        }
+                        else if (normalized === '4') {
+                            // Rekap Rentang Tanggal
+                            adminFlowByPhone.set(senderPhone, 'ASK_RANGE');
+                            replyText = ['📅 *REKAP RENTANG*', '', `Contoh: *01-01-2026 ${dmyExample}*`, '', '_Ketik 0 untuk kembali._'].join('\n');
+                        }
+                        else if (normalized === '5') {
+                            // List Semua Kontak (langsung tampilkan)
                             const allContacts = await getAllLidPhoneMap();
                             if (allContacts.length === 0) {
                                 replyText = '📂 Belum ada kontak terdaftar.';
@@ -844,7 +863,51 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                     replyText = '✅ Selesai.';
                                 }
                             }
-                        } else if (normalized === '13') {
+                        }
+                        else if (normalized === '6') {
+                            // Edit Kontak
+                            adminFlowByPhone.set(senderPhone, 'EDIT_CONTACT');
+                            replyText = ['✏️ *EDIT KONTAK*', 'Ketik: NamaBaru NomorHP', 'Contoh: BudiRevisi 0812345'].join('\n');
+                        }
+                        else if (normalized === '7') {
+                            // Hapus Kontak
+                            adminFlowByPhone.set(senderPhone, 'DELETE_CONTACT');
+                            const allContacts = await getAllLidPhoneMap();
+
+                            adminContactCache.set(senderPhone, allContacts);
+
+                            if (allContacts.length === 0) {
+                                replyText = '📂 Tidak ada kontak untuk dihapus.';
+                                adminFlowByPhone.set(senderPhone, 'MENU');
+                            } else {
+                                let msg = '🗑️ *HAPUS KONTAK*\n\n';
+                                for (let i = 0; i < allContacts.length; i++) {
+                                    const c = allContacts[i];
+                                    msg += `${i + 1}. ${c.push_name || '(Tanpa Nama)'} (${c.phone_number})\n`;
+                                    if (msg.length > 3500) {
+                                        msg += '\n...(List dipotong, terlalu panjang)...';
+                                        break;
+                                    }
+                                }
+                                msg += '\n👇 *Ketik nomor urut yg ingin dihapus (bisa banyak, pisah koma/spasi)*\nContoh: 1, 3, 5\n\n_Ketik 0 untuk batal._';
+                                replyText = msg;
+                            }
+                        }
+                        else if (normalized === '8') {
+                            // Broadcast Informasi
+                            adminFlowByPhone.set(senderPhone, 'BROADCAST_SELECT');
+                            replyText = [
+                                '📢 *BROADCAST INFO*',
+                                '',
+                                'Pilih target pengiriman:',
+                                '',
+                                '1️⃣ Kirim ke SEMUA kontak',
+                                '2️⃣ Kirim ke nomor tertentu',
+                                '',
+                                '_Ketik 0 untuk batal._'
+                            ].join('\n');
+                        }
+                        else if (normalized === '9') {
                             // FEATURE: STATISTIK DASHBOARD
                             const stats = await getStatistics(processingDayKey);
                             const displayDate = processingDayKey.split('-').reverse().join('-');
@@ -874,7 +937,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             }
 
                             replyText = lines.join('\n');
-                        } else if (normalized === '14') {
+                        } else if (normalized === '10') {
                             // FEATURE: CARI DATA
                             adminFlowByPhone.set(senderPhone, 'SEARCH_DATA');
                             replyText = [
@@ -889,7 +952,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                 '_Pencarian di SEMUA tanggal._',
                                 '_Ketik 0 untuk batal._'
                             ].join('\n');
-                        } else if (normalized === '15') {
+                        } else if (normalized === '11') {
                             // FEATURE: LOG AKTIVITAS
                             const { data: logs, error } = await supabase
                                 .from('log_pesan_wa')
@@ -932,8 +995,8 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
 
                                 replyText = lines.join('\n');
                             }
-                        } else if (normalized === '16') {
-                            // FEATURE: EXPORT DATA (CSV & TXT)
+                        } else if (normalized === '12') {
+                            // FEATURE: EXPORT DATA (TXT only)
                             await sock.sendMessage(remoteJid, { text: '⏳ Sedang menyiapkan file export...' });
 
                             // Helper untuk lookup nama (bisa pakai registeredUsersCache)
@@ -1289,6 +1352,105 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             if (normalized === '0') {
                                 replyText = '❌ Penjadwalan dibatalkan.';
                                 adminFlowByPhone.set(senderPhone, 'MENU');
+                            }
+                        }
+                    } else if (currentAdminFlow === 'ADMIN_DELETE_SELECT_USER') {
+                        // Admin memilih user mana yang datanya akan dihapus
+                        const choice = parseInt(normalized);
+                        const userList = adminUserListCache.get(senderPhone);
+
+                        if (isNaN(choice) || choice < 0) {
+                            replyText = '⚠️ Ketik nomor urut user. Ketik 0 untuk batal.';
+                        } else if (choice === 0) {
+                            adminFlowByPhone.set(senderPhone, 'MENU');
+                            adminUserListCache.delete(senderPhone);
+                            replyText = '✅ Dibatalkan.';
+                        } else if (!userList || choice > userList.length) {
+                            replyText = '⚠️ Nomor urut tidak valid.';
+                        } else {
+                            const selectedUser = userList[choice - 1];
+                            // Simpan user yg dipilih dan tampilkan datanya
+                            adminUserListCache.set(senderPhone + '_selected', [selectedUser]);
+
+                            // Ambil data detail user tersebut
+                            const { data: userData } = await supabase
+                                .from('data_harian')
+                                .select('id, nama, no_kjp')
+                                .eq('processing_day_key', processingDayKey)
+                                .eq('sender_phone', selectedUser.phone)
+                                .order('received_at', { ascending: true });
+
+                            if (!userData || userData.length === 0) {
+                                replyText = '❌ Data user tidak ditemukan.';
+                                adminFlowByPhone.set(senderPhone, 'MENU');
+                            } else {
+                                // Cache data untuk delete
+                                adminContactCache.set(senderPhone + '_data', userData.map((d: any) => ({
+                                    phone_number: String(d.id),
+                                    push_name: d.nama
+                                })));
+
+                                let msg = `🗑️ *DATA MILIK: ${selectedUser.name}*\n\n`;
+                                userData.forEach((d: any, i: number) => {
+                                    msg += `${i + 1}. ${d.nama} (${d.no_kjp})\n`;
+                                });
+                                msg += '\n👇 Ketik nomor data yang mau dihapus (bisa banyak, pisah koma).\nContoh: 1, 3, 5\n\n_Ketik 0 untuk batal._';
+                                replyText = msg;
+                                adminFlowByPhone.set(senderPhone, 'ADMIN_DELETE_USER_DATA');
+                            }
+                        }
+                    } else if (currentAdminFlow === 'ADMIN_DELETE_USER_DATA') {
+                        // Admin memilih data mana yang akan dihapus
+                        if (normalized === '0') {
+                            replyText = '✅ Penghapusan dibatalkan.';
+                            adminFlowByPhone.set(senderPhone, 'MENU');
+                            adminContactCache.delete(senderPhone + '_data');
+                        } else {
+                            const parts = rawTrim.split(/[,\s]+/);
+                            const indices = parts.map((p: string) => parseInt(p.trim())).filter((n: number) => !isNaN(n) && n > 0);
+
+                            if (indices.length === 0) {
+                                replyText = '⚠️ Ketik nomor urut data. Contoh: 1, 2, 3. Ketik 0 untuk batal.';
+                            } else {
+                                const dataList = adminContactCache.get(senderPhone + '_data');
+
+                                if (!dataList || dataList.length === 0) {
+                                    replyText = '❌ Cache data hilang. Ulangi dari menu admin.';
+                                    adminFlowByPhone.set(senderPhone, 'MENU');
+                                } else {
+                                    let successCount = 0;
+                                    const deletedNames: string[] = [];
+
+                                    // Sort descending
+                                    const sortedIndices = [...indices].sort((a, b) => b - a);
+
+                                    for (const idx of sortedIndices) {
+                                        const target = dataList[idx - 1];
+                                        if (target) {
+                                            const dataId = target.phone_number; // ID disimpan di phone_number
+                                            const { error } = await supabase
+                                                .from('data_harian')
+                                                .delete()
+                                                .eq('id', dataId);
+
+                                            if (!error) {
+                                                successCount++;
+                                                deletedNames.push(target.push_name || `Data ${idx}`);
+                                            }
+                                        }
+                                    }
+
+                                    if (successCount > 0) {
+                                        replyText = `✅ Berhasil menghapus ${successCount} data:\n- ${deletedNames.join('\n- ')}`;
+                                    } else {
+                                        replyText = '❌ Gagal menghapus.';
+                                    }
+
+                                    adminContactCache.delete(senderPhone + '_data');
+                                    adminUserListCache.delete(senderPhone);
+                                    adminUserListCache.delete(senderPhone + '_selected');
+                                    adminFlowByPhone.set(senderPhone, 'MENU');
+                                }
                             }
                         }
                     }
