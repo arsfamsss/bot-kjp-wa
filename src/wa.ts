@@ -623,6 +623,61 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                         continue;
                     }
                 }
+                else if (currentUserFlow === 'SELECT_LOCATION') {
+                    // Handler untuk pilihan lokasi pendaftaran
+                    if (normalized === '1') {
+                        // Pilih Pasarjaya (5 baris: Nama, Kartu, KTP, KK, Tanggal Lahir)
+                        userLocationChoice.set(senderPhone, 'PASARJAYA');
+                        userFlowByPhone.set(senderPhone, 'NONE');
+                        replyText = [
+                            '✅ *LOKASI: PASARJAYA (Kedoya/Cengkareng)*',
+                            '',
+                            '📋 Format pendaftaran *5 BARIS*:',
+                            '1. Nama',
+                            '2. Nomor Kartu (16-18 digit)',
+                            '3. Nomor KTP (16 digit)',
+                            '4. Nomor KK (16 digit)',
+                            '5. Tanggal Lahir (DD-MM-YYYY)',
+                            '',
+                            '*Contoh:*',
+                            'Budi Santoso',
+                            '5049488500001111',
+                            '3173444455556666',
+                            '3173555566667777',
+                            '15-08-1985',
+                            '',
+                            '👇 Silakan kirim data pendaftaran sekarang.'
+                        ].join('\n');
+                    } else if (normalized === '2') {
+                        // Pilih Dharmajaya (4 baris standar)
+                        userLocationChoice.set(senderPhone, 'DHARMAJAYA');
+                        userFlowByPhone.set(senderPhone, 'NONE');
+                        replyText = [
+                            '✅ *LOKASI: DHARMAJAYA (Duri Kosambi)*',
+                            '',
+                            '📋 Format pendaftaran *4 BARIS*:',
+                            '1. Nama',
+                            '2. Nomor Kartu (16-18 digit)',
+                            '3. Nomor KTP (16 digit)',
+                            '4. Nomor KK (16 digit)',
+                            '',
+                            '*Contoh:*',
+                            'Budi Santoso',
+                            '5049488500001111',
+                            '3173444455556666',
+                            '3173555566667777',
+                            '',
+                            '👇 Silakan kirim data pendaftaran sekarang.'
+                        ].join('\n');
+                    } else if (normalized === '0') {
+                        userFlowByPhone.set(senderPhone, 'NONE');
+                        replyText = '✅ Pendaftaran dibatalkan.';
+                    } else {
+                        replyText = '⚠️ Pilih 1 (Pasarjaya) atau 2 (Dharmajaya). Ketik 0 untuk batal.';
+                    }
+                    await sock.sendMessage(remoteJid, { text: replyText });
+                    continue;
+                }
 
                 if (pendingDelete.has(senderPhone)) {
                     const isMenuOrCommand =
