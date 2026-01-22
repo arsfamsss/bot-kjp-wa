@@ -13,14 +13,14 @@ import { parseFlexibleDate } from './utils/dateParser';
  * - Simpan sebagai UPPERCASE (case-insensitive)
  */
 function cleanName(text: string): string {
-  if (!text) return '';
+    if (!text) return '';
 
-  let cleaned = text.replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '');
-  // Hanya ambil karakter huruf, angka, spasi, titik, koma, strip, petik (nama orang umum)
-  // [a-zA-Z0-9\s.,'-]
-  cleaned = cleaned.replace(/[^a-zA-Z0-9\s.,'-]/g, '');
-  cleaned = cleaned.replace(/\s+/g, ' ').trim();
-  return cleaned.toUpperCase();
+    let cleaned = text.replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '');
+    // Hanya ambil karakter huruf, angka, spasi, titik, koma, strip, petik (nama orang umum)
+    // [a-zA-Z0-9\s.,'-]
+    cleaned = cleaned.replace(/[^a-zA-Z0-9\s.,'-]/g, '');
+    cleaned = cleaned.replace(/\s+/g, ' ').trim();
+    return cleaned.toUpperCase();
 }
 
 /**
@@ -28,293 +28,299 @@ function cleanName(text: string): string {
  * - Hanya ambil ANGKA (0-9), abaikan semua huruf dan tanda baca
  */
 export function extractDigits(input: string): string {
-  if (!input) return '';
+    if (!input) return '';
 
-  // Ambil HANYA angka, abaikan semua huruf/label/tanda baca apapun
-  return (input.match(/\d+/g) || []).join('');
+    // Ambil HANYA angka, abaikan semua huruf/label/tanda baca apapun
+    return (input.match(/\d+/g) || []).join('');
 }
 
 // --- BAGIAN 2: PARSING LOGIC ---
 
 // Parsing logic with Auto-Split feature
 export function parseRawMessageToLines(text: string): string[] {
-  // SANITASI AWAL: Bersihkan karakter invisible dan format aneh
-  let sanitized = (text || '')
-    .replace(/[\u200B-\u200D\uFEFF]/g, '')  // Zero-width characters
-    .replace(/\u00A0/g, ' ')                  // Non-breaking space → normal space
-    .replace(/:+/g, ':')                      // :: → :
-    .replace(/\r\n/g, '\n')                   // Windows newline
-    .replace(/\r/g, '\n');                    // Old Mac newline
+    // SANITASI AWAL: Bersihkan karakter invisible dan format aneh
+    let sanitized = (text || '')
+        .replace(/[\u200B-\u200D\uFEFF]/g, '')  // Zero-width characters
+        .replace(/\u00A0/g, ' ')                  // Non-breaking space → normal space
+        .replace(/:+/g, ':')                      // :: → :
+        .replace(/\r\n/g, '\n')                   // Windows newline
+        .replace(/\r/g, '\n');                    // Old Mac newline
 
-  const rawLines = sanitized
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
+    const rawLines = sanitized
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
 
-  const finalLines: string[] = [];
+    const finalLines: string[] = [];
 
-  // Auto-Split Logic: Deteksi baris yang berisi Nama + Angka 16 digit tergabung
-  // Regex: 
-  // ^(.*?)          -> Nama di depan (lazy match)
-  // \s+             -> Spasi pemisah
-  // (\d{16,})$      -> Angka 16 digit atau lebih di akhir
-  const mergedRegex = /^(.*?)[\s\t]+(\d{16,})$/;
+    // Auto-Split Logic: Deteksi baris yang berisi Nama + Angka 16 digit tergabung
+    // Regex: 
+    // ^(.*?)          -> Nama di depan (lazy match)
+    // \s+             -> Spasi pemisah
+    // (\d{16,})$      -> Angka 16 digit atau lebih di akhir
+    const mergedRegex = /^(.*?)[\s\t]+(\d{16,})$/;
 
-  for (const line of rawLines) {
-    // Cek apakah baris ini "Name + KJP" yang nempel?
-    // Contoh: "Agus Dalimin 5049488500001111"
-    const match = line.match(mergedRegex);
+    for (const line of rawLines) {
+        // Cek apakah baris ini "Name + KJP" yang nempel?
+        // Contoh: "Agus Dalimin 5049488500001111"
+        const match = line.match(mergedRegex);
 
-    // Tapi hati-hati, jangan split jika itu cuma angka (misal user kirim angka doang tapi ada spasi di depan)
-    // Pastikan grup 1 (Nama) mengandung huruf minimal 2
-    if (match && /[a-zA-Z]{2,}/.test(match[1])) {
+        // Tapi hati-hati, jangan split jika itu cuma angka (misal user kirim angka doang tapi ada spasi di depan)
+        // Pastikan grup 1 (Nama) mengandung huruf minimal 2
+        if (match && /[a-zA-Z]{2,}/.test(match[1])) {
 
-      // FIX: Jangan split jika Text bagian depan sepertinya adalah LABEL umum
-      // Contoh: "NIK 3173..." -> Jangan split jadi "NIK" dan "3173..."
-      const candidateName = match[1].trim();
-      // Cek apakah candidateName MENGANDUNG kata kunci label umum (lebih fleksibel)
-      // Termasuk: ATM, KTP, NIK, KK, KJP, KARTU, KELUARGA, NO, NOMOR, NOMER
-      const isLabel = /\b(NIK|KTP|KK|KJP|KARTU|KELUARGA|ATM|NO|NOMOR|NOMER)\b/i.test(candidateName);
+            // FIX: Jangan split jika Text bagian depan sepertinya adalah LABEL umum
+            // Contoh: "NIK 3173..." -> Jangan split jadi "NIK" dan "3173..."
+            const candidateName = match[1].trim();
+            // Cek apakah candidateName MENGANDUNG kata kunci label umum (lebih fleksibel)
+            // Termasuk: ATM, KTP, NIK, KK, KJP, KARTU, KELUARGA, NO, NOMOR, NOMER
+            const isLabel = /\b(NIK|KTP|KK|KJP|KARTU|KELUARGA|ATM|NO|NOMOR|NOMER)\b/i.test(candidateName);
 
-      if (isLabel) {
-        // Ini kemungkinan format "NIK 123456...", jangan displit
-        finalLines.push(line);
-      } else {
-        // Beneran nama nempel
-        finalLines.push(candidateName);
-        finalLines.push(match[2].trim()); // Nomor
-      }
-    } else {
-      finalLines.push(line);
+            if (isLabel) {
+                // Ini kemungkinan format "NIK 123456...", jangan displit
+                finalLines.push(line);
+            } else {
+                // Beneran nama nempel
+                finalLines.push(candidateName);
+                finalLines.push(match[2].trim()); // Nomor
+            }
+        } else {
+            finalLines.push(line);
+        }
     }
-  }
 
-  return finalLines;
+    return finalLines;
 }
 
 export function groupLinesToBlocks(lines: string[], linesPerBlock: number = 4): { blocks: string[][]; remainder: string[] } {
-  const blocks: string[][] = [];
-  const validChunkCount = Math.floor(lines.length / linesPerBlock);
+    const blocks: string[][] = [];
+    const validChunkCount = Math.floor(lines.length / linesPerBlock);
 
-  for (let i = 0; i < validChunkCount; i++) {
-    const chunk = lines.slice(i * linesPerBlock, (i * linesPerBlock) + linesPerBlock);
-    blocks.push(chunk);
-  }
+    for (let i = 0; i < validChunkCount; i++) {
+        const chunk = lines.slice(i * linesPerBlock, (i * linesPerBlock) + linesPerBlock);
+        blocks.push(chunk);
+    }
 
-  // Sisa baris yang tidak cukup (gantung)
-  const remainder = lines.slice(validChunkCount * linesPerBlock);
+    // Sisa baris yang tidak cukup (gantung)
+    const remainder = lines.slice(validChunkCount * linesPerBlock);
 
-  return { blocks, remainder };
+    return { blocks, remainder };
 }
 
 function buildParsedFields(block: string[], location: 'PASARJAYA' | 'DHARMAJAYA' | 'DEFAULT' = 'DEFAULT'): ParsedFields {
-  if (location === 'PASARJAYA') {
-    // FORMAT 5 BARIS: Nama, KK, KTP, Kartu, Tanggal Lahir
-    const [line1, line2, line3, line4, line5] = block;
-    return {
-      nama: cleanName(line1),
-      no_kk: extractDigits(line2),   // Line 2: KK
-      no_ktp: extractDigits(line3),  // Line 3: KTP
-      no_kjp: extractDigits(line4),  // Line 4: Kartu
-      tanggal_lahir: parseFlexibleDate(line5), // Line 5: Date
-      lokasi: 'PASARJAYA'
-    };
-  } else {
-    // DEFAULT / DHARMAJAYA (4 BARIS): Nama, Kartu, KTP, KK
-    const [line1, line2, line3, line4] = block;
-    return {
-      nama: cleanName(line1),
-      no_kjp: extractDigits(line2), // Line 2: Kartu
-      no_ktp: extractDigits(line3), // Line 3: KTP
-      no_kk: extractDigits(line4),  // Line 4: KK
-      lokasi: location === 'DHARMAJAYA' ? 'DHARMAJAYA' : undefined
-    };
-  }
+    if (location === 'PASARJAYA') {
+        // FORMAT 5 BARIS: Nama, KK, KTP, Kartu, Tanggal Lahir
+        const [line1, line2, line3, line4, line5] = block;
+        return {
+            nama: cleanName(line1),
+            no_kk: extractDigits(line2),   // Line 2: KK
+            no_ktp: extractDigits(line3),  // Line 3: KTP
+            no_kjp: extractDigits(line4),  // Line 4: Kartu
+            tanggal_lahir: parseFlexibleDate(line5), // Line 5: Date
+            lokasi: 'PASARJAYA'
+        };
+    } else {
+        // DEFAULT / DHARMAJAYA (4 BARIS): Nama, Kartu, KTP, KK
+        const [line1, line2, line3, line4] = block;
+        return {
+            nama: cleanName(line1),
+            no_kjp: extractDigits(line2), // Line 2: Kartu
+            no_ktp: extractDigits(line3), // Line 3: KTP
+            no_kk: extractDigits(line4),  // Line 4: KK
+            lokasi: location === 'DHARMAJAYA' ? 'DHARMAJAYA' : undefined
+        };
+    }
 }
 
 export function validateBlockToItem(block: string[], index: number, location: 'PASARJAYA' | 'DHARMAJAYA' | 'DEFAULT' = 'DEFAULT'): LogItem {
-  const parsed = buildParsedFields(block, location);
-  const errors: ItemError[] = [];
+    const parsed = buildParsedFields(block, location);
+    const errors: ItemError[] = [];
 
-  // Nama wajib ada
-  if (!parsed.nama) {
-    errors.push({ field: 'nama', type: 'required', detail: 'Nama wajib diisi.' });
-  }
-
-  // VALIDASI NOMOR (Common)
-
-  // NOMOR KARTU 16–18 digit
-  if (!parsed.no_kjp) {
-    errors.push({ field: 'no_kjp', type: 'required', detail: 'Nomor Kartu wajib diisi angka.' });
-  } else if (parsed.no_kjp.length < 16 || parsed.no_kjp.length > 18) {
-    errors.push({
-      field: 'no_kjp',
-      type: 'invalid_length',
-      detail: `Panjang Nomor Kartu salah (${parsed.no_kjp.length} digit). Harusnya 16-18 digit.`,
-    });
-  }
-
-  // KTP 16 digit
-  if (!parsed.no_ktp) {
-    errors.push({ field: 'no_ktp', type: 'required', detail: 'No KTP wajib diisi angka.' });
-  } else if (parsed.no_ktp.length !== 16) {
-    errors.push({
-      field: 'no_ktp',
-      type: 'invalid_length',
-      detail: `Panjang KTP salah (${parsed.no_ktp.length} digit). Harusnya 16 digit.`,
-    });
-  }
-
-  // KK 16 digit
-  if (!parsed.no_kk) {
-    errors.push({ field: 'no_kk', type: 'required', detail: 'No KK wajib diisi angka.' });
-  } else if (parsed.no_kk.length !== 16) {
-    errors.push({
-      field: 'no_kk',
-      type: 'invalid_length',
-      detail: `Panjang KK salah (${parsed.no_kk.length} digit). Harusnya 16 digit.`,
-    });
-  }
-
-  // VALIDASI TANGGAL LAHIR (Khusus Pasarjaya)
-  if (location === 'PASARJAYA') {
-    if (!parsed.tanggal_lahir) {
-      errors.push({
-        field: 'tanggal_lahir',
-        type: 'required',
-        detail: 'Tanggal lahir salah format atau kosong. Gunakan: Tgl-Bln-Thn (Contoh: 01-01-2015)'
-      });
+    // Nama wajib ada
+    if (!parsed.nama) {
+        errors.push({ field: 'nama', type: 'required', detail: 'Nama wajib diisi.' });
     }
-    // Note: Logic urutan terbalik KTP/KK tidak relevan di Pasarjaya karena urutan fixed: KK, KTP, Kartu
-  } else {
-    // VALIDASI: Deteksi urutan terbalik (KK di baris 3, KTP di baris 4) - HANYA UNTUK 4 BARIS
-    const line3 = block[2]?.toLowerCase() || '';
-    const line4 = block[3]?.toLowerCase() || '';
-    const line3HasKK = /\b(kk|kartu\s*keluarga)\b/.test(line3);
-    const line4HasKTP = /\b(ktp|nik)\b/.test(line4);
 
-    if (line3HasKK && line4HasKTP) {
-      errors.push({
-        field: 'no_ktp',
-        type: 'wrong_order',
-        detail: 'Urutan salah! Baris 3 harus KTP, baris 4 harus KK. Kirim ulang dengan urutan: Nama → Kartu → KTP → KK.',
-      });
+    // VALIDASI NOMOR (Common)
+
+    // NOMOR KARTU 16–18 digit
+    if (!parsed.no_kjp) {
+        errors.push({ field: 'no_kjp', type: 'required', detail: 'Nomor Kartu wajib diisi angka.' });
+    } else if (parsed.no_kjp.length < 16 || parsed.no_kjp.length > 18) {
+        errors.push({
+            field: 'no_kjp',
+            type: 'invalid_length',
+            detail: `Panjang Nomor Kartu salah (${parsed.no_kjp.length} digit). Harusnya 16-18 digit.`,
+        });
     }
-  }
 
-  // VALIDASI UNIK INTER-FIELD
-  if (parsed.no_kjp && parsed.no_ktp && parsed.no_kjp === parsed.no_ktp) {
-    errors.push({ field: 'no_ktp', type: 'same_as_other', detail: 'No KTP sama dengan No Kartu.' });
-  }
-  if (parsed.no_kjp && parsed.no_kk && parsed.no_kjp === parsed.no_kk) {
-    errors.push({ field: 'no_kk', type: 'same_as_other', detail: 'No KK sama dengan No Kartu.' });
-  }
-  if (parsed.no_ktp && parsed.no_kk && parsed.no_ktp === parsed.no_kk) {
-    errors.push({ field: 'no_kk', type: 'same_as_other', detail: 'No KK sama dengan No KTP.' });
-  }
+    // KTP 16 digit
+    if (!parsed.no_ktp) {
+        errors.push({ field: 'no_ktp', type: 'required', detail: 'No KTP wajib diisi angka.' });
+    } else if (parsed.no_ktp.length !== 16) {
+        errors.push({
+            field: 'no_ktp',
+            type: 'invalid_length',
+            detail: `Panjang KTP salah (${parsed.no_ktp.length} digit). Harusnya 16 digit.`,
+        });
+    }
 
-  const status = errors.length === 0 ? 'OK' : 'SKIP_FORMAT';
+    // KK 16 digit
+    if (!parsed.no_kk) {
+        errors.push({ field: 'no_kk', type: 'required', detail: 'No KK wajib diisi angka.' });
+    } else if (parsed.no_kk.length !== 16) {
+        errors.push({
+            field: 'no_kk',
+            type: 'invalid_length',
+            detail: `Panjang KK salah (${parsed.no_kk.length} digit). Harusnya 16 digit.`,
+        });
+    }
 
-  return {
-    index,
-    raw_lines: [...block],
-    parsed,
-    status,
-    errors,
-    duplicate_info: null,
-  };
+    // VALIDASI TANGGAL LAHIR (Khusus Pasarjaya)
+    if (location === 'PASARJAYA') {
+        if (!parsed.tanggal_lahir) {
+            errors.push({
+                field: 'tanggal_lahir',
+                type: 'required',
+                detail: 'Tanggal lahir salah format atau kosong. Gunakan: Tgl-Bln-Thn (Contoh: 01-01-2015)'
+            });
+        }
+        // Note: Logic urutan terbalik KTP/KK tidak relevan di Pasarjaya karena urutan fixed: KK, KTP, Kartu
+    } else {
+        // VALIDASI: Deteksi urutan terbalik (KK di baris 3, KTP di baris 4) - HANYA UNTUK 4 BARIS
+        const line3 = block[2]?.toLowerCase() || '';
+        const line4 = block[3]?.toLowerCase() || '';
+        const line3HasKK = /\b(kk|kartu\s*keluarga)\b/.test(line3);
+        const line4HasKTP = /\b(ktp|nik)\b/.test(line4);
+
+        if (line3HasKK && line4HasKTP) {
+            errors.push({
+                field: 'no_ktp',
+                type: 'wrong_order',
+                detail: 'Urutan salah! Baris 3 harus KTP, baris 4 harus KK. Kirim ulang dengan urutan: Nama → Kartu → KTP → KK.',
+            });
+        }
+    }
+
+    // VALIDASI UNIK INTER-FIELD
+    if (parsed.no_kjp && parsed.no_ktp && parsed.no_kjp === parsed.no_ktp) {
+        errors.push({ field: 'no_ktp', type: 'same_as_other', detail: 'No KTP sama dengan No Kartu.' });
+    }
+    if (parsed.no_kjp && parsed.no_kk && parsed.no_kjp === parsed.no_kk) {
+        errors.push({ field: 'no_kk', type: 'same_as_other', detail: 'No KK sama dengan No Kartu.' });
+    }
+    if (parsed.no_ktp && parsed.no_kk && parsed.no_ktp === parsed.no_kk) {
+        errors.push({ field: 'no_kk', type: 'same_as_other', detail: 'No KK sama dengan No KTP.' });
+    }
+
+    const status = errors.length === 0 ? 'OK' : 'SKIP_FORMAT';
+
+    return {
+        index,
+        raw_lines: [...block],
+        parsed,
+        status,
+        errors,
+        duplicate_info: null,
+    };
 }
 
 export async function processRawMessageToLogJson(params: {
-  text: string;
-  senderPhone: string;
-  messageId?: string | null;
-  receivedAt: Date;
-  tanggal: string; // YYYY-MM-DD (kalender WIB)
-  processingDayKey: string; // YYYY-MM-DD (periode operasional)
-  locationContext?: 'PASARJAYA' | 'DHARMAJAYA'; // New Param
+    text: string;
+    senderPhone: string;
+    messageId?: string | null;
+    receivedAt: Date;
+    tanggal: string; // YYYY-MM-DD (kalender WIB)
+    processingDayKey: string; // YYYY-MM-DD (periode operasional)
+    locationContext?: 'PASARJAYA' | 'DHARMAJAYA'; // New Param
 }): Promise<LogJson> {
-  const { text, senderPhone, messageId, receivedAt, tanggal, processingDayKey, locationContext } = params;
+    const { text, senderPhone, messageId, receivedAt, tanggal, processingDayKey, locationContext } = params;
 
-  // Determine lines per block based on location
-  const location = locationContext || 'DEFAULT';
-  const linesPerBlock = location === 'PASARJAYA' ? 5 : 4;
+    // Determine lines per block based on location
+    const location = locationContext || 'DEFAULT';
+    const linesPerBlock = location === 'PASARJAYA' ? 5 : 4;
 
-  const receivedAtIso = receivedAt.toISOString();
-  const lines = parseRawMessageToLines(text);
+    const receivedAtIso = receivedAt.toISOString();
+    const lines = parseRawMessageToLines(text);
 
-  // 1) Grouping dengan Partial Success Logic
-  const { blocks, remainder } = groupLinesToBlocks(lines, linesPerBlock);
+    // 1) Grouping dengan Partial Success Logic
+    const { blocks, remainder } = groupLinesToBlocks(lines, linesPerBlock);
 
-  // 2) parse & validasi format
-  let items = blocks.map((block, i) => validateBlockToItem(block, i + 1, location));
+    // 2) parse & validasi format
+    let items = blocks.map((block, i) => validateBlockToItem(block, i + 1, location));
 
-  // 3) duplikat DI DALAM 1 PESAN
-  // ✅ PENTING: KK BOLEH SAMA DALAM 1 PESAN (Sesuai Request D)
-  // ✅ Tapi KJP dan KTP/NIK Tetap TIDAK BOLEH SAMA DALAM 1 PESAN (Logis)
+    // 3) duplikat DI DALAM 1 PESAN
+    // ✅ PENTING: KK BOLEH SAMA DALAM 1 PESAN (Sesuai Request)
+    // ✅ Tapi KJP dan KTP/NIK Tetap TIDAK BOLEH SAMA DALAM 1 PESAN
 
-  const occurrences = new Map<string, { itemIdx: number; field: 'no_kjp' | 'no_ktp' }[]>();
+    const occurrences = new Map<string, { itemIdx: number; field: 'no_kjp' | 'no_ktp' }[]>();
 
-  items.forEach((it, idx) => {
-    // Cek duplikat internal hanya untuk KJP dan KTP
-    (['no_kjp', 'no_ktp'] as const).forEach((field) => {
-      const val = it.parsed[field];
-      if (!val) return;
-      const arr = occurrences.get(val) ?? [];
-      arr.push({ itemIdx: idx, field });
-      occurrences.set(val, arr);
-    });
-  });
+    items.forEach((it, idx) => {
+        // PERBAIKAN: Hanya cek item yang statusnya masih OK
+        if (it.status !== 'OK') return;
 
-  for (const [val, occs] of occurrences.entries()) {
-    if (occs.length <= 1) continue;
+        // Cek duplikat internal hanya untuk KJP dan KTP
+        (['no_kjp', 'no_ktp'] as const).forEach((field) => {
+            const val = it.parsed[field];
+            if (!val) return;
 
-    // SMART DUPLICATE: Pertahankan yang PERTAMA, tandai sisanya sebagai duplikat
-    // Skip index 0 (occurrence pertama), hanya proses index 1 ke atas
-    occs.slice(1).forEach(({ itemIdx, field }) => {
-      const it = items[itemIdx];
-      if (it.status === 'OK') {
-        it.status = 'SKIP_FORMAT';
-        it.errors.push({
-          field,
-          type: 'duplicate_in_message',
-          detail: `Data ini duplikat (${field === 'no_kjp' ? 'No Kartu' : 'No KTP'} sama dengan data sebelumnya).`,
+            // Gunakan key unik per field agar KJP dan KTP tidak tumpang tindih
+            const key = `${field}:${val}`;
+            const arr = occurrences.get(key) ?? [];
+            arr.push({ itemIdx: idx, field });
+            occurrences.set(key, arr);
         });
-      }
     });
-  }
 
-  // 4) cek duplikat database hanya untuk item OK
-  const updatedItems: LogItem[] = [];
-  for (const item of items) {
-    const updated = await checkDuplicateForItem(item, {
-      processingDayKey,
-      senderPhone,
-    });
-    updatedItems.push(updated);
-  }
-  items = updatedItems;
+    for (const [key, occs] of occurrences.entries()) {
+        if (occs.length <= 1) continue;
 
-  // 5) hitung stats
-  const stats: LogStats = {
-    total_blocks: items.length,
-    ok_count: items.filter((it) => it.status === 'OK').length,
-    skip_format_count: items.filter((it) => it.status === 'SKIP_FORMAT').length,
-    skip_duplicate_count: items.filter((it) => it.status === 'SKIP_DUPLICATE').length,
-  };
+        // SMART DUPLICATE: Pertahankan yang PERTAMA, tandai sisanya sebagai duplikat
+        // Skip index 0 (occurrence pertama), hanya proses index 1 ke atas
+        occs.slice(1).forEach(({ itemIdx, field }) => {
+            const it = items[itemIdx];
+            if (it.status === 'OK') {
+                it.status = 'SKIP_FORMAT';
+                it.errors.push({
+                    field,
+                    type: 'duplicate_in_message',
+                    detail: `Data ini duplikat (${field === 'no_kjp' ? 'No Kartu' : 'No KTP'} sama dengan data sebelumnya dalam pesan ini).`,
+                });
+            }
+        });
+    }
 
-  const logJson: LogJson = {
-    message_id: messageId ?? null,
-    sender_phone: senderPhone,
-    received_at: receivedAtIso,
-    tanggal,
-    processing_day_key: processingDayKey,
-    stats,
-    items,
+    // 4) cek duplikat database hanya untuk item OK
+    const updatedItems: LogItem[] = [];
+    for (const item of items) {
+        const updated = await checkDuplicateForItem(item, {
+            processingDayKey,
+            senderPhone,
+        });
+        updatedItems.push(updated);
+    }
+    items = updatedItems;
 
-    failed_remainder_lines: remainder.length > 0 ? remainder : undefined,
-    lokasi: location !== 'DEFAULT' ? location : undefined // Simpan lokasi di log
-  };
+    // 5) hitung stats
+    const stats: LogStats = {
+        total_blocks: items.length,
+        ok_count: items.filter((it) => it.status === 'OK').length,
+        skip_format_count: items.filter((it) => it.status === 'SKIP_FORMAT').length,
+        skip_duplicate_count: items.filter((it) => it.status === 'SKIP_DUPLICATE').length,
+    };
 
-  return logJson;
+    const logJson: LogJson = {
+        message_id: messageId ?? null,
+        sender_phone: senderPhone,
+        received_at: receivedAtIso,
+        tanggal,
+        processing_day_key: processingDayKey,
+        stats,
+        items,
+
+        failed_remainder_lines: remainder.length > 0 ? remainder : undefined,
+        lokasi: location !== 'DEFAULT' ? location : undefined // Simpan lokasi di log
+    };
+
+    return logJson;
 }
