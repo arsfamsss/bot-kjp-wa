@@ -639,11 +639,18 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             '4. Nomor KK (16 digit)',
                             '5. Tanggal Lahir (DD-MM-YYYY)',
                             '',
-                            '*Contoh:*',
+                            '*Contoh 1:*',
                             'Budi Santoso',
                             '5049488500001111',
                             '3173444455556666',
                             '3173555566667777',
+                            '15-08-1985',
+                            '',
+                            '*Atau Contoh 2:*',
+                            'Budi Santoso',
+                            'Kjp 5049488500001111',
+                            'Ktp 3173444455556666',
+                            'Kk 3173555566667777',
                             '15-08-1985',
                             '',
                             '👇 Silakan kirim data pendaftaran sekarang.'
@@ -661,11 +668,17 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             '3. Nomor KTP (16 digit)',
                             '4. Nomor KK (16 digit)',
                             '',
-                            '*Contoh:*',
+                            '*Contoh 1:*',
                             'Budi Santoso',
                             '5049488500001111',
                             '3173444455556666',
                             '3173555566667777',
+                            '',
+                            '*Atau Contoh 2:*',
+                            'Budi Santoso',
+                            'Kjp 5049488500001111',
+                            'Ktp 3173444455556666',
+                            'Kk 3173555566667777',
                             '',
                             '👇 Silakan kirim data pendaftaran sekarang.'
                         ].join('\n');
@@ -1289,30 +1302,120 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                     userFlowByPhone.set(senderPhone, 'SELECT_LOCATION');
                     replyText = [
                         '📋 *DAFTAR ANTREAN*',
-                        'Silakan pilih lokasi pendaftaran:',
+                        'Silakan pilih lokasi pengambilan:',
                         '',
-                        '1️⃣ **Pasarjaya** (Kedoya/Cengkareng)',
-                        '   _Format: 5 Baris (Ada Tanggal Lahir)_',
+                        '1️⃣ *Pasarjaya* (Kedoya/Cengkareng)',
+                        '2️⃣ *Dharmajaya* (Duri Kosambi)',
                         '',
-                        '2️⃣ **Dharmajaya** (Duri Kosambi)',
-                        '   _Format: 4 Baris (Standar)_',
-                        '',
-                        '_Ketik 0 untuk batal._'
+                        '_Ketik 0 untuk batal._',
+                        '_Ketik MENU untuk kembali ke menu utama._'
                     ].join('\n');
                 } else if (normalized === '2' || normalized.startsWith('CEK')) {
                     pendingDelete.delete(senderPhone);
-                    // NEW FLOW: Show Check Data Menu
-                    userFlowByPhone.set(senderPhone, 'CHECK_DATA_MENU');
-                    replyText = [
-                        '📅 *CEK DATA*',
-                        '',
-                        'Pilih periode cek data:',
-                        '1️⃣ Hari Ini',
-                        '2️⃣ Kemarin',
-                        '3️⃣ Tanggal Lain (DD-MM-YYYY)',
-                        '',
-                        '_Ketik 0 untuk batal._'
-                    ].join('\n');
+                    // LANGSUNG TAMPILKAN DATA HARI INI (tanpa sub-menu)
+                    const { validCount, validItems } = await getTodayRecapForSender(senderPhone, processingDayKey);
+                    const dateDisplay = processingDayKey.split('-').reverse().join('-');
+
+                    if (validCount === 0) {
+                        replyText = [
+                            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+                            '🔎 *STATUS DATA HARI INI*',
+                            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+                            '',
+                            `📅 Periode: *${dateDisplay}* (06.01–04.00 WIB)`,
+                            '',
+                            '❌ *Belum ada data terdaftar*',
+                            '',
+                            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+                            '💡 _Ketik *MENU* untuk kembali._'
+                        ].join('\n');
+                    } else {
+                        const lines = [
+                            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+                            '🔎 *STATUS DATA HARI INI*',
+                            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+                            '',
+                            `📅 Periode: *${dateDisplay}* (06.01–04.00 WIB)`,
+                            '',
+                            `✅ *Data Terdaftar: ${validCount} Orang*`,
+                            ''
+                        ];
+
+                        validItems.forEach((item, idx) => {
+                            lines.push(`┌── ${idx + 1}. *${item.nama}*`);
+                            lines.push(`│   📇 Kartu : ${item.no_kjp}`);
+                            lines.push(`│   🪪 KTP   : ${item.no_ktp}`);
+                            lines.push(`└── 🏠 KK    : ${item.no_kk}`);
+                            lines.push('');
+                        });
+
+                        lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+                        lines.push('💡 _Ketik *MENU* untuk kembali._');
+                        lines.push('💡 _Ketik *HAPUS 1* atau *HAPUS 1,2,3* untuk menghapus data._');
+
+                        replyText = lines.join('\n');
+                    }
+                } else if (normalized.startsWith('HAPUS')) {
+                    // FITUR HAPUS DENGAN FORMAT: HAPUS 1 atau HAPUS 1,2,3
+                    pendingDelete.delete(senderPhone);
+                    const hapusArgs = normalized.replace('HAPUS', '').trim();
+
+                    if (!hapusArgs) {
+                        // Jika hanya ketik HAPUS tanpa angka, tampilkan daftar
+                        const { validCount, validItems } = await getTodayRecapForSender(senderPhone, processingDayKey);
+
+                        if (validCount === 0) {
+                            replyText = '⚠️ Anda belum mengirim data pendaftaran hari ini.';
+                        } else {
+                            const list = validItems.map((item, idx) => `${idx + 1}. ${item.nama} (${item.no_kjp})`).join('\n');
+                            replyText = [
+                                '🗑️ *HAPUS DATA*',
+                                '',
+                                'Data Anda hari ini:',
+                                list,
+                                '',
+                                'Ketik *HAPUS 1* untuk hapus data nomor 1',
+                                'Ketik *HAPUS 1,2,3* untuk hapus beberapa data',
+                                '',
+                                '_Ketik MENU untuk kembali._'
+                            ].join('\n');
+                        }
+                    } else {
+                        // Parse angka dari HAPUS 1,2,3 atau HAPUS 1 2 3
+                        const indices = hapusArgs.split(/[,\s]+/).map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n > 0);
+
+                        if (indices.length === 0) {
+                            replyText = '⚠️ Format salah. Contoh: *HAPUS 1* atau *HAPUS 1,2,3*';
+                        } else {
+                            // Hapus data berdasarkan index
+                            let successCount = 0;
+                            const deletedNames: string[] = [];
+
+                            // Sort descending agar index tidak bergeser saat hapus
+                            const sortedIndices = [...indices].sort((a, b) => b - a);
+
+                            for (const idx of sortedIndices) {
+                                const res = await deleteDailyDataByIndex(senderPhone, processingDayKey, idx);
+                                if (res.success) {
+                                    successCount++;
+                                    deletedNames.push(res.deletedName || `Data ${idx}`);
+                                }
+                            }
+
+                            if (successCount > 0) {
+                                replyText = [
+                                    '✅ *DATA BERHASIL DIHAPUS*',
+                                    '',
+                                    `${successCount} data telah dihapus:`,
+                                    deletedNames.map(n => `- ${n}`).join('\n'),
+                                    '',
+                                    '💡 _Ketik *CEK* untuk melihat sisa data Anda._'
+                                ].join('\n');
+                            } else {
+                                replyText = '❌ Gagal menghapus. Pastikan nomor urut benar.';
+                            }
+                        }
+                    }
                 } else if (normalized === '3' || normalized.includes('HAPUS DATA')) {
                     pendingDelete.delete(senderPhone); // disable old logic
                     const { validCount, validItems } = await getTodayRecapForSender(senderPhone, processingDayKey);
