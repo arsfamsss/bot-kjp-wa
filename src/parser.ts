@@ -2,6 +2,7 @@
 
 import type { LogItem, ParsedFields, ItemError, LogJson, LogStats } from './types';
 import { checkDuplicateForItem } from './supabase';
+import { parseFlexibleDate } from './utils/dateParser';
 
 // --- BAGIAN 1: PEMBERSIH INPUT ---
 
@@ -91,39 +92,56 @@ export function parseRawMessageToLines(text: string): string[] {
   return finalLines;
 }
 
-export function groupLinesToBlocks(lines: string[]): { blocks: string[][]; remainder: string[] } {
+export function groupLinesToBlocks(lines: string[], linesPerBlock: number = 4): { blocks: string[][]; remainder: string[] } {
   const blocks: string[][] = [];
-  const validChunkCount = Math.floor(lines.length / 4);
+  const validChunkCount = Math.floor(lines.length / linesPerBlock);
 
   for (let i = 0; i < validChunkCount; i++) {
-    const chunk = lines.slice(i * 4, (i * 4) + 4);
+    const chunk = lines.slice(i * linesPerBlock, (i * linesPerBlock) + linesPerBlock);
     blocks.push(chunk);
   }
 
-  // Sisa baris yang tidak cukup 4 (gantung)
-  const remainder = lines.slice(validChunkCount * 4);
+  // Sisa baris yang tidak cukup (gantung)
+  const remainder = lines.slice(validChunkCount * linesPerBlock);
 
   return { blocks, remainder };
 }
 
-function buildParsedFields(block: string[]): ParsedFields {
-  const [line1, line2, line3, line4] = block;
-  return {
-    nama: cleanName(line1),
-    no_kjp: extractDigits(line2),
-    no_ktp: extractDigits(line3),
-    no_kk: extractDigits(line4),
-  };
+function buildParsedFields(block: string[], location: 'PASARJAYA' | 'DHARMAJAYA' | 'DEFAULT' = 'DEFAULT'): ParsedFields {
+  if (location === 'PASARJAYA') {
+    // FORMAT 5 BARIS: Nama, KK, KTP, Kartu, Tanggal Lahir
+    const [line1, line2, line3, line4, line5] = block;
+    return {
+      nama: cleanName(line1),
+      no_kk: extractDigits(line2),   // Line 2: KK
+      no_ktp: extractDigits(line3),  // Line 3: KTP
+      no_kjp: extractDigits(line4),  // Line 4: Kartu
+      tanggal_lahir: parseFlexibleDate(line5), // Line 5: Date
+      lokasi: 'PASARJAYA'
+    };
+  } else {
+    // DEFAULT / DHARMAJAYA (4 BARIS): Nama, Kartu, KTP, KK
+    const [line1, line2, line3, line4] = block;
+    return {
+      nama: cleanName(line1),
+      no_kjp: extractDigits(line2), // Line 2: Kartu
+      no_ktp: extractDigits(line3), // Line 3: KTP
+      no_kk: extractDigits(line4),  // Line 4: KK
+      lokasi: location === 'DHARMAJAYA' ? 'DHARMAJAYA' : undefined
+    };
+  }
 }
 
-export function validateBlockToItem(block: string[], index: number): LogItem {
-  const parsed = buildParsedFields(block);
+export function validateBlockToItem(block: string[], index: number, location: 'PASARJAYA' | 'DHARMAJAYA' | 'DEFAULT' = 'DEFAULT'): LogItem {
+  const parsed = buildParsedFields(block, location);
   const errors: ItemError[] = [];
 
   // Nama wajib ada
   if (!parsed.nama) {
     errors.push({ field: 'nama', type: 'required', detail: 'Nama wajib diisi.' });
   }
+
+  // VALIDASI NOMOR (Common)
 
   // NOMOR KARTU 16–18 digit
   if (!parsed.no_kjp) {
@@ -158,43 +176,41 @@ export function validateBlockToItem(block: string[], index: number): LogItem {
     });
   }
 
-  // VALIDASI: Deteksi urutan terbalik (KK di baris 3, KTP di baris 4)
-  // Cek apakah baris 3 mengandung label "KK" dan baris 4 mengandung label "KTP"
-  const line3 = block[2]?.toLowerCase() || '';
-  const line4 = block[3]?.toLowerCase() || '';
-  const line3HasKK = /\b(kk|kartu\s*keluarga)\b/.test(line3);
-  const line4HasKTP = /\b(ktp|nik)\b/.test(line4);
+  // VALIDASI TANGGAL LAHIR (Khusus Pasarjaya)
+  if (location === 'PASARJAYA') {
+    if (!parsed.tanggal_lahir) {
+      errors.push({
+        field: 'tanggal_lahir',
+        type: 'required',
+        detail: 'Tanggal lahir salah format atau kosong. Gunakan: Tgl-Bln-Thn (Contoh: 01-01-2015)'
+      });
+    }
+    // Note: Logic urutan terbalik KTP/KK tidak relevan di Pasarjaya karena urutan fixed: KK, KTP, Kartu
+  } else {
+    // VALIDASI: Deteksi urutan terbalik (KK di baris 3, KTP di baris 4) - HANYA UNTUK 4 BARIS
+    const line3 = block[2]?.toLowerCase() || '';
+    const line4 = block[3]?.toLowerCase() || '';
+    const line3HasKK = /\b(kk|kartu\s*keluarga)\b/.test(line3);
+    const line4HasKTP = /\b(ktp|nik)\b/.test(line4);
 
-  if (line3HasKK && line4HasKTP) {
-    errors.push({
-      field: 'no_ktp',
-      type: 'wrong_order',
-      detail: 'Urutan salah! Baris 3 harus KTP, baris 4 harus KK. Kirim ulang dengan urutan: Nama → Kartu → KTP → KK.',
-    });
+    if (line3HasKK && line4HasKTP) {
+      errors.push({
+        field: 'no_ktp',
+        type: 'wrong_order',
+        detail: 'Urutan salah! Baris 3 harus KTP, baris 4 harus KK. Kirim ulang dengan urutan: Nama → Kartu → KTP → KK.',
+      });
+    }
   }
 
-  // VALIDASI BARU: Cek apakah nomor dalam 1 blok ada yang sama
-  // No Kartu, No KTP, No KK harus UNIK (berbeda satu sama lain)
+  // VALIDASI UNIK INTER-FIELD
   if (parsed.no_kjp && parsed.no_ktp && parsed.no_kjp === parsed.no_ktp) {
-    errors.push({
-      field: 'no_ktp',
-      type: 'same_as_other',
-      detail: 'No KTP sama dengan No Kartu. Setiap nomor harus berbeda.',
-    });
+    errors.push({ field: 'no_ktp', type: 'same_as_other', detail: 'No KTP sama dengan No Kartu.' });
   }
   if (parsed.no_kjp && parsed.no_kk && parsed.no_kjp === parsed.no_kk) {
-    errors.push({
-      field: 'no_kk',
-      type: 'same_as_other',
-      detail: 'No KK sama dengan No Kartu. Setiap nomor harus berbeda.',
-    });
+    errors.push({ field: 'no_kk', type: 'same_as_other', detail: 'No KK sama dengan No Kartu.' });
   }
   if (parsed.no_ktp && parsed.no_kk && parsed.no_ktp === parsed.no_kk) {
-    errors.push({
-      field: 'no_kk',
-      type: 'same_as_other',
-      detail: 'No KK sama dengan No KTP. Setiap nomor harus berbeda.',
-    });
+    errors.push({ field: 'no_kk', type: 'same_as_other', detail: 'No KK sama dengan No KTP.' });
   }
 
   const status = errors.length === 0 ? 'OK' : 'SKIP_FORMAT';
@@ -216,17 +232,22 @@ export async function processRawMessageToLogJson(params: {
   receivedAt: Date;
   tanggal: string; // YYYY-MM-DD (kalender WIB)
   processingDayKey: string; // YYYY-MM-DD (periode operasional)
+  locationContext?: 'PASARJAYA' | 'DHARMAJAYA'; // New Param
 }): Promise<LogJson> {
-  const { text, senderPhone, messageId, receivedAt, tanggal, processingDayKey } = params;
+  const { text, senderPhone, messageId, receivedAt, tanggal, processingDayKey, locationContext } = params;
+
+  // Determine lines per block based on location
+  const location = locationContext || 'DEFAULT';
+  const linesPerBlock = location === 'PASARJAYA' ? 5 : 4;
 
   const receivedAtIso = receivedAt.toISOString();
   const lines = parseRawMessageToLines(text);
 
   // 1) Grouping dengan Partial Success Logic
-  const { blocks, remainder } = groupLinesToBlocks(lines);
+  const { blocks, remainder } = groupLinesToBlocks(lines, linesPerBlock);
 
   // 2) parse & validasi format
-  let items = blocks.map((block, i) => validateBlockToItem(block, i + 1));
+  let items = blocks.map((block, i) => validateBlockToItem(block, i + 1, location));
 
   // 3) duplikat DI DALAM 1 PESAN
   // ✅ PENTING: KK BOLEH SAMA DALAM 1 PESAN (Sesuai Request D)
@@ -290,7 +311,9 @@ export async function processRawMessageToLogJson(params: {
     processing_day_key: processingDayKey,
     stats,
     items,
-    failed_remainder_lines: remainder.length > 0 ? remainder : undefined
+
+    failed_remainder_lines: remainder.length > 0 ? remainder : undefined,
+    lokasi: location !== 'DEFAULT' ? location : undefined // Simpan lokasi di log
   };
 
   return logJson;

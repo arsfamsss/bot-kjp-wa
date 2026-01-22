@@ -7,10 +7,12 @@ export interface ParsedFields {
   no_kjp: string;
   no_ktp: string;
   no_kk: string;
+  tanggal_lahir?: string | null; // Format YYYY-MM-DD
+  lokasi?: 'PASARJAYA' | 'DHARMAJAYA'; // New Field
 }
 
 export interface ItemError {
-  field: "nama" | "no_kjp" | "no_ktp" | "no_kk";
+  field: "nama" | "no_kjp" | "no_ktp" | "no_kk" | "tanggal_lahir";
   type:
   | "required"
   | "invalid_length"
@@ -66,5 +68,6 @@ export interface LogJson {
   processing_day_key: string; // YYYY-MM-DD (periode operasional 06:01–05:30 WIB)
   stats: LogStats;
   items: LogItem[];
-  failed_remainder_lines?: string[]; // Sisa baris yang tidak lengkap/gagal (untuk Partial Success)
+  failed_remainder_lines?: string[]; // Sisa baris yang tidak lengkap/gagal
+  lokasi?: string; // Untuk menyimpan context lokasi di level log
 }

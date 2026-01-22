@@ -4,24 +4,24 @@
 // --- TYPE DEFINITIONS ---
 
 // State alur menu user
-export type UserFlowState = 'NONE' | 'CHECK_DATA_MENU' | 'CHECK_DATA_SPECIFIC_DATE' | 'DELETE_DATA';
+export type UserFlowState = 'NONE' | 'CHECK_DATA_MENU' | 'CHECK_DATA_SPECIFIC_DATE' | 'DELETE_DATA' | 'SELECT_LOCATION';
 
 // State alur menu admin
-export type AdminFlowState = 
-    | 'NONE' 
-    | 'MENU' 
-    | 'ASK_DATE' 
-    | 'ASK_RANGE' 
-    | 'RESET_CONFIRM' 
-    | 'ADD_CONTACT' 
-    | 'CHECK_CONTACT' 
-    | 'EDIT_CONTACT' 
-    | 'DELETE_CONTACT' 
-    | 'BROADCAST_SELECT' 
-    | 'BROADCAST_MSG' 
-    | 'BROADCAST_PREVIEW' 
-    | 'BROADCAST_SCHEDULE' 
-    | 'SEARCH_DATA' 
+export type AdminFlowState =
+    | 'NONE'
+    | 'MENU'
+    | 'ASK_DATE'
+    | 'ASK_RANGE'
+    | 'RESET_CONFIRM'
+    | 'ADD_CONTACT'
+    | 'CHECK_CONTACT'
+    | 'EDIT_CONTACT'
+    | 'DELETE_CONTACT'
+    | 'BROADCAST_SELECT'
+    | 'BROADCAST_MSG'
+    | 'BROADCAST_PREVIEW'
+    | 'BROADCAST_SCHEDULE'
+    | 'SEARCH_DATA'
     | 'CHECK_DATA_PERIOD';
 
 // Draft broadcast untuk penjadwalan/preview
@@ -35,6 +35,9 @@ export type BroadcastDraft = {
 
 // State per pengirim untuk alur menu User
 export const userFlowByPhone = new Map<string, UserFlowState>();
+
+// Pilihan lokasi user (Pasarjaya vs Dharmajaya)
+export const userLocationChoice = new Map<string, 'PASARJAYA' | 'DHARMAJAYA'>();
 
 // State per pengirim untuk alur menu Admin
 export const adminFlowByPhone = new Map<string, AdminFlowState>();

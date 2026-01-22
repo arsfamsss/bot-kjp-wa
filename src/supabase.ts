@@ -22,7 +22,7 @@ let isCacheInitialized = false;
 export async function initRegisteredUsersCache() {
   if (isCacheInitialized) return;
   console.log('🔄 Memuat cache pengguna terdaftar...');
-  
+
   // Ambil semua data dari lid_phone_map
   const { data, error } = await supabase
     .from('lid_phone_map')
@@ -30,7 +30,7 @@ export async function initRegisteredUsersCache() {
 
   if (error) {
     console.error('❌ Gagal memuat cache pengguna:', error.message);
-    return; 
+    return;
   }
 
   if (data) {
@@ -53,7 +53,7 @@ export function getRegisteredUserNameSync(phoneNumber: string): string | null {
   // Cek dulu apakah key ini sebenarnya adalah LID?
   const mappedPhone = lidToPhoneCache.get(phoneNumber);
   const key = mappedPhone || phoneNumber;
-  
+
   return registeredUsersCache.get(key) || null;
 }
 
@@ -266,6 +266,8 @@ export async function saveLogAndOkItems(log: LogJson, rawText: string): Promise<
     no_kjp: it.parsed.no_kjp,
     no_ktp: it.parsed.no_ktp,
     no_kk: it.parsed.no_kk,
+    tanggal_lahir: it.parsed.tanggal_lahir || null, // ADDED
+    lokasi: it.parsed.lokasi || null,               // ADDED
     meta: {
       message_id: log.message_id,
       index: it.index,
@@ -336,34 +338,34 @@ export async function deleteDataByNameOrCard(
 }
 
 export async function deleteDailyDataByIndex(
-    senderPhone: string, 
-    processingDayKey: string,
-    targetIndex: number // 1-based index
+  senderPhone: string,
+  processingDayKey: string,
+  targetIndex: number // 1-based index
 ): Promise<{ success: boolean; deletedName?: string }> {
-    // 1. Ambil data dengan urutan yang SAMA PERSIS dengan REKAP
-    const { data, error } = await supabase
-        .from('data_harian')
-        .select('id, nama')
-        .eq('processing_day_key', processingDayKey)
-        .eq('sender_phone', senderPhone)
-        .order('received_at', { ascending: true });
+  // 1. Ambil data dengan urutan yang SAMA PERSIS dengan REKAP
+  const { data, error } = await supabase
+    .from('data_harian')
+    .select('id, nama')
+    .eq('processing_day_key', processingDayKey)
+    .eq('sender_phone', senderPhone)
+    .order('received_at', { ascending: true });
 
-    if (error || !data || data.length === 0) return { success: false };
-    
-    // 2. Ambil item berdasarkan index
-    const item = data[targetIndex - 1]; // convert to 0-based
-    
-    if (!item) return { success: false };
-    
-    // 3. Hapus by ID
-    const { error: delError } = await supabase
-        .from('data_harian')
-        .delete()
-        .eq('id', item.id);
-        
-    if (delError) return { success: false };
-    
-    return { success: true, deletedName: item.nama };
+  if (error || !data || data.length === 0) return { success: false };
+
+  // 2. Ambil item berdasarkan index
+  const item = data[targetIndex - 1]; // convert to 0-based
+
+  if (!item) return { success: false };
+
+  // 3. Hapus by ID
+  const { error: delError } = await supabase
+    .from('data_harian')
+    .delete()
+    .eq('id', item.id);
+
+  if (delError) return { success: false };
+
+  return { success: true, deletedName: item.nama };
 }
 // --- HAPUS DATA TERAKHIR (UNTUK FITUR BATAL/UNDO) ---
 export async function deleteLastSubmission(
@@ -388,7 +390,7 @@ export async function deleteLastSubmission(
     // Filter data yang masih dalam batas waktu (maxAgeMinutes)
     const now = new Date();
     const cutoffTime = new Date(now.getTime() - maxAgeMinutes * 60 * 1000);
-    
+
     // Cari semua data yang received_at >= cutoff (berarti baru dikirim dalam X menit terakhir)
     // dan yang memiliki received_at yang sama (dikirim dalam 1 batch pesan)
     const recentData = data.filter((row: any) => {
@@ -446,38 +448,38 @@ export interface DashboardStats {
 
 export async function getStatistics(processingDayKey: string): Promise<DashboardStats> {
   const today = processingDayKey;
-  
+
   // Hitung 7 hari dan 30 hari ke belakang
   const weekAgo = shiftDateString(today, -6);
   const monthAgo = shiftDateString(today, -29);
-  
+
   // Query data hari ini
   const { count: todayCount } = await supabase
     .from('data_harian')
     .select('*', { count: 'exact', head: true })
     .eq('processing_day_key', today);
-  
+
   // Query data 7 hari
   const { count: weekCount } = await supabase
     .from('data_harian')
     .select('*', { count: 'exact', head: true })
     .gte('processing_day_key', weekAgo)
     .lte('processing_day_key', today);
-  
+
   // Query data 30 hari
   const { count: monthCount } = await supabase
     .from('data_harian')
     .select('*', { count: 'exact', head: true })
     .gte('processing_day_key', monthAgo)
     .lte('processing_day_key', today);
-  
+
   // Active users hari ini
   const { data: todayUsers } = await supabase
     .from('data_harian')
     .select('sender_phone')
     .eq('processing_day_key', today);
   const activeUsersToday = new Set(todayUsers?.map(r => r.sender_phone) || []).size;
-  
+
   // Active users minggu ini
   const { data: weekUsers } = await supabase
     .from('data_harian')
@@ -485,16 +487,16 @@ export async function getStatistics(processingDayKey: string): Promise<Dashboard
     .gte('processing_day_key', weekAgo)
     .lte('processing_day_key', today);
   const activeUsersWeek = new Set(weekUsers?.map(r => r.sender_phone) || []).size;
-  
+
   // Total registered users
   const totalRegisteredUsers = registeredUsersCache.size;
-  
+
   // Top 10 users hari ini (by data count)
   const userCounts = new Map<string, number>();
   todayUsers?.forEach(r => {
     userCounts.set(r.sender_phone, (userCounts.get(r.sender_phone) || 0) + 1);
   });
-  
+
   const topUsers = Array.from(userCounts.entries())
     .sort((a, b) => b[1] - a[1])
     .slice(0, 10)
@@ -503,7 +505,7 @@ export async function getStatistics(processingDayKey: string): Promise<Dashboard
       name: registeredUsersCache.get(phone) || phone,
       count
     }));
-  
+
   return {
     todayCount: todayCount ?? 0,
     weekCount: weekCount ?? 0,
@@ -598,21 +600,21 @@ export async function upsertLidPhoneMap(params: {
   const existing = await getRegisteredUserByPhone(params.phone_number);
 
   if (existing && existing.push_name !== params.push_name) {
-      // Update Nama Existing (tanpa mengubah LID JID yg mungkin sudah valid)
-      const { error } = await supabase
-        .from('lid_phone_map')
-        .update({ 
-            push_name: params.push_name,
-            updated_at: new Date().toISOString()
-        })
-        .eq('phone_number', params.phone_number);
-        
-      if (error) console.error('❌ Gagal update nama kontak:', error.message);
-      else {
-          // Update Cache
-          registeredUsersCache.set(params.phone_number, params.push_name || '');
-      }
-      return;
+    // Update Nama Existing (tanpa mengubah LID JID yg mungkin sudah valid)
+    const { error } = await supabase
+      .from('lid_phone_map')
+      .update({
+        push_name: params.push_name,
+        updated_at: new Date().toISOString()
+      })
+      .eq('phone_number', params.phone_number);
+
+    if (error) console.error('❌ Gagal update nama kontak:', error.message);
+    else {
+      // Update Cache
+      registeredUsersCache.set(params.phone_number, params.push_name || '');
+    }
+    return;
   }
 
   // Jika belum ada, atau nama sama, jalankan logika insert/upsert normal by LID
@@ -636,8 +638,8 @@ export async function upsertLidPhoneMap(params: {
   if (params.phone_number) {
     registeredUsersCache.set(params.phone_number, params.push_name || '');
     if (params.lid_jid) {
-        // Update cache LID juga (siapa tahu ini first time insert)
-        lidToPhoneCache.set(params.lid_jid, params.phone_number);
+      // Update cache LID juga (siapa tahu ini first time insert)
+      lidToPhoneCache.set(params.lid_jid, params.phone_number);
     }
   }
 }
@@ -655,7 +657,7 @@ export async function deleteLidPhoneMap(phoneNumber: string): Promise<boolean> {
 
   // Update Cache
   registeredUsersCache.delete(phoneNumber);
-  
+
   return true;
 }
 

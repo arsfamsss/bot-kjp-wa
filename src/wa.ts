@@ -62,6 +62,7 @@ import {
     AdminFlowState,
     BroadcastDraft,
     userFlowByPhone,
+    userLocationChoice, // IMPORTED
     adminFlowByPhone,
     pendingDelete,
     broadcastDraftMap,
@@ -292,6 +293,9 @@ export async function connectToWhatsApp() {
                     mAny?.templateButtonReplyMessage?.selectedId;
 
                 const rawInput = selectedRowId || selectedButtonId || messageText;
+
+                // Helper untuk membersihkan input user
+                // (Variables normalized, rawTrim are declared later)
 
                 // Jika pesan adalah gambar/video tanpa caption, beritahu user
                 if (!rawInput && (mAny?.imageMessage || mAny?.videoMessage)) {
@@ -556,6 +560,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                 };
 
                 const currentUserFlow = userFlowByPhone.get(senderPhone) || 'NONE';
+                const currentLocation = userLocationChoice.get(senderPhone) || 'DHARMAJAYA'; // Default to old style (Dharmajaya) if unknown
 
                 // Handle Reset Flow jika user ketik Menu/Greeting
                 if (currentUserFlow !== 'NONE' && (normalized === '0' || isGreetingOrMenu(normalized))) {
@@ -1225,39 +1230,19 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
 
                 // --- CUSTOMER MENU ---
                 if (normalized === '1' || normalized.includes('DAFTAR')) {
+                    // New Flow: Ask for Location
+                    userFlowByPhone.set(senderPhone, 'SELECT_LOCATION');
                     replyText = [
-                        '📋 *FORMAT DAFTAR ANTREAN*',
-                        'Silakan kirim data dengan urutan 4 baris kebawah:',
+                        '📋 *DAFTAR ANTREAN*',
+                        'Silakan pilih lokasi pendaftaran:',
                         '',
-                        '1. Nama',
-                        '2. Nomor Kartu',
-                        '3. Nomor KTP (NIK)',
-                        '4. Nomor KK',
+                        '1️⃣ **Pasarjaya** (Kedoya/Cengkareng)',
+                        '   _Format: 5 Baris (Ada Tanggal Lahir)_',
                         '',
-                        '✅ *Contoh:*',
-                        'JIKA KIRIM 1 DATA',
-                        'Budi',
-                        '5049488500001111',
-                        '3173444455556666',
-                        '3173555566667777',
+                        '2️⃣ **Dharmajaya** (Duri Kosambi)',
+                        '   _Format: 4 Baris (Standar)_',
                         '',
-                        'JIKA KIRIM LEBIH DARI SATU',
-                        'Budi',
-                        '5049488500001111',
-                        '3173444455556666',
-                        '3173555566667777',
-                        '',
-                        'Agus',
-                        '5049488522223333',
-                        '3173000011112222',
-                        '3173888877776666',
-                        '',
-                        'dan seterusnya',
-                        '',
-                        'penulisan nomor kartu/ktp/kk bebas (boleh pakai spasi, koma, titik, strip, dll).',
-                        '',
-                        'Mohon pastikan urutan data sudah sesuai agar pendaftaran dapat dicatat dengan baik 🙏',
-                        '_(Anda bisa kirim banyak nama sekaligus, pisahkan dengan enter)_',
+                        '_Ketik 0 untuk batal._'
                     ].join('\n');
                 } else if (normalized === '2' || normalized.startsWith('CEK')) {
                     pendingDelete.delete(senderPhone);
@@ -1322,10 +1307,14 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                 } else {
 
                     // Logic Baru: Terima Partial Success
-                    // Asal >= 4 baris, kita coba proses.
-                    // Parser akan memisahkan valid blocks dan remainder.
+                    // Cek lokasi yg dipilih user, default ke Dharmajaya kalau belum set (backward compatibility)
+                    const userLocation = userLocationChoice.get(senderPhone) || 'DHARMAJAYA';
+                    // Min lines 4 atau 5 depending on location
+                    const minLines = userLocation === 'PASARJAYA' ? 5 : 4;
+
                     const lines = parseRawMessageToLines(messageText);
-                    if (lines.length >= 4) {
+
+                    if (lines.length >= minLines) {
                         const logJson = await processRawMessageToLogJson({
                             text: messageText,
                             senderPhone,
@@ -1333,6 +1322,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             receivedAt,
                             tanggal: tanggalWib,
                             processingDayKey,
+                            locationContext: userLocation // PASS CONTEXT
                         });
 
                         // INJECT SENDER NAME (untuk disimpan di tabe data_harian)
@@ -1346,9 +1336,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             replyText = buildReplyForNewData(logJson, totalDataToday);
                         } else {
                             // Kasus langka: >= 4 baris tapi tidak ada blok valid satu pun?
-                            // Harusnya masuk ke failed remainder semua.
-                            // Tapi untuk safety:
-                            replyText = '⚠️ *Format Salah*\nHarus 4 baris per orang. Ketik 1 untuk contoh.';
+                            replyText = `⚠️ *Format Data Salah*\nPastikan format sesuai dengan lokasi **${userLocation}** (${minLines} baris per orang).`;
                         }
                     }
                 }
