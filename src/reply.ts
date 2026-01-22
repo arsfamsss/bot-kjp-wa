@@ -19,25 +19,32 @@ export function buildReplyForNewData(log: LogJson, totalDataToday?: number): str
         const lines = [
             '✅ *DATA PENDAFTARAN DITERIMA*',
             '',
-            `📌 Data diterima: *${total} orang*`,
+            `🎯 Diterima: *${total} orang*`,
         ];
 
         // Tampilkan total data hari ini jika tersedia
         if (totalDataToday !== undefined && totalDataToday > 0) {
-            lines.push(`📊 Total data Anda hari ini: *${totalDataToday} orang*`);
+            lines.push(`📊 Total Data Anda hari ini: *${totalDataToday} orang*`);
         }
 
         lines.push('');
         lines.push('Terima kasih 🙏');
-        lines.push('Data pendaftaran anda telah kami terima dan dicatat.');
+        lines.push('Data pendaftaran Anda telah kami terima dan dicatat.');
         lines.push('');
-        lines.push('⚠️ *PENTING:*');
-        lines.push('Pastikan data sudah BENAR dan URUT sesuai contoh.');
-        lines.push('Jika salah, pengambilan sembako bisa DITOLAK.');
+        lines.push('━━━━━━━━━━━━━━━━━━━━━━');
+        lines.push('⚠️ *PERHATIAN*');
+        lines.push('━━━━━━━━━━━━━━━━━━━━━━');
+        lines.push('• Pastikan data sudah *BENAR* dan *URUT*');
+        lines.push('• Kesalahan data dapat menyebabkan penolakan saat pengambilan');
+        lines.push('• Kami tidak bertanggung jawab atas kesalahan input');
         lines.push('');
-        lines.push('💡 _Ketik *CEK* untuk melihat detail data Anda._');
-        lines.push('💡 _Ketik *BATAL* dalam 30 menit jika ingin membatalkan._');
-        lines.push('💡 _Atau langsung kirim data baru sesuai format pendaftaran._');
+        lines.push('━━━━━━━━━━━━━━━━━━━━━━');
+        lines.push('📋 *MENU LANJUTAN*');
+        lines.push('━━━━━━━━━━━━━━━━━━━━━━');
+        lines.push('💡 Ketik *CEK* → Lihat detail data Anda');
+        lines.push('💡 Ketik *BATAL* → Batalkan (dalam 30 menit)');
+        lines.push('💡 Ketik *HAPUS* → Hapus data tertentu');
+        lines.push('💡 Atau langsung kirim data baru');
 
         return lines.join('\n');
     }
