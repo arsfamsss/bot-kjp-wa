@@ -1528,11 +1528,11 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                     ].join('\n');
                 } else if (normalized === '2' || normalized.startsWith('CEK')) {
                     pendingDelete.delete(senderPhone);
-                    // LANGSUNG TAMPILKAN DATA HARI INI (tanpa sub-menu)
-                    const { validCount, validItems } = await getTodayRecapForSender(senderPhone, processingDayKey);
-                    const dateDisplay = processingDayKey.split('-').reverse().join('-');
+                    // LANGSUNG TAMPILKAN DATA HARI INI menggunakan buildReplyForTodayRecap
+                    const { validCount, totalInvalid, validItems } = await getTodayRecapForSender(senderPhone, processingDayKey);
 
                     if (validCount === 0) {
+                        const dateDisplay = processingDayKey.split('-').reverse().join('-');
                         replyText = [
                             '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
                             '🔎 *STATUS DATA HARI INI*',
@@ -1546,30 +1546,10 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             '💡 _Ketik *MENU* untuk kembali._'
                         ].join('\n');
                     } else {
-                        const lines = [
-                            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-                            '🔎 *STATUS DATA HARI INI*',
-                            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-                            '',
-                            `📅 Periode: *${dateDisplay}* (06.01–04.00 WIB)`,
-                            '',
-                            `✅ *Data Terdaftar: ${validCount} Orang*`,
-                            ''
-                        ];
-
-                        validItems.forEach((item, idx) => {
-                            lines.push(`┌── ${idx + 1}. *${item.nama}*`);
-                            lines.push(`│   📇 Kartu : ${item.no_kjp}`);
-                            lines.push(`│   🪪 KTP   : ${item.no_ktp}`);
-                            lines.push(`└── 🏠 KK    : ${item.no_kk}`);
-                            lines.push('');
-                        });
-
-                        lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-                        lines.push('💡 _Ketik *MENU* untuk kembali._');
-                        lines.push('💡 _Ketik *HAPUS 1* atau *HAPUS 1,2,3* untuk menghapus data._');
-
-                        replyText = lines.join('\n');
+                        // Gunakan buildReplyForTodayRecap yang sudah ada lokasi & tanggal lahir
+                        replyText = buildReplyForTodayRecap(validCount, totalInvalid, validItems, processingDayKey);
+                        // Tambahkan tips hapus di akhir
+                        replyText += '\n💡 _Ketik *HAPUS 1* atau *HAPUS 1,2,3* untuk menghapus data._';
                     }
                 } else if (normalized.startsWith('HAPUS')) {
                     // FITUR HAPUS DENGAN FORMAT: HAPUS 1 atau HAPUS 1,2,3
@@ -1698,7 +1678,13 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                     const messageTextLower = messageText.toLowerCase();
                     const containsBirthKeyword = /\b(tgl\s*lahir|tanggal\s*lahir|lahir)\b/i.test(messageTextLower);
 
-                    if (userLocation === 'DHARMAJAYA' && containsBirthKeyword && lines.length >= 4) {
+                    // DETEKSI: User di DHARMAJAYA tapi kirim 5 baris (format Pasarjaya)
+                    // Cek apakah baris ke-5 terlihat seperti tanggal (DD-MM-YYYY, DD/MM/YYYY, dll)
+                    const looksLikeDatePattern = /^\d{1,2}[-\/\.]\d{1,2}[-\/\.]\d{2,4}$/;
+                    const fifthLine = lines[4]?.trim() || '';
+                    const looksLikePasarjayaFormat = lines.length === 5 && looksLikeDatePattern.test(fifthLine);
+
+                    if (userLocation === 'DHARMAJAYA' && (containsBirthKeyword || looksLikePasarjayaFormat) && lines.length >= 4) {
                         // Tolak karena kemungkinan user salah pilih lokasi atau format salah
                         replyText = [
                             '❌ *Format yang Anda kirim Salah.*',
