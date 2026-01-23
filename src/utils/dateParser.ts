@@ -1,17 +1,20 @@
+/**
+ * Parse flexible date formats to YYYY-MM-DD
+ * Supports:
+ * - 20-01-2025, 20/01/2025, 20.01.2025
+ * - 20012025, 200125 (compact)
+ * - 20 01 2025 (spaces)
+ * - 20 Januari 2025, 20-Jan-2025
+ * - 20  -  01  -  2025 (messy spacing/separators)
+ * - 20 - 01 - 2025
+ */
 export function parseFlexibleDate(input: string): string | null {
     if (!input) return null;
 
-    const raw = input.trim();
-    // Regex Patterns
-    // 1. DDMMYYYY or DDMMYY (e.g., 01012025, 010125)
-    // Avoid matching if it looks like a phone number or NIK (too long), but here we trust the line context (Line 5)
-    const compactMatch = raw.match(/^(\d{1,2})(\d{2})(\d{2,4})$/);
+    // Normalize: trim, collapse multiple spaces, uppercase
+    let raw = input.trim().toUpperCase();
 
-    // 2. DD-MM-YYYY, DD/MM/YYYY, DD.MM.YYYY
-    const separatorMatch = raw.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/);
-
-    // 3. DD Month YYYY (Indonesian)
-    // Matches: 01 Januari 2025, 1 Jan 25, 1-Jan-2025
+    // Month names mapping
     const monthNames: { [key: string]: number } = {
         'JAN': 1, 'JANUARI': 1, 'JANUARY': 1,
         'PEB': 2, 'FEB': 2, 'FEBRUARI': 2, 'FEBRUARY': 2,
@@ -27,41 +30,80 @@ export function parseFlexibleDate(input: string): string | null {
         'DES': 12, 'DEC': 12, 'DESEMBER': 12, 'DECEMBER': 12
     };
 
-    // Regex for text month: capture DD, MonthName, YYYY
-    const textMonthMatch = raw.match(/^(\d{1,2})[\s\-\/]+([a-zA-Z]+)[\s\-\/]+(\d{2,4})$/);
-
     let day = 0, month = 0, year = 0;
+    let matched = false;
 
-    if (compactMatch) {
-        day = parseInt(compactMatch[1]);
-        month = parseInt(compactMatch[2]);
-        year = parseInt(compactMatch[3]);
-    } else if (separatorMatch) {
-        day = parseInt(separatorMatch[1]);
-        month = parseInt(separatorMatch[2]);
-        year = parseInt(separatorMatch[3]);
-    } else if (textMonthMatch) {
+    // Strategy 1: Check for text month first (e.g., "20 Januari 2025", "20-Jan-2025")
+    // Remove messy separators around text: "20   -  JANUARI  -  2025" → "20 JANUARI 2025"
+    const normalizedForTextMonth = raw.replace(/[\s\-\/\.]+/g, ' ').trim();
+    const textMonthMatch = normalizedForTextMonth.match(/^(\d{1,2})\s+([A-Z]+)\s+(\d{2,4})$/);
+
+    if (textMonthMatch) {
         day = parseInt(textMonthMatch[1]);
-        const monthStr = textMonthMatch[2].toUpperCase().trim();
+        const monthStr = textMonthMatch[2];
         year = parseInt(textMonthMatch[3]);
-
-        // Find month index
         month = monthNames[monthStr] || 0;
-    } else {
-        return null;
+        if (month > 0) matched = true;
     }
 
-    // Date Validation
+    // Strategy 2: Numeric with separators (messy or clean)
+    // "20-01-2025", "20 / 01 / 2025", "20  -  01  -  2025", "20 01 2025"
+    if (!matched) {
+        // Replace all separators (-, /, ., spaces) with single space, then split
+        const normalizedNumeric = raw.replace(/[\s\-\/\.]+/g, ' ').trim();
+        const parts = normalizedNumeric.split(' ');
+
+        if (parts.length === 3) {
+            const d = parseInt(parts[0]);
+            const m = parseInt(parts[1]);
+            const y = parseInt(parts[2]);
+
+            if (!isNaN(d) && !isNaN(m) && !isNaN(y)) {
+                day = d;
+                month = m;
+                year = y;
+                matched = true;
+            }
+        }
+    }
+
+    // Strategy 3: Compact format (DDMMYYYY or DDMMYY)
+    // "20012025" → 20-01-2025
+    // "200125" → 20-01-2025
+    if (!matched) {
+        // Remove all non-digits
+        const digitsOnly = raw.replace(/\D/g, '');
+
+        // 8 digits: DDMMYYYY
+        if (digitsOnly.length === 8) {
+            day = parseInt(digitsOnly.substring(0, 2));
+            month = parseInt(digitsOnly.substring(2, 4));
+            year = parseInt(digitsOnly.substring(4, 8));
+            matched = true;
+        }
+        // 6 digits: DDMMYY
+        else if (digitsOnly.length === 6) {
+            day = parseInt(digitsOnly.substring(0, 2));
+            month = parseInt(digitsOnly.substring(2, 4));
+            year = parseInt(digitsOnly.substring(4, 6));
+            matched = true;
+        }
+    }
+
+    if (!matched) return null;
+
+    // Validate day and month
     if (day < 1 || day > 31 || month < 1 || month > 12) return null;
 
-    // Year Normalization (Handle 2 digits: 25 -> 2025)
-    // Assumption: < 50 is 20xx, >= 50 is 19xx (e.g. 99 -> 1999)
+    // Year normalization (2-digit to 4-digit)
+    // < 50 → 20xx, >= 50 → 19xx
     if (year < 100) {
         if (year < 50) year += 2000;
         else year += 1900;
     }
 
-    if (year < 1900 || year > 2100) return null; // Logic range
+    // Sanity check year range
+    if (year < 1900 || year > 2100) return null;
 
     // Format to YYYY-MM-DD
     const yyyy = year.toString();
@@ -69,4 +111,39 @@ export function parseFlexibleDate(input: string): string | null {
     const dd = day.toString().padStart(2, '0');
 
     return `${yyyy}-${mm}-${dd}`;
+}
+
+/**
+ * Check if a string looks like it could be a date (for format detection)
+ * More lenient than parseFlexibleDate - just checks structure
+ */
+export function looksLikeDate(input: string): boolean {
+    if (!input) return false;
+
+    const raw = input.trim().toUpperCase();
+
+    // Contains month name?
+    const monthKeywords = ['JAN', 'FEB', 'MAR', 'APR', 'MEI', 'MAY', 'JUN', 'JUL',
+        'AGU', 'AGT', 'SEP', 'OKT', 'OCT', 'NOV', 'NOP', 'DES', 'DEC'];
+    if (monthKeywords.some(m => raw.includes(m))) return true;
+
+    // Remove all non-alphanumeric
+    const cleaned = raw.replace(/[\s\-\/\.]+/g, ' ').trim();
+
+    // Pattern: DD MM YYYY (with spaces)
+    if (/^\d{1,2}\s+\d{1,2}\s+\d{2,4}$/.test(cleaned)) return true;
+
+    // Pattern: DD-MM-YYYY style (original separators)
+    if (/^\d{1,2}[\s\-\/\.]+\d{1,2}[\s\-\/\.]+\d{2,4}$/.test(raw)) return true;
+
+    // Pattern: DDMMYYYY (8 digits) or DDMMYY (6 digits)
+    const digitsOnly = raw.replace(/\D/g, '');
+    if (digitsOnly.length === 6 || digitsOnly.length === 8) {
+        // Check if it looks like a valid date
+        const d = parseInt(digitsOnly.substring(0, 2));
+        const m = parseInt(digitsOnly.substring(2, 4));
+        if (d >= 1 && d <= 31 && m >= 1 && m <= 12) return true;
+    }
+
+    return false;
 }
