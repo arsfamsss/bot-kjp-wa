@@ -5,8 +5,10 @@ import type { LogJson } from './types';
  * Membangun pesan balasan untuk data pendaftaran baru
  * @param log - Data log dari proses parsing
  * @param totalDataToday - Total data valid yang sudah dikirim user hari ini (termasuk data baru)
+ * @param locationContext - Konteks lokasi ('PASARJAYA' atau 'DHARMAJAYA')
  */
-export function buildReplyForNewData(log: LogJson, totalDataToday?: number): string {
+export function buildReplyForNewData(log: LogJson, totalDataToday?: number, locationContext?: string): string {
+    const isPasarjaya = locationContext === 'PASARJAYA';
     const stats = log.stats;
     const total = stats.total_blocks;
     const success = stats.ok_count;
@@ -135,9 +137,10 @@ export function buildReplyForNewData(log: LogJson, totalDataToday?: number): str
 
         // 2. Tampilkan sisa baris (Remainder)
         if (hasRemainder && log.failed_remainder_lines) {
+            const expectedLines = isPasarjaya ? 5 : 4;
             lines.push('┌─────────────────────────────');
             lines.push(`│ 👤 *Data tidak lengkap*`);
-            lines.push(`│ ⚠️ Baris tidak cukup 4 (tiap orang = 4 baris)`);
+            lines.push(`│ ⚠️ Baris tidak cukup ${expectedLines} (tiap orang = ${expectedLines} baris)`);
             lines.push('│');
             lines.push('│ _Coba kirim ulang text ini:_');
             lines.push('│');
@@ -147,14 +150,27 @@ export function buildReplyForNewData(log: LogJson, totalDataToday?: number): str
             lines.push('└─────────────────────────────');
         }
 
-        // Contoh format yang benar
+        // Contoh format yang benar - sesuai lokasi
         lines.push('');
         lines.push('💡 *CONTOH FORMAT YANG BENAR:*');
         lines.push('');
-        lines.push('Budi');
-        lines.push('5049488500001111');
-        lines.push('3173444455556666');
-        lines.push('3173555566667777');
+
+        if (isPasarjaya) {
+            // Format Pasarjaya (5 baris)
+            lines.push('*Format Pasarjaya (5 baris):*');
+            lines.push('Budi Santoso');
+            lines.push('5049488500001111');
+            lines.push('3173444455556666');
+            lines.push('3173555566667777');
+            lines.push('15-08-1985');
+        } else {
+            // Format Dharmajaya (4 baris)
+            lines.push('*Format Dharmajaya (4 baris):*');
+            lines.push('Budi Santoso');
+            lines.push('5049488500001111');
+            lines.push('3173444455556666');
+            lines.push('3173555566667777');
+        }
     }
 
     lines.push('');

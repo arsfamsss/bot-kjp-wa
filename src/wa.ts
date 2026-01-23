@@ -1684,12 +1684,43 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                     const fifthLine = lines[4]?.trim() || '';
                     const looksLikePasarjayaFormat = lines.length === 5 && looksLikeDatePattern.test(fifthLine);
 
-                    if (userLocation === 'DHARMAJAYA' && (containsBirthKeyword || looksLikePasarjayaFormat) && lines.length >= 4) {
+                    // DETEKSI: User di PASARJAYA tapi kirim 4 baris (format Dharmajaya)
+                    const looksLikeDharmajayaFormat = lines.length === 4 && !looksLikeDatePattern.test(lines[3]?.trim() || '');
+
+                    if (userLocation === 'PASARJAYA' && looksLikeDharmajayaFormat) {
+                        // Tolak karena user kirim 4 baris di mode Pasarjaya
+                        replyText = [
+                            '❌ *FORMAT TIDAK SESUAI LOKASI*',
+                            '',
+                            'Anda memilih lokasi *PASARJAYA* yang membutuhkan *5 BARIS* (termasuk Tanggal Lahir).',
+                            '',
+                            '📋 *FORMAT PASARJAYA (5 BARIS):*',
+                            '1. Nama',
+                            '2. Nomor Kartu (16-18 digit)',
+                            '3. Nomor KTP (16 digit)',
+                            '4. Nomor KK (16 digit)',
+                            '5. Tanggal Lahir (DD-MM-YYYY)',
+                            '',
+                            '*Contoh:*',
+                            'Budi Santoso',
+                            '5049488500001111',
+                            '3173444455556666',
+                            '3173555566667777',
+                            '15-08-1985',
+                            '',
+                            '────────────────────────────────',
+                            '',
+                            '💡 *Jika lokasi Anda adalah Dharmajaya (4 baris):*',
+                            'Ketik *1* di Menu utama → Pilih *2* (Dharmajaya)',
+                            '',
+                            'Terima kasih. 🙏'
+                        ].join('\n');
+                    } else if (userLocation === 'DHARMAJAYA' && (containsBirthKeyword || looksLikePasarjayaFormat) && lines.length >= 4) {
                         // Tolak karena kemungkinan user salah pilih lokasi atau format salah
                         replyText = [
-                            '❌ *Format yang Anda kirim Salah.*',
+                            '❌ *FORMAT TIDAK SESUAI LOKASI*',
                             '',
-                            'Pesan Anda mengandung kata "tanggal lahir" yang hanya digunakan untuk format *Pasarjaya*.',
+                            'Anda memilih lokasi *DHARMAJAYA* yang membutuhkan *4 BARIS* (tanpa Tanggal Lahir).',
                             '',
                             'Silahkan kirim data sesuai format yang berlaku:',
                             '',
@@ -1743,7 +1774,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
 
                             // Hitung total data hari ini SETELAH data disimpan
                             const totalDataToday = await getTotalDataTodayForSender(senderPhone, processingDayKey);
-                            replyText = buildReplyForNewData(logJson, totalDataToday);
+                            replyText = buildReplyForNewData(logJson, totalDataToday, userLocation);
                         } else {
                             // Kasus langka: >= 4 baris tapi tidak ada blok valid satu pun?
                             replyText = `⚠️ *Format Data Salah*\nPastikan format sesuai dengan lokasi **${userLocation}** (${minLines} baris per orang).`;
