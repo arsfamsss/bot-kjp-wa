@@ -109,13 +109,14 @@ export function groupLinesToBlocks(lines: string[], linesPerBlock: number = 4): 
 
 function buildParsedFields(block: string[], location: 'PASARJAYA' | 'DHARMAJAYA' | 'DEFAULT' = 'DEFAULT'): ParsedFields {
     if (location === 'PASARJAYA') {
-        // FORMAT 5 BARIS: Nama, KK, KTP, Kartu, Tanggal Lahir
+        // FORMAT 5 BARIS PASARJAYA: Nama, Kartu, KTP, KK, Tanggal Lahir
+        // Urutan sama seperti Dharmajaya + Tanggal Lahir di baris 5
         const [line1, line2, line3, line4, line5] = block;
         return {
             nama: cleanName(line1),
-            no_kk: extractDigits(line2),   // Line 2: KK
+            no_kjp: extractDigits(line2),  // Line 2: Kartu
             no_ktp: extractDigits(line3),  // Line 3: KTP
-            no_kjp: extractDigits(line4),  // Line 4: Kartu
+            no_kk: extractDigits(line4),   // Line 4: KK
             tanggal_lahir: parseFlexibleDate(line5), // Line 5: Date
             lokasi: 'PASARJAYA'
         };

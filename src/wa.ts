@@ -44,6 +44,7 @@ import {
     getTotalDataTodayForSender,
 } from './supabase';
 import { getProcessingDayKey, getWibIsoDate, shiftIsoDate, isSystemClosed } from './time';
+import { parseFlexibleDate } from './utils/dateParser';
 import {
     MENU_MESSAGE,
     FAQ_MESSAGE,
@@ -996,28 +997,18 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                 replyText = lines.join('\n');
                             }
                         } else if (normalized === '12') {
-                            // FEATURE: EXPORT DATA (TXT only - Laporan Detail Per Pengirim)
-                            await sock.sendMessage(remoteJid, { text: '⏳ Sedang menyiapkan file export...' });
-
-                            // Helper untuk lookup nama
-                            const lookupName = (ph: string) => getRegisteredUserNameSync(ph) || undefined;
-
-                            const exportResult = await generateExportData(processingDayKey, lookupName);
-
-                            if (!exportResult || exportResult.count === 0) {
-                                replyText = '📂 Belum ada data pendaftaran hari ini untuk diexport.';
-                            } else {
-                                // Kirim TXT (Laporan Detail Per Pengirim)
-                                const txtBuffer = Buffer.from(exportResult.txt, 'utf-8');
-                                await sock.sendMessage(remoteJid, {
-                                    document: txtBuffer,
-                                    mimetype: 'text/plain',
-                                    fileName: `${exportResult.filenameBase}.txt`,
-                                    caption: `📄 Laporan Detail Data (${exportResult.count} data)`
-                                });
-
-                                replyText = '✅ Export data selesai.';
-                            }
+                            // FEATURE: EXPORT DATA (TXT only) - Default hari ini, opsi tanggal lain
+                            adminFlowByPhone.set(senderPhone, 'EXPORT_SELECT_DATE');
+                            replyText = [
+                                '📤 *EXPORT DATA*',
+                                '',
+                                `📅 Default: Hari Ini (${dmyExample})`,
+                                '',
+                                '1️⃣ Export Hari Ini',
+                                '2️⃣ Export Tanggal Lain',
+                                '',
+                                '_Ketik 0 untuk batal._'
+                            ].join('\n');
                         } else replyText = '⚠️ Pilihan tidak dikenali.';
                     } else if (currentAdminFlow === 'SEARCH_DATA') {
                         // SEARCH ALL DATA
@@ -1449,6 +1440,72 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                     adminFlowByPhone.set(senderPhone, 'MENU');
                                 }
                             }
+                        }
+                    } else if (currentAdminFlow === 'EXPORT_SELECT_DATE') {
+                        // Admin pilih export hari ini atau tanggal lain
+                        if (normalized === '1') {
+                            // Export hari ini
+                            await sock.sendMessage(remoteJid, { text: '⏳ Sedang menyiapkan file export...' });
+
+                            const lookupNameFn = (ph: string) => getRegisteredUserNameSync(ph) || undefined;
+                            const exportResult = await generateExportData(processingDayKey, lookupNameFn);
+
+                            if (!exportResult || exportResult.count === 0) {
+                                replyText = '📂 Belum ada data pendaftaran hari ini untuk diexport.';
+                            } else {
+                                const txtBuffer = Buffer.from(exportResult.txt, 'utf-8');
+                                await sock.sendMessage(remoteJid, {
+                                    document: txtBuffer,
+                                    mimetype: 'text/plain',
+                                    fileName: `${exportResult.filenameBase}.txt`,
+                                    caption: `📄 Laporan Detail Data (${exportResult.count} data)`
+                                });
+                                replyText = '✅ Export data selesai.';
+                            }
+                            adminFlowByPhone.set(senderPhone, 'MENU');
+                        } else if (normalized === '2') {
+                            // Pilih tanggal lain
+                            adminFlowByPhone.set(senderPhone, 'EXPORT_CUSTOM_DATE');
+                            replyText = [
+                                '📅 *EXPORT TANGGAL LAIN*',
+                                '',
+                                'Ketik tanggal dengan format bebas:',
+                                `• DD-MM-YYYY (${dmyExample})`,
+                                '• DD/MM/YYYY (01/01/2026)',
+                                '• DDMMYYYY (01012026)',
+                                '• DD MMM YYYY (1 Januari 2026)',
+                                '',
+                                '_Ketik 0 untuk batal._'
+                            ].join('\n');
+                        } else {
+                            replyText = '⚠️ Pilih 1 (Hari Ini) atau 2 (Tanggal Lain). Ketik 0 untuk batal.';
+                        }
+                    } else if (currentAdminFlow === 'EXPORT_CUSTOM_DATE') {
+                        // Admin ketik tanggal custom untuk export - FLEXIBLE FORMAT
+                        // parseFlexibleDate returns YYYY-MM-DD or null
+                        const iso = parseFlexibleDate(rawTrim);
+                        if (!iso) {
+                            replyText = '⚠️ Format tanggal tidak dikenali.\n\nContoh format yang diterima:\n• 22-01-2026\n• 22/01/2026\n• 22012026\n• 22 Januari 2026\n\nKetik 0 untuk batal.';
+                        } else {
+                            await sock.sendMessage(remoteJid, { text: '⏳ Sedang menyiapkan file export...' });
+
+                            const lookupNameFn = (ph: string) => getRegisteredUserNameSync(ph) || undefined;
+                            const exportResult = await generateExportData(iso, lookupNameFn);
+
+                            const displayDate = iso.split('-').reverse().join('-');
+                            if (!exportResult || exportResult.count === 0) {
+                                replyText = `📂 Tidak ada data pendaftaran pada tanggal ${displayDate}.`;
+                            } else {
+                                const txtBuffer = Buffer.from(exportResult.txt, 'utf-8');
+                                await sock.sendMessage(remoteJid, {
+                                    document: txtBuffer,
+                                    mimetype: 'text/plain',
+                                    fileName: `${exportResult.filenameBase}.txt`,
+                                    caption: `📄 Laporan Detail Data ${displayDate} (${exportResult.count} data)`
+                                });
+                                replyText = '✅ Export data selesai.';
+                            }
+                            adminFlowByPhone.set(senderPhone, 'MENU');
                         }
                     }
                     if (replyText) await sock.sendMessage(remoteJid, { text: replyText });

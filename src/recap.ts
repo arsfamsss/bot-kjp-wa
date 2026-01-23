@@ -16,6 +16,8 @@ export type ValidItemDetail = {
     no_kjp: string;
     no_ktp: string;
     no_kk: string;
+    lokasi?: string;
+    tanggal_lahir?: string;
 };
 
 const MAX_DETAIL_ITEMS = 50;
@@ -32,10 +34,10 @@ export async function getTodayRecapForSender(
     senderPhone: string,
     processingDayKey: string
 ): Promise<TodayRecapResult> {
-    // 1. Ambil data VALID (semua detail)
+    // 1. Ambil data VALID (semua detail termasuk lokasi dan tanggal lahir)
     const { data: validData, count: validCount, error: countError } = await supabase
         .from('data_harian')
-        .select('nama, no_kjp, no_ktp, no_kk', { count: 'exact' })
+        .select('nama, no_kjp, no_ktp, no_kk, lokasi, tanggal_lahir', { count: 'exact' })
         .eq('sender_phone', senderPhone)
         .eq('processing_day_key', processingDayKey)
         .order('received_at', { ascending: true });
@@ -46,7 +48,9 @@ export async function getTodayRecapForSender(
         nama: d.nama,
         no_kjp: d.no_kjp,
         no_ktp: d.no_ktp,
-        no_kk: d.no_kk
+        no_kk: d.no_kk,
+        lokasi: d.lokasi || undefined,
+        tanggal_lahir: d.tanggal_lahir || undefined
     })) : [];
 
     // 2. Ambil data INVALID dari log
@@ -135,10 +139,23 @@ export function buildReplyForTodayRecap(
     if (validItems.length > 0) {
         lines.push('');
         validItems.forEach((item, i) => {
+            // Tentukan lokasi pengambilan
+            const lokasiLabel = item.lokasi === 'PASARJAYA'
+                ? '📍 Kedoya/Cengkareng'
+                : '📍 Duri Kosambi';
+
             lines.push(`┌── ${i + 1}. *${item.nama}*`);
             lines.push(`│   📇 Kartu : ${item.no_kjp}`);
             lines.push(`│   🪪 KTP   : ${item.no_ktp}`);
-            lines.push(`└── 🏠 KK    : ${item.no_kk}`);
+            lines.push(`│   🏠 KK    : ${item.no_kk}`);
+
+            // Tampilkan tanggal lahir jika ada (khusus Pasarjaya)
+            if (item.tanggal_lahir) {
+                const tglLahirDisplay = formatDateDMY(item.tanggal_lahir);
+                lines.push(`│   🎂 Lahir : ${tglLahirDisplay}`);
+            }
+
+            lines.push(`└── ${lokasiLabel}`);
             if (i < validItems.length - 1) lines.push('');
         });
     } else {
@@ -311,7 +328,7 @@ function formatDateDMY(isoDate: string | null): string {
     return `${parts[2]}-${parts[1]}-${parts[0]}`;
 }
 
-// --- GENERATE EXPORT DATA (TXT ONLY - Format Laporan Detail Per Pengirim + Lokasi) ---
+// --- GENERATE EXPORT DATA (TXT ONLY - Format Laporan Detail Per Gerai + Pengirim) ---
 export async function generateExportData(
     processingDayKey: string,
     nameLookup?: (phone: string) => string | undefined
@@ -328,16 +345,8 @@ export async function generateExportData(
         return null;
     }
 
-    // Group by sender_phone
-    const grouped: Record<string, any[]> = {};
-    for (const row of data as any[]) {
-        const phone = row.sender_phone;
-        if (!grouped[phone]) grouped[phone] = [];
-        grouped[phone].push(row);
-    }
-
-    // Ambil nama dari database
-    const allPhones = Object.keys(grouped);
+    // Ambil nama dari database untuk semua pengirim
+    const allPhones = [...new Set((data as any[]).map(r => r.sender_phone))];
     const dbNamesMap = new Map<string, string>();
 
     if (allPhones.length > 0) {
@@ -355,9 +364,38 @@ export async function generateExportData(
         }
     }
 
+    // Helper untuk lookup nama
+    const getSenderName = (phone: string): string => {
+        let name = dbNamesMap.get(phone) || null;
+        if (!name && nameLookup) {
+            name = nameLookup(phone) || null;
+        }
+        return name || 'Unknown';
+    };
+
     const displayDate = processingDayKey.split('-').reverse().join('-');
 
-    // --- Generate TXT (Format Laporan Detail Per Pengirim + Lokasi) ---
+    // --- Group by Lokasi terlebih dahulu, lalu by Sender ---
+    const dharmajayaData = (data as any[]).filter((i: any) => i.lokasi === 'DHARMAJAYA' || !i.lokasi);
+    const pasarjayaData = (data as any[]).filter((i: any) => i.lokasi === 'PASARJAYA');
+
+    // Group Dharmajaya by sender
+    const dharmajayaBySender: Record<string, any[]> = {};
+    for (const row of dharmajayaData) {
+        const phone = row.sender_phone;
+        if (!dharmajayaBySender[phone]) dharmajayaBySender[phone] = [];
+        dharmajayaBySender[phone].push(row);
+    }
+
+    // Group Pasarjaya by sender
+    const pasarjayaBySender: Record<string, any[]> = {};
+    for (const row of pasarjayaData) {
+        const phone = row.sender_phone;
+        if (!pasarjayaBySender[phone]) pasarjayaBySender[phone] = [];
+        pasarjayaBySender[phone].push(row);
+    }
+
+    // --- Generate TXT (Format Baru: Per Gerai > Per Pengirim) ---
     const txtRows: string[] = [];
     txtRows.push('👑 *LAPORAN DETAIL DATA*');
     txtRows.push(`📅 Periode: ${displayDate} (06.01–04.00 WIB)`);
@@ -366,57 +404,64 @@ export async function generateExportData(
     txtRows.push('👇 *RINCIAN DATA MASUK:*');
     txtRows.push('────────────────────────────────────');
 
-    Object.keys(grouped).forEach((phone, idx) => {
-        const items = grouped[phone];
-
-        // Lookup nama pengirim
-        let senderName = dbNamesMap.get(phone) || null;
-        if (!senderName && nameLookup) {
-            senderName = nameLookup(phone) || null;
-        }
-
+    // === GERAI DHARMAJAYA ===
+    if (Object.keys(dharmajayaBySender).length > 0) {
+        txtRows.push('*Gerai Dharmajaya Duri Kosambi*');
         txtRows.push('');
-        txtRows.push(`👤 *PENGIRIM ${idx + 1}: ${senderName || 'Unknown'}*`);
-        txtRows.push(`📱 WA: ${phone}`);
-        txtRows.push(`📥 Jumlah Data: ${items.length}`);
 
-        // --- GROUPING PER LOKASI ---
-        const dharmajayaItems = items.filter((i: any) => i.lokasi === 'DHARMAJAYA' || !i.lokasi);
-        const pasarjayaItems = items.filter((i: any) => i.lokasi === 'PASARJAYA');
+        let senderIdx = 1;
+        for (const phone of Object.keys(dharmajayaBySender)) {
+            const items = dharmajayaBySender[phone];
+            const senderName = getSenderName(phone);
 
-        let globalIndex = 1;
+            txtRows.push(`👤 *PENGIRIM ${senderIdx}: ${senderName}*`);
+            txtRows.push(`📱 WA: ${phone}`);
+            txtRows.push(`📥 Jumlah Data: ${items.length}`);
+            txtRows.push('');
 
-        // Tampilkan Dharmajaya terlebih dahulu
-        if (dharmajayaItems.length > 0) {
-            txtRows.push(`*Dharmajaya Duri Kosambi* : ${dharmajayaItems.length}`);
-            dharmajayaItems.forEach((item: any) => {
-                txtRows.push(`   ${globalIndex}. ${item.nama}`);
-                txtRows.push(`   KJP ${item.no_kjp}`);
-                txtRows.push(`   KTP ${item.no_ktp}`);
-                txtRows.push(`   KK  ${item.no_kk}`);
+            items.forEach((item: any) => {
+                txtRows.push(`${senderName} (${item.nama})`);
+                txtRows.push(`   📇 KJP ${item.no_kjp}`);
+                txtRows.push(`   🪪 KTP ${item.no_ktp}`);
+                txtRows.push(`   🏠 KK  ${item.no_kk}`);
                 txtRows.push('');
-                globalIndex++;
             });
-        }
 
-        // Tampilkan Pasarjaya
-        if (pasarjayaItems.length > 0) {
-            txtRows.push(`*Pasarjaya Kedoya/Cengkareng* : ${pasarjayaItems.length}`);
-            pasarjayaItems.forEach((item: any) => {
+            senderIdx++;
+        }
+    }
+
+    // === GERAI PASARJAYA ===
+    if (Object.keys(pasarjayaBySender).length > 0) {
+        txtRows.push('*Gerai Pasarjaya Kedoya*');
+        txtRows.push('');
+
+        let senderIdx = 1;
+        for (const phone of Object.keys(pasarjayaBySender)) {
+            const items = pasarjayaBySender[phone];
+            const senderName = getSenderName(phone);
+
+            txtRows.push(`👤 *PENGIRIM ${senderIdx}: ${senderName}*`);
+            txtRows.push(`📱 WA: ${phone}`);
+            txtRows.push(`📥 Jumlah Data: ${items.length}`);
+            txtRows.push('');
+
+            items.forEach((item: any) => {
                 const tglLahir = item.tanggal_lahir ? formatDateDMY(item.tanggal_lahir) : '';
-                txtRows.push(`   ${globalIndex}. ${item.nama}`);
-                txtRows.push(`   KK  ${item.no_kk}`);
-                txtRows.push(`   KTP ${item.no_ktp}`);
-                txtRows.push(`   KJP ${item.no_kjp}`);
-                if (tglLahir) txtRows.push(`   ${tglLahir}`);
+                txtRows.push(`${senderName} (${item.nama})`);
+                txtRows.push(`KJP ${item.no_kjp}`);
+                txtRows.push(`KTP ${item.no_ktp}`);
+                txtRows.push(`KK ${item.no_kk}`);
+                if (tglLahir) txtRows.push(`${tglLahir}`);
+                txtRows.push(`Lokasi: Kedoya`);
                 txtRows.push('');
-                globalIndex++;
             });
+
+            senderIdx++;
         }
+    }
 
-        txtRows.push('────────────────────────────────────');
-    });
-
+    txtRows.push('────────────────────────────────────');
     txtRows.push('');
     txtRows.push('✅ *Laporan selesai.*');
 
