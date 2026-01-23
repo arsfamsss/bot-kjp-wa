@@ -379,9 +379,17 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             // Nomor sudah ada tapi LID berbeda - ini kemungkinan user pindah device/bot ganti nomor
                             // UPDATE LID-nya agar user bisa lanjut pakai
                             await updateLidForPhone(phoneFound, chatJid);
-                            await sock.sendMessage(remoteJid, {
-                                text: `✅ Selamat datang kembali!\nNomor Anda (${phoneFound}) sudah dikenali.\n\nSilakan kirim pesan lagi (ketik MENU atau langsung kirim data).`
-                            });
+
+                            // Kirim pesan selamat datang + MENU UTAMA
+                            const welcomeBackMsg = [
+                                `✅ *Selamat datang kembali!*`,
+                                `Nomor Anda (${phoneFound}) sudah dikenali.`,
+                                '',
+                                '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+                                '',
+                                MENU_MESSAGE,
+                            ].join('\n');
+                            await sock.sendMessage(remoteJid, { text: welcomeBackMsg });
                             // PENTING: continue di sini, agar pada pesan berikutnya LID sudah ter-mapping
                             continue;
                         }
@@ -1661,101 +1669,51 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             '_Fitur BATAL hanya berlaku untuk data yang dikirim dalam 30 menit terakhir._'
                         ].join('\n');
                     }
-                } else if (normalized === '4' || normalized.includes('FAQ') || normalized.includes('BANTUAN')) {
+                } else if (normalized === '4' || normalized === 'BANTUAN') {
+                    // FAQ hanya muncul jika ketik '4' atau 'BANTUAN' (exact match, tanpa embel-embel)
                     replyText = FAQ_MESSAGE;
                 } else {
 
-                    // Logic Baru: Terima Partial Success
-                    // Cek lokasi yg dipilih user, default ke Dharmajaya kalau belum set (backward compatibility)
-                    const userLocation = userLocationChoice.get(senderPhone) || 'DHARMAJAYA';
-                    // Min lines 4 atau 5 depending on location
-                    const minLines = userLocation === 'PASARJAYA' ? 5 : 4;
-
+                    // Logic Baru: Terima Partial Success dengan AUTO-DETECT FORMAT
                     const lines = parseRawMessageToLines(messageText);
 
-                    // --- DETEKSI FORMAT SALAH: Data mengandung kata "lahir" tapi dikirim sebagai 4 baris (Dharmajaya) ---
-                    // Jika user pilih Dharmajaya tapi pesannya mengandung kata lahir, kemungkinan salah format
-                    const messageTextLower = messageText.toLowerCase();
-                    const containsBirthKeyword = /\b(tgl\s*lahir|tanggal\s*lahir|lahir)\b/i.test(messageTextLower);
-
-                    // DETEKSI: User di DHARMAJAYA tapi kirim 5 baris (format Pasarjaya)
-                    // Cek apakah baris ke-5 terlihat seperti tanggal (DD-MM-YYYY, DD/MM/YYYY, dll)
+                    // AUTO-DETECT: Cek apakah baris ke-5 atau setiap baris ke-5 (dalam multi-data) adalah tanggal
                     const looksLikeDatePattern = /^\d{1,2}[-\/\.]\d{1,2}[-\/\.]\d{2,4}$/;
-                    const fifthLine = lines[4]?.trim() || '';
-                    const looksLikePasarjayaFormat = lines.length === 5 && looksLikeDatePattern.test(fifthLine);
 
-                    // DETEKSI: User di PASARJAYA tapi kirim 4 baris (format Dharmajaya)
-                    const looksLikeDharmajayaFormat = lines.length === 4 && !looksLikeDatePattern.test(lines[3]?.trim() || '');
+                    // Deteksi format berdasarkan pattern data
+                    let detectedFormat: 'PASARJAYA' | 'DHARMAJAYA' | null = null;
 
-                    if (userLocation === 'PASARJAYA' && looksLikeDharmajayaFormat) {
-                        // Tolak karena user kirim 4 baris di mode Pasarjaya
-                        replyText = [
-                            '❌ *FORMAT TIDAK SESUAI LOKASI*',
-                            '',
-                            'Anda memilih lokasi *PASARJAYA* yang membutuhkan *5 BARIS* (termasuk Tanggal Lahir).',
-                            '',
-                            '📋 *FORMAT PASARJAYA (5 BARIS):*',
-                            '1. Nama',
-                            '2. Nomor Kartu (16-18 digit)',
-                            '3. Nomor KTP (16 digit)',
-                            '4. Nomor KK (16 digit)',
-                            '5. Tanggal Lahir (DD-MM-YYYY)',
-                            '',
-                            '*Contoh:*',
-                            'Budi Santoso',
-                            '5049488500001111',
-                            '3173444455556666',
-                            '3173555566667777',
-                            '15-08-1985',
-                            '',
-                            '────────────────────────────────',
-                            '',
-                            '💡 *Jika lokasi Anda adalah Dharmajaya (4 baris):*',
-                            'Ketik *1* di Menu utama → Pilih *2* (Dharmajaya)',
-                            '',
-                            'Terima kasih. 🙏'
-                        ].join('\n');
-                    } else if (userLocation === 'DHARMAJAYA' && (containsBirthKeyword || looksLikePasarjayaFormat) && lines.length >= 4) {
-                        // Tolak karena kemungkinan user salah pilih lokasi atau format salah
-                        replyText = [
-                            '❌ *FORMAT TIDAK SESUAI LOKASI*',
-                            '',
-                            'Anda memilih lokasi *DHARMAJAYA* yang membutuhkan *4 BARIS* (tanpa Tanggal Lahir).',
-                            '',
-                            'Silahkan kirim data sesuai format yang berlaku:',
-                            '',
-                            '📋 *FORMAT DHARMAJAYA (4 BARIS):*',
-                            '1. Nama',
-                            '2. Nomor Kartu (16-18 digit)',
-                            '3. Nomor KTP (16 digit)',
-                            '4. Nomor KK (16 digit)',
-                            '',
-                            '*Contoh:*',
-                            'Budi Santoso',
-                            '5049488500001111',
-                            '3173444455556666',
-                            '3173555566667777',
-                            '',
-                            '────────────────────────────────',
-                            '',
-                            '📋 *FORMAT PASARJAYA (5 BARIS):*',
-                            '1. Nama',
-                            '2. Nomor KK (16 digit)',
-                            '3. Nomor KTP (16 digit)',
-                            '4. Nomor Kartu (16-18 digit)',
-                            '5. Tanggal Lahir (DD-MM-YYYY)',
-                            '',
-                            '*Contoh:*',
-                            'Budi Santoso',
-                            '3173555566667777',
-                            '3173444455556666',
-                            '5049488500001111',
-                            '15-08-1985',
-                            '',
-                            '💡 Ketik *1* di Menu utama untuk memilih lokasi pendaftaran yang benar.',
-                            'Terima kasih. 🙏'
-                        ].join('\n');
-                    } else if (lines.length >= minLines) {
+                    // Cek untuk single data (5 baris = Pasarjaya, 4 baris = Dharmajaya)
+                    if (lines.length === 5 && looksLikeDatePattern.test(lines[4]?.trim() || '')) {
+                        detectedFormat = 'PASARJAYA';
+                    } else if (lines.length === 4) {
+                        detectedFormat = 'DHARMAJAYA';
+                    }
+                    // Cek untuk multi data (kelipatan 5 dengan tanggal = Pasarjaya, kelipatan 4 = Dharmajaya) 
+                    else if (lines.length >= 5 && lines.length % 5 === 0) {
+                        // Cek apakah setiap baris ke-5 adalah tanggal
+                        let allDates = true;
+                        for (let i = 4; i < lines.length; i += 5) {
+                            if (!looksLikeDatePattern.test(lines[i]?.trim() || '')) {
+                                allDates = false;
+                                break;
+                            }
+                        }
+                        if (allDates) detectedFormat = 'PASARJAYA';
+                    } else if (lines.length >= 4 && lines.length % 4 === 0) {
+                        detectedFormat = 'DHARMAJAYA';
+                    }
+
+                    // Gunakan format terdeteksi, atau fallback ke pilihan user, atau default DHARMAJAYA
+                    const userLocation = detectedFormat || userLocationChoice.get(senderPhone) || 'DHARMAJAYA';
+                    const minLines = userLocation === 'PASARJAYA' ? 5 : 4;
+
+                    // Auto-save detected location untuk konsistensi session
+                    if (detectedFormat) {
+                        userLocationChoice.set(senderPhone, detectedFormat);
+                    }
+
+                    if (lines.length >= minLines) {
                         const logJson = await processRawMessageToLogJson({
                             text: messageText,
                             senderPhone,
@@ -1809,18 +1767,15 @@ Budi
 
 Ketik MENU untuk bantuan.`;
                             await sock.sendMessage(remoteJid, { text: formatGuide });
-                        } else if (inputLineCount >= 5 && inputLineCount % 4 !== 0) {
-                            // 5+ baris tapi bukan kelipatan 4
+                        } else if (inputLineCount >= 5 && inputLineCount % 4 !== 0 && inputLineCount % 5 !== 0) {
+                            // 5+ baris tapi bukan kelipatan 4 atau 5
                             const formatGuide = `⚠️ *DATA TIDAK LENGKAP*
 
-Jumlah baris harus kelipatan 4 (tiap orang = 4 baris).
-Anda mengirim ${inputLineCount} baris.
+Jumlah baris harus kelipatan:
+• 4 baris (Dharmajaya: Nama, Kartu, KTP, KK)
+• 5 baris (Pasarjaya: Nama, Kartu, KTP, KK, Tanggal Lahir)
 
-Format per orang:
-1. Nama
-2. Nomor Kartu
-3. Nomor KTP (NIK)
-4. Nomor KK
+Anda mengirim ${inputLineCount} baris.
 
 Ketik MENU untuk bantuan.`;
                             await sock.sendMessage(remoteJid, { text: formatGuide });

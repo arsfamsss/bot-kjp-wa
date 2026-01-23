@@ -144,7 +144,7 @@ export function validateBlockToItem(block: string[], index: number, location: 'P
 
     // VALIDASI NOMOR (Common)
 
-    // NOMOR KARTU 16–18 digit
+    // NOMOR KARTU 16–18 digit DAN harus diawali dengan 504948
     if (!parsed.no_kjp) {
         errors.push({ field: 'no_kjp', type: 'required', detail: 'Nomor Kartu wajib diisi angka.' });
     } else if (parsed.no_kjp.length < 16 || parsed.no_kjp.length > 18) {
@@ -152,6 +152,13 @@ export function validateBlockToItem(block: string[], index: number, location: 'P
             field: 'no_kjp',
             type: 'invalid_length',
             detail: `Panjang Nomor Kartu salah (${parsed.no_kjp.length} digit). Harusnya 16-18 digit.`,
+        });
+    } else if (!parsed.no_kjp.startsWith('504948')) {
+        // Validasi PREFIX: Nomor Kartu KJP harus diawali dengan 504948
+        errors.push({
+            field: 'no_kjp',
+            type: 'invalid_prefix',
+            detail: `Nomor Kartu tidak valid. Nomor Kartu KJP harus diawali dengan 504948.`,
         });
     }
 
