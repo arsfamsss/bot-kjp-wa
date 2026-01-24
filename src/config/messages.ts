@@ -102,7 +102,7 @@ export const FAQ_MESSAGE = [
     'J: Bebas! Kirim semua sekaligus aja~',
     '',
     '*T: 1 kartu boleh berapa kali?*',
-    'J: 1 kartu = 1x per bulan',
+    'J: 1 kartu = 1x per HARI',
     '',
     '*T: Salah kirim, gimana?*',
     'J: Ketik *BATAL* (max 30 menit)',

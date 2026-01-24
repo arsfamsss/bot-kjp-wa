@@ -1,99 +1,198 @@
-# Implementasi Fitur Daftar Ulang Cepat (Quick Re-registration)
+# 📋 PLAN: FITUR DAFTAR ULANG KARTU KJP
 
-## Goal
+## 🎯 MASALAH
 
-Memudahkan pengguna untuk mendaftarkan kembali data yang sama (untuk bulan baru) tanpa harus mengetik ulang format panjang, dengan tetap memastikan data valid (KTP/KK tidak berubah).
+**Skenario:**
+1. User A daftar kartu KJP `5049488500001234` di tanggal 1 Januari via WA Bot
+2. Kartu sudah **TERCATAT** di database WA Bot ✅
+3. TAPI di lapangan, user **GAGAL** dapat antrian (stok habis, telat, dll)
+4. Tanggal 2 Januari, user ingin daftar lagi dengan kartu yang sama
+5. **DITOLAK** oleh bot karena kartu sudah terdaftar bulan ini
 
-## User Review Required
+**Current Logic:**
+- 1 kartu KJP = 1x per HARI ✅ (sudah benar!)
+- Pengecekan berdasarkan `no_kjp` + `processing_day_key` (tanggal)
 
-> [!IMPORTANT]
-> **Logic Validasi**: Pengguna harus mengkonfirmasi bahwa data (terutama KTP dan KK) **masih sama**. Jika ada perubahan sekecil apapun pada KTP/KK, mereka **wajib** input manual ulang. Fitur ini hanya untuk data yang 100% sama dengan bulan lalu.
->
-> **Privacy**: Data history hanya diambil berdasarkan `sender_phone`. Pengguna tidak bisa melihat data orang lain.
+---
 
-## Proposed Changes
+## 💡 SOLUSI YANG DIUSULKAN
 
-### Database & Query (`src/supabase.ts`)
+### OPSI A: RESET OTOMATIS SETELAH H+1 (RECOMMENDED)
+Data kartu otomatis bisa didaftarkan lagi setelah lewat tanggal pengambilan.
 
-- [NEW] Function `getRegistrationHistory(senderPhone: string)`
-  - Akan mengambil daftar unique dari `data_harian` berdasarkan `sender_phone`.
-  - Mengambil kolom `nama, no_kjp, no_ktp, no_kk`.
-  - Logic: `SELECT DISTINCT ON (no_kjp) ... ORDER BY no_kjp, received_at DESC LIMIT 10`.
-  - Ini memastikan kita mendapat data terakhir yang valid untuk setiap nomor kartu yang pernah didaftarkan user ini.
+**Logic:**
+```
+IF tanggal_daftar < hari_ini - 1 THEN
+   → Kartu bisa didaftarkan lagi
+   → (Artinya tanggal pengambilan sudah lewat)
+ELSE
+   → Tolak duplikat (masih dalam periode aktif)
+```
 
-### Menu Configuration (`src/config/messages.ts`)
+**Contoh:**
+- Daftar: 1 Januari
+- Pengambilan: 2 Januari
+- Tanggal 3 Januari → Kartu bisa didaftar lagi ✅
 
-- [MODIFY] Update `MENU_MESSAGE` untuk menambahkan opsi baru:
-  - `4. Daftar Ulang Cepat (Data Lama)`
+**Pro:**
+- Otomatis, tidak perlu konfirmasi manual
+- User tidak perlu lapor ke admin
 
-### State Management (`src/state.ts`)
+**Con:**
+- User yang memang sudah ambil bisa daftar lagi (curang?)
+- Perlu tracking status pengambilan
 
-- [MODIFY] Update `UserFlowState` type untuk handle flow baru:
-  - `'QUICK_REGISTER_MENU'` (Saat pilih data)
-  - `'QUICK_REGISTER_CONFIRM'` (Saat konfirmasi Ya/Tidak)
+---
 
-### Bot Logic (`src/wa.ts`)
+### OPSI B: FITUR "DAFTAR ULANG" DENGAN KONFIRMASI
+User bisa ketik perintah khusus untuk daftar ulang.
 
-#### 1. Menu Handler
+**Alur:**
+1. User ketik: `ULANG 5049488500001234`
+2. Bot cek: "Kartu ini sudah terdaftar tanggal 1 Jan"
+3. Bot tanya: "Apakah Anda BELUM berhasil ambil sembako? (Y/N)"
+4. User ketik: `Y`
+5. Bot hapus data lama, minta kirim data baru
+6. Data baru tercatat
 
-- Tambahkan deteksi input `4` atau `DAFTAR ULANG`.
-- Panggil `getRegistrationHistory`.
-- Jika kosong -> Info "Belum ada history".
-- Jika ada -> Tampilkan list nomer urut & nama/kartu.
-  - Simpan list ini di temporary storage (`quickRegisterCache` di `state.ts`).
-  - Info ke user: "Bisa pilih banyak (contoh: 1, 2, 3)".
+**Pro:**
+- User sadar dan konfirmasi manual
+- Menghindari penyalahgunaan
 
-#### 2. Input Handler (Flow: `QUICK_REGISTER_MENU`)
+**Con:**
+- Ribet buat user
+- Tambahan flow
 
-- User ketik nomor urut (SINGLE `1` atau MULTIPLE `1,3,5` dipisah koma/spasi).
-- Bot parsing input menjadi array of numbers.
-- Bot ambil detail data dari cache untuk setiap nomor.
-- Bot tampilkan ringkasan:
-  - **Tampilkan detail lengkap (Nama, No Kartu, NIK, KK) untuk SETIAP item yang dipilih.**
-  - (Jangan disingkat, agar User bisa cek satu per satu).
+---
 
-  ```
-  Konfirmasi Data (3 Orang):
-  1. Agus
-     Kartu: ...1234
-     NIK: ...5678
-     KK: ...9012
+### OPSI C: ADMIN RESET MANUAL
+Admin yang reset kartu agar bisa didaftarkan lagi.
 
-  2. Budi
-  ...
+**Alur:**
+1. User lapor ke admin: "Pak, saya gagal ambil kemarin"
+2. Admin ketik: `RESET 5049488500001234`
+3. Bot hapus data kartu tersebut
+4. User bisa daftar lagi
 
-  Apakah data (NIK & KK) untuk SEMUA di atas MASIH SAMA?
-  Ketik YA untuk lanjut.
-  Ketik TIDAK untuk batal.
-  ```
+**Pro:**
+- Kontrol penuh di admin
+- Menghindari penyalahgunaan
 
-#### 3. Input Handler (Flow: `QUICK_REGISTER_CONFIRM`)
+**Con:**
+- Admin harus online & responsive
+- Tidak scalable kalau banyak request
 
-- Jika `YA`:
-  - Loop semua item yang dipilih.
-  - Jalankan validasi standar untuk setiap item (Cek kuota, cek duplikat).
-  - Insert item yang valid.
-  - Kirim rekap hasil:
-    ```
-    ✅ PENDAFTARAN BERHASIL (2/2)
-    1. AGUS SANTOSO - Sukses
-    2. BUDI SANTOSO - Sukses
-    ```
-- Jika `TIDAK`:
-  - Kirim pesan panduan manual dengan format standar 4 baris (Nama, Kartu, KTP, KK) + Contoh.
-  - Reset flow.
+---
 
-## Verification Plan
+### OPSI D: TRACKING STATUS PENGAMBILAN (KOMPLEKS)
+Tambah status: TERDAFTAR → DIAMBIL
 
-### Manual Verification
+**Alur:**
+1. User daftar → Status: TERDAFTAR
+2. Admin/Sistem update setelah user ambil → Status: DIAMBIL
+3. Hanya kartu dengan status DIAMBIL yang tidak bisa daftar lagi bulan ini
+4. Kartu dengan status TERDAFTAR tapi sudah lewat H+1 → Bisa daftar ulang
 
-1.  **Test User Baru**: Kirim `4` -> Harusnya "Belum ada history".
-2.  **Test User Lama (Agus)**:
-    - Pastikan DB ada data Agus bulan lalu.
-    - Kirim `4` -> Muncul list "1. Agus (Kartu: ...1234)".
-    - Pilih `1`.
-    - Bot tanya konfirmasi.
-    - Jawab `TIDAK` -> Harusnya batal.
-    - Ulangi, Jawab `YA`.
-    - Cek DB `data_harian` -> Harus ada entry baru dengan tanggal hari ini.
-    - Cek Validasi -> Coba daftar ulang lagi di hari yang sama -> Harusnya kena validasi "Sudah terdaftar hari ini".
+**Pro:**
+- Paling akurat
+- Bisa buat laporan siapa yang benar-benar ambil
+
+**Con:**
+- Perlu integrasi dengan sistem di lapangan
+- Kompleks implementasi
+
+---
+
+## 🎯 REKOMENDASI
+
+**OPSI A + C (Hybrid):**
+
+1. **Auto-reset setelah H+2** (lebih aman dari H+1)
+   - Daftar tanggal 1 → Pengambilan tanggal 2
+   - Tanggal 3 → Otomatis bisa daftar lagi
+
+2. **Admin bisa manual reset** untuk kasus urgent
+   - Ketik: `RESET 5049488500001234`
+   - Kartu langsung bisa didaftarkan lagi
+
+3. **Notifikasi ke user** saat duplikat:
+   ```
+   ⚠️ Kartu ini sudah terdaftar tanggal 1 Jan.
+   
+   Jika BELUM berhasil ambil, kartu akan otomatis 
+   bisa didaftarkan lagi mulai tanggal 3 Jan.
+   
+   Atau hubungi admin untuk reset manual.
+   ```
+
+---
+
+## 📝 PERUBAHAN YANG DIPERLUKAN
+
+### 1. Database
+- Tidak perlu perubahan schema
+- Menggunakan field `processing_day_key` yang sudah ada
+
+### 2. Logic Duplikat (`parser.ts` atau `supabase.ts`)
+```typescript
+// Sebelum:
+// Cek: no_kjp sudah ada di bulan ini? → TOLAK
+
+// Sesudah:
+// Cek: no_kjp sudah ada?
+//   → Jika tanggal_daftar >= hari_ini - 1 → TOLAK (masih aktif)
+//   → Jika tanggal_daftar < hari_ini - 1 → IZINKAN (sudah expired)
+```
+
+### 3. Balasan Duplikat (`reply.ts`)
+- Tambahkan info kapan bisa daftar lagi
+- Tambahkan info hubungi admin
+
+### 4. Fitur Admin Reset (`wa.ts`)
+- Tambahkan command: `RESET <no_kartu>`
+- Hapus data kartu dari database
+
+---
+
+## ⏱️ ESTIMASI WAKTU
+
+| Task | Waktu |
+|------|-------|
+| Update logic duplikat | 30 menit |
+| Update balasan duplikat | 15 menit |
+| Tambah admin reset | 30 menit |
+| Testing | 30 menit |
+| **TOTAL** | **~2 jam** |
+
+---
+
+## ✅ CHECKLIST IMPLEMENTASI
+
+- [ ] Update logic cek duplikat di `parser.ts`
+- [ ] Update balasan duplikat di `reply.ts`
+- [ ] Tambahkan fitur RESET di menu admin `wa.ts`
+- [ ] Tambahkan handler RESET command
+- [ ] Testing skenario daftar ulang
+- [ ] Testing admin reset
+- [ ] Push ke GitHub
+
+---
+
+## 🤔 PERTANYAAN UNTUK USER
+
+1. **Berapa hari setelah daftar, kartu otomatis bisa didaftarkan lagi?**
+   - H+1 (besoknya langsung bisa)?
+   - H+2 (2 hari setelah daftar)?
+
+2. **Apakah perlu fitur admin reset?**
+   - Ya, untuk kasus urgent
+   - Tidak, cukup auto-reset saja
+
+3. **Notifikasi ke user saat ditolak duplikat?**
+   - Tampilkan tanggal kapan bisa daftar lagi?
+   - Info hubungi admin?
+
+---
+
+*Dokumen ini dibuat: 24 Januari 2026*
+*Status: MENUNGGU APPROVAL*
