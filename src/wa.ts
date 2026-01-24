@@ -1778,9 +1778,17 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                         // Cek apakah ini percobaan kirim data dengan format salah
                         const inputLineCount = parseRawMessageToLines(messageText).length;
 
-                        if (inputLineCount >= 1 && inputLineCount <= 3) {
-                            // 1-3 baris = format salah
-                            const formatGuide = `⚠️ *FORMAT SALAH*
+                        if (inputLineCount >= 2 && inputLineCount <= 3) {
+                            // 2-3 baris = kemungkinan data tidak lengkap
+                            // Cek apakah ada angka panjang (nomor kartu/KTP) di salah satu baris
+                            const hasLongNumbers = inputLines.some(line => {
+                                const digits = line.replace(/\D/g, '');
+                                return digits.length >= 10;
+                            });
+                            
+                            if (hasLongNumbers) {
+                                // Kemungkinan user coba kirim data tapi tidak lengkap
+                                const formatGuide = `⚠️ *DATA TIDAK LENGKAP*
 
 Kirim data dalam *4 BARIS* sekaligus:
 
@@ -1795,8 +1803,12 @@ Budi
 3173444455556666
 3173555566667777
 
-Ketik MENU untuk bantuan.`;
-                            await sock.sendMessage(remoteJid, { text: formatGuide });
+Ketik *1* untuk panduan daftar.`;
+                                await sock.sendMessage(remoteJid, { text: formatGuide });
+                            } else {
+                                // Input random 2-3 kata/baris tanpa angka panjang
+                                await sock.sendMessage(remoteJid, { text: 'Hai! 👋 Mau daftar sembako?\n\nKetik *1* untuk mulai~ 😊' });
+                            }
                         } else if (inputLineCount >= 5 && inputLineCount % 4 !== 0 && inputLineCount % 5 !== 0) {
                             // 5+ baris tapi bukan kelipatan 4 atau 5
                             const formatGuide = `⚠️ *DATA TIDAK LENGKAP*
