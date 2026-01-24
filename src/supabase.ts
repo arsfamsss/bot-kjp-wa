@@ -110,21 +110,123 @@ export async function checkDuplicateForItem(
         };
     };
 
-    // (1) Cek Duplikat NAMA (per hari)
-    if (item.parsed.nama) {
-        const { data, error } = await supabase
-            .from('data_harian')
-            .select('nama, no_kjp, no_ktp, no_kk')
-            .eq('processing_day_key', processingDayKey)
-            .ilike('nama', item.parsed.nama) // Case-insensitive
-            .limit(1);
+    // PARALLEL CHECK: Jalankan semua cek duplikat secara bersamaan
+    const [nameDup, kjpDup, ktpDup, kkDup] = await Promise.all([
+        // (1) Cek Duplikat NAMA
+        (async () => {
+            if (!item.parsed.nama) return null;
+            const { data, error } = await supabase
+                .from('data_harian')
+                .select('nama, no_kjp, no_ktp, no_kk')
+                .eq('processing_day_key', processingDayKey)
+                .ilike('nama', item.parsed.nama)
+                .limit(1);
+            if (!error && data && data.length > 0) return data[0];
+            return null;
+        })(),
 
-        if (!error && data && data.length > 0) {
-            const orig = data[0];
+        // (2) Cek Duplikat No Kartu
+        (async () => {
+            if (!item.parsed.no_kjp) return null;
+            const { data, error } = await supabase
+                .from('data_harian')
+                .select('nama, no_kjp, no_ktp, no_kk')
+                .eq('processing_day_key', processingDayKey)
+                .eq('no_kjp', item.parsed.no_kjp)
+                .limit(1);
+            if (!error && data && data.length > 0) return data[0];
+            return null;
+        })(),
+
+        // (3) Cek Duplikat KTP
+        (async () => {
+            if (!item.parsed.no_ktp) return null;
+            const { data, error } = await supabase
+                .from('data_harian')
+                .select('nama, no_kjp, no_ktp, no_kk')
+                .eq('processing_day_key', processingDayKey)
+                .eq('no_ktp', item.parsed.no_ktp)
+                .limit(1);
+            if (!error && data && data.length > 0) return data[0];
+            return null;
+        })(),
+
+        // (4) Cek Duplikat KK
+        (async () => {
+            if (!item.parsed.no_kk) return null;
+            const { data, error } = await supabase
+                .from('data_harian')
+                .select('received_at, sender_phone, nama, no_kjp, no_ktp, no_kk')
+                .eq('processing_day_key', processingDayKey)
+                .eq('no_kk', item.parsed.no_kk)
+                .order('received_at', { ascending: true })
+                .limit(1);
+            if (!error && data && data.length > 0) return data[0];
+            return null;
+        })(),
+    ]);
+
+    // EVALUASI HASIL (Prioritas 1 -> 4)
+
+    // 1. Name
+    if (nameDup) {
+        const orig = nameDup;
+        return markDup({
+            kind: 'NAME',
+            safe_message:
+                'Nama sudah terdaftar hari ini. Jika orang berbeda tapi nama sama, tambahkan 4 digit terakhir Nomor Kartu di belakang nama (contoh: BUDI-1234).',
+            original_data: {
+                nama: orig.nama || '',
+                no_kjp: orig.no_kjp || '',
+                no_ktp: orig.no_ktp || '',
+                no_kk: orig.no_kk || '',
+            },
+        });
+    }
+
+    // 2. KJP
+    if (kjpDup) {
+        const orig = kjpDup;
+        return markDup({
+            kind: 'NO_KJP',
+            safe_message: 'No Kartu sudah terdaftar hari ini.',
+            original_data: {
+                nama: orig.nama || '',
+                no_kjp: orig.no_kjp || '',
+                no_ktp: orig.no_ktp || '',
+                no_kk: orig.no_kk || '',
+            },
+        });
+    }
+
+    // 3. KTP
+    if (ktpDup) {
+        const orig = ktpDup;
+        return markDup({
+            kind: 'NO_KTP',
+            safe_message: 'No KTP sudah digunakan hari ini.',
+            original_data: {
+                nama: orig.nama || '',
+                no_kjp: orig.no_kjp || '',
+                no_ktp: orig.no_ktp || '',
+                no_kk: orig.no_kk || '',
+            },
+        });
+    }
+
+    // 4. KK
+    if (kkDup) {
+        const existingSender = kkDup.sender_phone;
+        if (existingSender !== senderPhone) {
+            const firstSeenAt = kkDup.received_at ? String(kkDup.received_at) : null;
+            const timeWib = firstSeenAt ? getWibTimeHHmm(new Date(firstSeenAt)) : '??.??';
+            const orig = kkDup;
+
             return markDup({
-                kind: 'NAME',
-                safe_message:
-                    'Nama sudah terdaftar hari ini. Jika orang berbeda tapi nama sama, tambahkan 4 digit terakhir Nomor Kartu di belakang nama (contoh: BUDI-1234).',
+                kind: 'NO_KK_OTHER',
+                first_seen_at: firstSeenAt,
+                first_seen_wib_time: timeWib,
+                safe_message: `No KK sudah digunakan hari ini oleh nomor WA lain pada jam ${timeWib} WIB.`,
                 original_data: {
                     nama: orig.nama || '',
                     no_kjp: orig.no_kjp || '',
@@ -132,93 +234,6 @@ export async function checkDuplicateForItem(
                     no_kk: orig.no_kk || '',
                 },
             });
-        }
-    }
-
-    // (2) Cek Duplikat Nomor Kartu (no_kjp)
-    if (item.parsed.no_kjp) {
-        const { data, error } = await supabase
-            .from('data_harian')
-            .select('nama, no_kjp, no_ktp, no_kk')
-            .eq('processing_day_key', processingDayKey)
-            .eq('no_kjp', item.parsed.no_kjp)
-            .limit(1);
-
-        if (!error && data && data.length > 0) {
-            const orig = data[0];
-            return markDup({
-                kind: 'NO_KJP',
-                safe_message: 'No Kartu sudah terdaftar hari ini.',
-                original_data: {
-                    nama: orig.nama || '',
-                    no_kjp: orig.no_kjp || '',
-                    no_ktp: orig.no_ktp || '',
-                    no_kk: orig.no_kk || '',
-                },
-            });
-        }
-    }
-
-    // (3) Cek Duplikat NIK (no_ktp)
-    if (item.parsed.no_ktp) {
-        const { data, error } = await supabase
-            .from('data_harian')
-            .select('nama, no_kjp, no_ktp, no_kk')
-            .eq('processing_day_key', processingDayKey)
-            .eq('no_ktp', item.parsed.no_ktp)
-            .limit(1);
-
-        if (!error && data && data.length > 0) {
-            const orig = data[0];
-            return markDup({
-                kind: 'NO_KTP',
-                safe_message: 'No KTP sudah digunakan hari ini.',
-                original_data: {
-                    nama: orig.nama || '',
-                    no_kjp: orig.no_kjp || '',
-                    no_ktp: orig.no_ktp || '',
-                    no_kk: orig.no_kk || '',
-                },
-            });
-        }
-    }
-
-    // (4) Cek Duplikat KK (no_kk)
-    // Aturan:
-    // - Boleh dipakai ulang jika sender_phone SAMA.
-    // - Ditolak jika sender_phone BEDA.
-    if (item.parsed.no_kk) {
-        const { data, error } = await supabase
-            .from('data_harian')
-            .select('received_at, sender_phone, nama, no_kjp, no_ktp, no_kk')
-            .eq('processing_day_key', processingDayKey)
-            .eq('no_kk', item.parsed.no_kk)
-            .order('received_at', { ascending: true })
-            .limit(1);
-
-        if (!error && data && data.length > 0) {
-            const existingSender = data[0].sender_phone;
-
-            // Jika pengirim beda, maka ANGGAP DUPLIKAT
-            if (existingSender !== senderPhone) {
-                const firstSeenAt = data[0].received_at ? String(data[0].received_at) : null;
-                const timeWib = firstSeenAt ? getWibTimeHHmm(new Date(firstSeenAt)) : '??.??';
-                const orig = data[0];
-
-                return markDup({
-                    kind: 'NO_KK_OTHER',
-                    first_seen_at: firstSeenAt,
-                    first_seen_wib_time: timeWib,
-                    safe_message: `No KK sudah digunakan hari ini oleh nomor WA lain pada jam ${timeWib} WIB.`,
-                    original_data: {
-                        nama: orig.nama || '',
-                        no_kjp: orig.no_kjp || '',
-                        no_ktp: orig.no_ktp || '',
-                        no_kk: orig.no_kk || '',
-                    },
-                });
-            }
-            // Jika pengirim sama, LANJUT (tidak dianggap duplikat)
         }
     }
 
@@ -226,62 +241,60 @@ export async function checkDuplicateForItem(
 }
 
 export async function saveLogAndOkItems(log: LogJson, rawText: string): Promise<void> {
-    // 1) Simpan log pesan
-    const { error: logError } = await supabase.from('log_pesan_wa').insert([
-        {
+    // PARALLEL INSERT: Log dan Data Harian berbarengan
+    const insertLogPromise = (async () => {
+        const { error: logError } = await supabase.from('log_pesan_wa').insert([
+            {
+                tanggal: log.tanggal,
+                processing_day_key: log.processing_day_key,
+                received_at: log.received_at,
+                sumber: 'wa',
+                sender_phone: log.sender_phone,
+                wa_message_id: log.message_id,
+                stats_total_blocks: log.stats.total_blocks,
+                stats_ok_count: log.stats.ok_count,
+                stats_skip_format_count: log.stats.skip_format_count,
+                stats_skip_duplicate_count: log.stats.skip_duplicate_count,
+                raw_text: rawText,
+                log_json: log,
+            },
+        ]);
+        if (logError) console.error('Error insert log_pesan_wa:', logError);
+    })();
+
+    const insertDataPromise = (async () => {
+        const okItems = log.items.filter((it) => it.status === 'OK');
+        if (okItems.length === 0) return;
+
+        const rows = okItems.map((it) => ({
             tanggal: log.tanggal,
             processing_day_key: log.processing_day_key,
             received_at: log.received_at,
             sumber: 'wa',
             sender_phone: log.sender_phone,
-            wa_message_id: log.message_id,
-            stats_total_blocks: log.stats.total_blocks,
-            stats_ok_count: log.stats.ok_count,
-            stats_skip_format_count: log.stats.skip_format_count,
-            stats_skip_duplicate_count: log.stats.skip_duplicate_count,
-            raw_text: rawText,
-            log_json: log,
-        },
-    ]);
+            sender_name: log.sender_name || null,
+            nama: it.parsed.nama,
+            no_kjp: it.parsed.no_kjp,
+            no_ktp: it.parsed.no_ktp,
+            no_kk: it.parsed.no_kk,
+            tanggal_lahir: it.parsed.tanggal_lahir || null,
+            lokasi: it.parsed.lokasi || null,
+            meta: {
+                message_id: log.message_id,
+                index: it.index,
+                received_at: log.received_at,
+            },
+        }));
 
-    if (logError) {
-        console.error('Error insert log_pesan_wa:', logError);
-    }
+        const { error: dataError } = await supabase.from('data_harian').insert(rows);
+        if (dataError) {
+            console.error('Error insert data_harian:', dataError);
+        } else {
+            console.log(`Berhasil simpan ${rows.length} item OK ke data_harian.`);
+        }
+    })();
 
-    // 2) Simpan item OK ke data_harian
-    const okItems = log.items.filter((it) => it.status === 'OK');
-    if (okItems.length === 0) {
-        // Tidak ada yg perlu disimpan
-        return;
-    }
-
-    const rows = okItems.map((it) => ({
-        tanggal: log.tanggal,
-        processing_day_key: log.processing_day_key,
-        received_at: log.received_at,
-        sumber: 'wa',
-        sender_phone: log.sender_phone,
-        sender_name: log.sender_name || null, // <--- TAMBAHAN BARU
-        nama: it.parsed.nama,
-        no_kjp: it.parsed.no_kjp,
-        no_ktp: it.parsed.no_ktp,
-        no_kk: it.parsed.no_kk,
-        tanggal_lahir: it.parsed.tanggal_lahir || null, // ADDED
-        lokasi: it.parsed.lokasi || null,               // ADDED
-        meta: {
-            message_id: log.message_id,
-            index: it.index,
-            received_at: log.received_at,
-        },
-    }));
-
-    const { error: dataError } = await supabase.from('data_harian').insert(rows);
-
-    if (dataError) {
-        console.error('Error insert data_harian:', dataError);
-    } else {
-        console.log(`Berhasil simpan ${rows.length} item OK ke data_harian.`);
-    }
+    await Promise.all([insertLogPromise, insertDataPromise]);
 }
 
 // --- HAPUS DATA (HANYA MILIK PENGIRIM) ---

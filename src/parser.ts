@@ -298,15 +298,13 @@ export async function processRawMessageToLogJson(params: {
         });
     }
 
-    // 4) cek duplikat database hanya untuk item OK
-    const updatedItems: LogItem[] = [];
-    for (const item of items) {
-        const updated = await checkDuplicateForItem(item, {
+    // 4) cek duplikat database hanya untuk item OK (PARALLEL)
+    const updatedItems = await Promise.all(items.map(async (item) => {
+        return checkDuplicateForItem(item, {
             processingDayKey,
             senderPhone,
         });
-        updatedItems.push(updated);
-    }
+    }));
     items = updatedItems;
 
     // 5) hitung stats
