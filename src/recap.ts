@@ -141,7 +141,7 @@ export function buildReplyForTodayRecap(
         validItems.forEach((item, i) => {
             // Tentukan lokasi pengambilan
             const lokasiLabel = item.lokasi === 'PASARJAYA'
-                ? '📍 Kedoya/Cengkareng'
+                ? '📍 Kedoya'
                 : '📍 Duri Kosambi';
 
             lines.push(`┌── ${i + 1}. *${item.nama}*`);
@@ -301,7 +301,7 @@ export async function getGlobalRecap(
 
         // Tampilkan Pasarjaya
         if (pasarjayaItems.length > 0) {
-            lines.push(`*Pasarjaya Kedoya/Cengkareng* : ${pasarjayaItems.length}`);
+            lines.push(`*Pasarjaya Kedoya* : ${pasarjayaItems.length}`);
             pasarjayaItems.forEach((item: any) => {
                 const itemKey = endKey ? ` (${String(item.processing_day_key).split('-').reverse().join('-')})` : '';
                 const tglLahir = item.tanggal_lahir ? formatDateDMY(item.tanggal_lahir) : '';

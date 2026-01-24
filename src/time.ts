@@ -34,14 +34,25 @@ export function getWibTimeHHmm(date: Date): string {
 
 /**
  * Cek apakah sistem sedang TUTUP (Maintenance Harian).
- * Tutup: 04:01 s/d 06:00 WIB.
+ * Default: 04:01 s/d 06:00 WIB.
+ * Bisa di-override dengan parameter settings dari database.
  */
-export function isSystemClosed(date: Date): boolean {
+export function isSystemClosed(date: Date, settings?: {
+    close_hour_start: number;
+    close_minute_start: number;
+    close_hour_end: number;
+    close_minute_end: number;
+}): boolean {
     const p = getWibParts(date);
     const minutes = p.hour * 60 + p.minute;
 
-    const startClose = 4 * 60 + 1;  // 04:01
-    const endClose = 6 * 60 + 0;    // 06:00
+    // Gunakan settings jika ada, kalau tidak pakai default
+    const startClose = settings
+        ? settings.close_hour_start * 60 + settings.close_minute_start
+        : 4 * 60 + 1;  // 04:01
+    const endClose = settings
+        ? settings.close_hour_end * 60 + settings.close_minute_end
+        : 6 * 60 + 0;    // 06:00
 
     return minutes >= startClose && minutes <= endClose;
 }

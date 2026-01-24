@@ -42,6 +42,11 @@ import {
     updateLidForPhone,
     getPhoneFromLidSync,
     getTotalDataTodayForSender,
+    getBotSettings,
+    updateBotSettings,
+    formatCloseTimeString,
+    renderCloseMessage,
+    clearBotSettingsCache,
 } from './supabase';
 import { getProcessingDayKey, getWibIsoDate, shiftIsoDate, isSystemClosed } from './time';
 import { parseFlexibleDate, looksLikeDate } from './utils/dateParser';
@@ -340,25 +345,15 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
 
                 if (!rawInput) continue;
 
-                const closed = isSystemClosed(receivedAt);
+                // Ambil pengaturan bot dari database
+                const botSettings = await getBotSettings();
+                const closed = isSystemClosed(receivedAt, botSettings);
 
                 // 🛑 CEK JAM TUTUP (PRIORITAS UTAMA)
                 // Jika tutup, langsung tolak (kecuali Admin)
                 if (closed && !isAdmin) {
-                    await sock.sendMessage(remoteJid, {
-                        text: [
-                            '⛔ *MOHON MAAF, SISTEM SEDANG TUTUP*',
-                            '(Maintenance Harian)',
-                            '',
-                            '🕒 Jam Tutup: *04.01 - 06.00 WIB*',
-                            '✅ Buka Kembali: *Pukul 06.01 WIB*',
-                            '',
-                            '📌 Data yang Anda kirim sekarang *tidak akan diproses*.',
-                            'Silakan kirim ulang setelah jam buka untuk pendaftaran besok.',
-                            '',
-                            '_Terima kasih atas pengertiannya._ 🙏'
-                        ].join('\n')
-                    });
+                    const closeMessage = renderCloseMessage(botSettings);
+                    await sock.sendMessage(remoteJid, { text: closeMessage });
                     continue; // STOP PROCESSING
                 }
 
@@ -1056,6 +1051,42 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                 '',
                                 '_Ketik 0 untuk batal._'
                             ].join('\n');
+                        } else if (normalized === '13') {
+                            // FEATURE: ATUR JAM TUTUP
+                            const currentSettings = await getBotSettings();
+                            const currentTimeStr = formatCloseTimeString(currentSettings);
+                            adminFlowByPhone.set(senderPhone, 'SETTING_CLOSE_TIME');
+                            replyText = [
+                                '⏰ *ATUR JAM TUTUP BOT*',
+                                '',
+                                `📌 Pengaturan Saat Ini: *${currentTimeStr}*`,
+                                '',
+                                'Ketik jam tutup baru dengan format:',
+                                '*JAM_MULAI JAM_SELESAI*',
+                                '',
+                                'Contoh: *04:01 06:00*',
+                                '(Artinya bot tutup jam 04:01 sampai 06:00 WIB)',
+                                '',
+                                '_Ketik 0 untuk batal._'
+                            ].join('\n');
+                        } else if (normalized === '14') {
+                            // FEATURE: EDIT TEMPLATE PESAN TUTUP
+                            const currentSettings = await getBotSettings();
+                            adminFlowByPhone.set(senderPhone, 'SETTING_CLOSE_MSG');
+                            replyText = [
+                                '📝 *EDIT TEMPLATE PESAN TUTUP*',
+                                '',
+                                '📌 *Template Saat Ini:*',
+                                '─────────────────',
+                                currentSettings.close_message_template,
+                                '─────────────────',
+                                '',
+                                '*Placeholder yang tersedia:*',
+                                '• {JAM_TUTUP} = Jam tutup (misal: 04.01 - 06.00 WIB)',
+                                '• {JAM_BUKA} = Jam buka (misal: 06.01)',
+                                '',
+                                'Ketik template baru atau ketik 0 untuk batal.'
+                            ].join('\n');
                         } else replyText = '⚠️ Pilihan tidak dikenali.';
                     } else if (currentAdminFlow === 'SEARCH_DATA') {
                         // SEARCH ALL DATA
@@ -1554,6 +1585,70 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             }
                             adminFlowByPhone.set(senderPhone, 'MENU');
                         }
+                    } else if (currentAdminFlow === 'SETTING_CLOSE_TIME') {
+                        // Admin input jam tutup baru: "04:01 06:00"
+                        const parts = rawTrim.split(/\s+/);
+                        if (parts.length !== 2) {
+                            replyText = '⚠️ Format salah. Gunakan: JAM_MULAI JAM_SELESAI\nContoh: 04:01 06:00\n\nKetik 0 untuk batal.';
+                        } else {
+                            const timePattern = /^(\d{1,2}):(\d{2})$/;
+                            const match1 = parts[0].match(timePattern);
+                            const match2 = parts[1].match(timePattern);
+
+                            if (!match1 || !match2) {
+                                replyText = '⚠️ Format jam salah. Gunakan HH:MM (contoh: 04:01)\n\nKetik 0 untuk batal.';
+                            } else {
+                                const startHour = parseInt(match1[1]);
+                                const startMin = parseInt(match1[2]);
+                                const endHour = parseInt(match2[1]);
+                                const endMin = parseInt(match2[2]);
+
+                                if (startHour > 23 || startMin > 59 || endHour > 23 || endMin > 59) {
+                                    replyText = '⚠️ Jam tidak valid. Jam harus 00-23, menit 00-59.';
+                                } else {
+                                    // Update settings
+                                    const success = await updateBotSettings({
+                                        close_hour_start: startHour,
+                                        close_minute_start: startMin,
+                                        close_hour_end: endHour,
+                                        close_minute_end: endMin
+                                    });
+
+                                    if (success) {
+                                        clearBotSettingsCache();
+                                        const newTimeStr = `${String(startHour).padStart(2, '0')}.${String(startMin).padStart(2, '0')} - ${String(endHour).padStart(2, '0')}.${String(endMin).padStart(2, '0')} WIB`;
+                                        replyText = `✅ *JAM TUTUP BERHASIL DIUBAH*\n\nJam tutup baru: *${newTimeStr}*\n\nBot akan menolak input data pada jam tersebut.`;
+                                    } else {
+                                        replyText = '❌ Gagal menyimpan pengaturan. Coba lagi.';
+                                    }
+                                    adminFlowByPhone.set(senderPhone, 'MENU');
+                                }
+                            }
+                        }
+                    } else if (currentAdminFlow === 'SETTING_CLOSE_MSG') {
+                        // Admin input template pesan tutup baru
+                        if (rawTrim.length < 10) {
+                            replyText = '⚠️ Template terlalu pendek. Minimal 10 karakter.\n\nKetik 0 untuk batal.';
+                        } else {
+                            const success = await updateBotSettings({
+                                close_message_template: rawTrim
+                            });
+
+                            if (success) {
+                                clearBotSettingsCache();
+                                replyText = [
+                                    '✅ *TEMPLATE PESAN TUTUP BERHASIL DIUBAH*',
+                                    '',
+                                    '📝 Template baru:',
+                                    '─────────────────',
+                                    rawTrim,
+                                    '─────────────────'
+                                ].join('\n');
+                            } else {
+                                replyText = '❌ Gagal menyimpan template. Coba lagi.';
+                            }
+                            adminFlowByPhone.set(senderPhone, 'MENU');
+                        }
                     }
                     if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
                     continue;
@@ -1757,12 +1852,42 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                         // INJECT SENDER NAME (untuk disimpan di tabe data_harian)
                         logJson.sender_name = existingName || undefined;
 
-                        if (logJson.stats.total_blocks > 0 || (logJson.failed_remainder_lines && logJson.failed_remainder_lines.length > 0)) {
-                            await saveLogAndOkItems(logJson, messageText);
+                        if (logJson.stats.total_blocks > 0) {
+                            // STRICT VALIDATION:
+                            // Jika ada sisa baris (remainder) yang gagal diparsing, TOLAK SELURUH PESAN.
+                            // Jangan simpan partial clean data. User harus kirim ulang dengan benar.
+                            if (logJson.failed_remainder_lines && logJson.failed_remainder_lines.length > 0) {
+                                // REJECTION REPLY
+                                const expectedLines = userLocation === 'PASARJAYA' ? 5 : 4;
+                                replyText = [
+                                    '❌ *DATA BELUM LENGKAP / FORMAT SALAH*',
+                                    '',
+                                    `⚠️ Anda mengirim data dengan jumlah baris yang tidak sesuai`,
+                                    `Lokasi: *${userLocation}*`,
+                                    `Syarat: *${expectedLines} baris per data*`,
+                                    '',
+                                    '❌ *MASALAH:*',
+                                    'Ada baris data yang menggantung / tidak lengkap.',
+                                    '',
+                                    '💡 *SOLUSI:*',
+                                    'Pastikan setiap 1 data orang terdiri dari ' + expectedLines + ' baris.',
+                                    'Jika daftar banyak orang, pisahkan dengan baris kosong/enter.',
+                                    '',
+                                    '👇 *CONTOH YANG BENAR:*',
+                                    userLocation === 'PASARJAYA'
+                                        ? 'Siti Aminah\n5049488500001234\n3171234567890123\n3171098765432109\n15-08-1975'
+                                        : 'Siti Aminah\n5049488500001234\n3171234567890123\n3171098765432109',
+                                    '',
+                                    'Mohon kirim ulang ya Bu/Pak 🙏'
+                                ].join('\n');
+                            } else {
+                                // DATA BERSIH (Valid Blocks Only & No Remainder) -> PROSES SIMPAN
+                                await saveLogAndOkItems(logJson, messageText);
 
-                            // Hitung total data hari ini SETELAH data disimpan
-                            const totalDataToday = await getTotalDataTodayForSender(senderPhone, processingDayKey);
-                            replyText = buildReplyForNewData(logJson, totalDataToday, userLocation);
+                                // Hitung total data hari ini SETELAH data disimpan
+                                const totalDataToday = await getTotalDataTodayForSender(senderPhone, processingDayKey);
+                                replyText = buildReplyForNewData(logJson, totalDataToday, userLocation);
+                            }
                         } else {
                             // Kasus langka: >= 4 baris tapi tidak ada blok valid satu pun?
                             replyText = `⚠️ *Format Data Salah*\nPastikan format sesuai dengan lokasi **${userLocation}** (${minLines} baris per orang).`;
@@ -1785,7 +1910,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                 const digits = line.replace(/\D/g, '');
                                 return digits.length >= 10;
                             });
-                            
+
                             if (hasLongNumbers) {
                                 // Kemungkinan user coba kirim data tapi tidak lengkap
                                 const formatGuide = `⚠️ *DATA TIDAK LENGKAP*

@@ -26,7 +26,9 @@ export type AdminFlowState =
     | 'ADMIN_DELETE_SELECT_USER'
     | 'ADMIN_DELETE_USER_DATA'
     | 'EXPORT_SELECT_DATE'
-    | 'EXPORT_CUSTOM_DATE';
+    | 'EXPORT_CUSTOM_DATE'
+    | 'SETTING_CLOSE_TIME'
+    | 'SETTING_CLOSE_MSG';
 
 // Draft broadcast untuk penjadwalan/preview
 export type BroadcastDraft = {
