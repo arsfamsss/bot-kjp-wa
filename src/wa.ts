@@ -44,7 +44,7 @@ import {
     getTotalDataTodayForSender,
 } from './supabase';
 import { getProcessingDayKey, getWibIsoDate, shiftIsoDate, isSystemClosed } from './time';
-import { parseFlexibleDate } from './utils/dateParser';
+import { parseFlexibleDate, looksLikeDate } from './utils/dateParser';
 import {
     MENU_MESSAGE,
     FAQ_MESSAGE,
@@ -571,6 +571,91 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
 
                 const currentUserFlow = userFlowByPhone.get(senderPhone) || 'NONE';
                 const currentLocation = userLocationChoice.get(senderPhone) || 'DHARMAJAYA'; // Default to old style (Dharmajaya) if unknown
+
+                // ===== PRIORITY AUTO-DETECT: Cek apakah input adalah DATA PENDAFTARAN =====
+                // Jika ya, LANGSUNG proses tanpa perlu melewati flow state atau menu
+                const dataLines = parseRawMessageToLines(messageText);
+                const looksLikeDatePatternCheck = /^\d{1,2}[-\/\.]\d{1,2}[-\/\.]\d{2,4}$/;
+
+                // Deteksi apakah ini data pendaftaran berdasarkan pattern
+                let isRegistrationData = false;
+                let autoDetectedFormat: 'PASARJAYA' | 'DHARMAJAYA' | null = null;
+
+                // Single data: 5 baris dengan tanggal di akhir = Pasarjaya
+                if (dataLines.length === 5 && looksLikeDatePatternCheck.test(dataLines[4]?.trim() || '')) {
+                    isRegistrationData = true;
+                    autoDetectedFormat = 'PASARJAYA';
+                }
+                // Single data: 4 baris = Dharmajaya
+                else if (dataLines.length === 4) {
+                    isRegistrationData = true;
+                    autoDetectedFormat = 'DHARMAJAYA';
+                }
+                // Multi data: kelipatan 5 dengan tanggal setiap baris ke-5 = Pasarjaya
+                else if (dataLines.length >= 10 && dataLines.length % 5 === 0) {
+                    let allDates = true;
+                    for (let i = 4; i < dataLines.length; i += 5) {
+                        if (!looksLikeDatePatternCheck.test(dataLines[i]?.trim() || '')) {
+                            allDates = false;
+                            break;
+                        }
+                    }
+                    if (allDates) {
+                        isRegistrationData = true;
+                        autoDetectedFormat = 'PASARJAYA';
+                    }
+                }
+                // Multi data: kelipatan 4 = Dharmajaya
+                else if (dataLines.length >= 8 && dataLines.length % 4 === 0) {
+                    isRegistrationData = true;
+                    autoDetectedFormat = 'DHARMAJAYA';
+                }
+
+                // Validasi tambahan: baris ke-2 harus berisi angka panjang (nomor kartu)
+                if (isRegistrationData && dataLines.length >= 2) {
+                    const secondLine = dataLines[1]?.replace(/\D/g, '') || '';
+                    if (secondLine.length < 10) {
+                        isRegistrationData = false; // Bukan data pendaftaran
+                    }
+                }
+
+                // JIKA INI DATA PENDAFTARAN, LANGSUNG PROSES (BYPASS SEMUA FLOW STATE)
+                if (isRegistrationData && autoDetectedFormat) {
+                    // Reset flow state agar tidak mengganggu
+                    userFlowByPhone.set(senderPhone, 'NONE');
+
+                    // Simpan format terdeteksi
+                    userLocationChoice.set(senderPhone, autoDetectedFormat);
+
+                    const logJson = await processRawMessageToLogJson({
+                        text: messageText,
+                        senderPhone,
+                        messageId: msg.key.id,
+                        receivedAt,
+                        tanggal: tanggalWib,
+                        processingDayKey,
+                        locationContext: autoDetectedFormat
+                    });
+
+                    // INJECT SENDER NAME
+                    logJson.sender_name = existingName || undefined;
+
+                    if (logJson.stats.total_blocks > 0 || (logJson.failed_remainder_lines && logJson.failed_remainder_lines.length > 0)) {
+                        await saveLogAndOkItems(logJson, messageText);
+
+                        // Hitung total data hari ini SETELAH data disimpan
+                        const totalDataToday = await getTotalDataTodayForSender(senderPhone, processingDayKey);
+                        const replyDataText = buildReplyForNewData(logJson, totalDataToday, autoDetectedFormat);
+                        await sock.sendMessage(remoteJid, { text: replyDataText });
+                        console.log(`📤 Data pendaftaran (${autoDetectedFormat}) berhasil diproses untuk ${senderPhone}`);
+                    } else {
+                        // Format terdeteksi tapi tidak ada blok valid
+                        await sock.sendMessage(remoteJid, {
+                            text: `⚠️ *Format Data Salah*\nPastikan format sesuai dengan lokasi **${autoDetectedFormat}** (${autoDetectedFormat === 'PASARJAYA' ? 5 : 4} baris per orang).`
+                        });
+                    }
+                    continue; // SKIP semua logic di bawah
+                }
 
                 // Handle Reset Flow jika user ketik Menu/Greeting
                 if (currentUserFlow !== 'NONE' && (normalized === '0' || isGreetingOrMenu(normalized))) {
