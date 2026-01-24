@@ -22,7 +22,10 @@ import {
     buildReplyForInvalidDetails,
     generateExportData,
 } from './recap';
-import { buildReplyForNewData } from './reply';
+import {
+    buildReplyForNewData,
+} from './reply';
+import { generateKJPExcel } from './services/excelService';
 import {
     saveLogAndOkItems,
     supabase,
@@ -328,11 +331,6 @@ Budi
 
 Jika lebih dari 1 data seperti ini:
 Budi
-5049488500001111
-3173444455556666
-3173555566667777
-
-Agus Sedih
 5049488522223333
 3173000011112222
 3173888877776666

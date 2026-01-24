@@ -151,6 +151,7 @@ export const ADMIN_MENU_MESSAGE = [
     '⚙️ *PENGATURAN BOT:*',
     '1️⃣3️⃣ Atur Jam Tutup',
     '1️⃣4️⃣ Edit Template Pesan Tutup',
+    '1️⃣5️⃣ 📥 Download Excel Hari Ini',
     '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
     '',
     '0️⃣ _Kembali ke Menu Utama_',
