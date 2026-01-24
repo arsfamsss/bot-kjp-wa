@@ -19,34 +19,27 @@ export function buildReplyForNewData(log: LogJson, totalDataToday?: number, loca
 
     if (failed === 0 && !hasRemainder) {
         const lines = [
-            '✅ *DATA PENDAFTARAN DITERIMA*',
+            '✅ *MANTAP! Data sudah masuk~*',
             '',
-            `🎯 Diterima: *${total} orang*`,
+            `📥 Diterima: *${total} orang*`,
         ];
 
         // Tampilkan total data hari ini jika tersedia
         if (totalDataToday !== undefined && totalDataToday > 0) {
-            lines.push(`📊 Total Data Anda hari ini: *${totalDataToday} orang*`);
+            lines.push(`📊 Total hari ini: *${totalDataToday} orang*`);
         }
 
         lines.push('');
-        lines.push('Terima kasih 🙏');
-        lines.push('Data pendaftaran Anda telah kami terima dan dicatat.');
+        lines.push('Makasih ya Bu/Pak! 🙏');
         lines.push('');
-        lines.push('━━━━━━━━━━━━━━━━━━━━━━');
-        lines.push('⚠️ *PERHATIAN*');
-        lines.push('━━━━━━━━━━━━━━━━━━━━━━');
-        lines.push('• Pastikan data sudah *BENAR* dan *URUT*');
-        lines.push('• Kesalahan data dapat menyebabkan penolakan saat pengambilan');
-        lines.push('• Kami tidak bertanggung jawab atas kesalahan input');
+        lines.push('━━━━━━━━━━━━━━━━━━━━');
+        lines.push('📋 *LANGKAH SELANJUTNYA:*');
+        lines.push('━━━━━━━━━━━━━━━━━━━━');
+        lines.push('• Ketik *CEK* → Lihat data');
+        lines.push('• Ketik *BATAL* → Batalkan (max 30 menit)');
+        lines.push('• Atau kirim data lagi 📝');
         lines.push('');
-        lines.push('━━━━━━━━━━━━━━━━━━━━━━');
-        lines.push('📋 *MENU LANJUTAN*');
-        lines.push('━━━━━━━━━━━━━━━━━━━━━━');
-        lines.push('💡 Ketik *CEK* → Lihat detail data Anda');
-        lines.push('💡 Ketik *BATAL* → Batalkan (dalam 30 menit)');
-        lines.push('💡 Ketik *HAPUS* → Hapus data tertentu');
-        lines.push('💡 Atau langsung kirim data baru');
+        lines.push('📍 Pengambilan: *BESOK* (H+1)');
 
         return lines.join('\n');
     }
@@ -55,126 +48,96 @@ export function buildReplyForNewData(log: LogJson, totalDataToday?: number, loca
     const lines: string[] = [];
 
     if (success > 0) {
-        lines.push(`⚠️ *DATA DICATAT SEBAGIAN*`);
+        lines.push(`⚠️ *Ada yang perlu diperbaiki nih~*`);
         lines.push('');
-        lines.push(`✅ Berhasil dicatat: *${success} orang*`);
+        lines.push(`✅ Masuk: *${success} orang*`);
         const failCount = failed + (hasRemainder ? 1 : 0);
-        lines.push(`❌ Perlu diperbaiki: *${failCount} item*`);
+        lines.push(`❌ Perlu cek: *${failCount} data*`);
 
         // Tampilkan total data hari ini jika tersedia
         if (totalDataToday !== undefined && totalDataToday > 0) {
-            lines.push(`📊 Total data Anda hari ini: *${totalDataToday} orang*`);
+            lines.push(`📊 Total hari ini: *${totalDataToday} orang*`);
         }
 
         lines.push('');
-        lines.push('👇 *YANG BERHASIL DICATAT:*');
+        lines.push('👇 *Yang sudah masuk:*');
         const okItems = log.items.filter((i) => i.status === 'OK');
         okItems.forEach((item, idx) => {
             lines.push(`   ${idx + 1}. ${item.parsed.nama}`);
         });
     } else {
-        lines.push(`❌ *MAAF, DATA BELUM BISA DIPROSES*`);
+        lines.push(`❌ *Waduh, data belum bisa masuk~*`);
         lines.push('');
-        lines.push('Mohon kirim ulang dengan format yang benar ya Bu/Pak 🙏');
+        lines.push('Coba kirim ulang ya Bu/Pak 🙏');
     }
 
     if (failed > 0 || hasRemainder) {
         lines.push('');
-        lines.push('📝 *YANG PERLU DIPERBAIKI:*');
+        lines.push('📝 *Cek data ini ya:*');
 
         // 1. Tampilkan item yang gagal validasi (format/duplikat)
         const failedItems = log.items.filter((i) => i.status !== 'OK');
         failedItems.forEach((item) => {
-            lines.push('┌─────────────────────────────');
             const namaLabel = item.parsed.nama ? item.parsed.nama : `Data ke-${item.index}`;
-            lines.push(`│ 👤 *${namaLabel}*`);
+            lines.push('');
+            lines.push(`❌ *${namaLabel}*`);
 
             if (item.status === 'SKIP_DUPLICATE') {
-                const msg = item.duplicate_info?.safe_message ?? 'Sudah pernah didaftarkan hari ini.';
-                lines.push(`│ ⚠️ ${msg}`);
-
-                // Tampilkan data asli yang menyebabkan duplikat
-                const orig = item.duplicate_info?.original_data;
-                if (orig) {
-                    lines.push('│');
-                    lines.push('│ 📋 Data yang sudah terdaftar:');
-                    lines.push(`│    • Nama  : ${orig.nama}`);
-                    lines.push(`│    • Kartu : ${orig.no_kjp}`);
-                    lines.push(`│    • KTP   : ${orig.no_ktp}`);
-                    lines.push(`│    • KK    : ${orig.no_kk}`);
-                }
+                lines.push(`   → Sudah terdaftar hari ini`);
             } else if (item.status === 'SKIP_FORMAT') {
                 item.errors.forEach((err) => {
-                    // Simplify error messages
-                    let friendlyMsg = err.detail;
+                    let friendlyMsg = '';
                     if (err.field === 'no_kjp' && err.type === 'invalid_length') {
-                        friendlyMsg = `No Kartu harus 16-18 digit (saat ini ${item.parsed.no_kjp?.length || 0} digit)`;
+                        friendlyMsg = `Kartu ${item.parsed.no_kjp?.length || 0} digit (harus 16-18)`;
                     } else if (err.field === 'no_ktp' && err.type === 'invalid_length') {
-                        friendlyMsg = `No KTP harus 16 digit (saat ini ${item.parsed.no_ktp?.length || 0} digit)`;
+                        friendlyMsg = `KTP ${item.parsed.no_ktp?.length || 0} digit (harus 16)`;
                     } else if (err.field === 'no_kk' && err.type === 'invalid_length') {
-                        friendlyMsg = `No KK harus 16 digit (saat ini ${item.parsed.no_kk?.length || 0} digit)`;
+                        friendlyMsg = `KK ${item.parsed.no_kk?.length || 0} digit (harus 16)`;
                     } else if (err.type === 'required') {
-                        friendlyMsg = `${err.field === 'nama' ? 'Nama' : err.field === 'no_kjp' ? 'No Kartu' : err.field === 'no_ktp' ? 'No KTP' : 'No KK'} kosong atau tidak terbaca`;
+                        const fieldName = err.field === 'nama' ? 'Nama' : err.field === 'no_kjp' ? 'Kartu' : err.field === 'no_ktp' ? 'KTP' : 'KK';
+                        friendlyMsg = `${fieldName} kosong`;
                     } else if (err.type === 'wrong_order') {
-                        friendlyMsg = 'Urutan salah! Kirim ulang dengan urutan:\n│    1. Nama\n│    2. No Kartu (16-18 digit)\n│    3. No KTP (16 digit)\n│    4. No KK (16 digit)';
+                        friendlyMsg = 'Urutan salah';
+                    } else if (err.type === 'same_as_other') {
+                        friendlyMsg = 'Nomor ada yang sama';
+                    } else {
+                        friendlyMsg = err.detail;
                     }
-                    lines.push(`│ ⚠️ ${friendlyMsg}`);
+                    lines.push(`   → ${friendlyMsg}`);
                 });
-
-                // Untuk error same_as_other, tampilkan data yang dikirim user
-                const hasSameAsOther = item.errors.some(e => e.type === 'same_as_other');
-                if (hasSameAsOther) {
-                    lines.push('│');
-                    lines.push('│ 📋 Data yang Anda kirim:');
-                    lines.push(`│    • Nama  : ${item.parsed.nama || '-'}`);
-                    lines.push(`│    • Kartu : ${item.parsed.no_kjp || '-'}`);
-                    lines.push(`│    • KTP   : ${item.parsed.no_ktp || '-'}${item.parsed.no_kjp === item.parsed.no_ktp ? ' ⛔ SAMA!' : ''}`);
-                    lines.push(`│    • KK    : ${item.parsed.no_kk || '-'}${(item.parsed.no_kjp === item.parsed.no_kk || item.parsed.no_ktp === item.parsed.no_kk) ? ' ⛔ SAMA!' : ''}`);
-                }
             }
-            lines.push('└─────────────────────────────');
         });
 
         // 2. Tampilkan sisa baris (Remainder)
         if (hasRemainder && log.failed_remainder_lines) {
             const expectedLines = isPasarjaya ? 5 : 4;
-            lines.push('┌─────────────────────────────');
-            lines.push(`│ 👤 *Data tidak lengkap*`);
-            lines.push(`│ ⚠️ Baris tidak cukup ${expectedLines} (tiap orang = ${expectedLines} baris)`);
-            lines.push('│');
-            lines.push('│ _Coba kirim ulang text ini:_');
-            lines.push('│');
-            log.failed_remainder_lines.forEach(line => {
-                lines.push(`│ ${line}`);
-            });
-            lines.push('└─────────────────────────────');
+            lines.push('');
+            lines.push(`❌ *Data tidak lengkap*`);
+            lines.push(`   → Kurang baris (harus ${expectedLines} baris/orang)`);
         }
 
-        // Contoh format yang benar - sesuai lokasi
+        // Contoh format yang benar - sesuai lokasi (lebih simpel)
         lines.push('');
-        lines.push('💡 *CONTOH FORMAT YANG BENAR:*');
-        lines.push('');
+        lines.push('━━━━━━━━━━━━━━━━━━━━');
+        lines.push('💡 *Contoh yang bener:*');
 
         if (isPasarjaya) {
-            // Format Pasarjaya (5 baris)
-            lines.push('*Format Pasarjaya (5 baris):*');
-            lines.push('Budi Santoso');
-            lines.push('5049488500001111');
-            lines.push('3173444455556666');
-            lines.push('3173555566667777');
-            lines.push('15-08-1985');
+            lines.push('Siti Aminah');
+            lines.push('5049488500001234');
+            lines.push('3171234567890123');
+            lines.push('3171098765432109');
+            lines.push('15-08-1975');
         } else {
-            // Format Dharmajaya (4 baris)
-            lines.push('*Format Dharmajaya (4 baris):*');
-            lines.push('Budi Santoso');
-            lines.push('5049488500001111');
-            lines.push('3173444455556666');
-            lines.push('3173555566667777');
+            lines.push('Siti Aminah');
+            lines.push('5049488500001234');
+            lines.push('3171234567890123');
+            lines.push('3171098765432109');
         }
+        lines.push('━━━━━━━━━━━━━━━━━━━━');
     }
 
     lines.push('');
-    lines.push('💡 _Ketik *CEK* untuk melihat data Anda._');
+    lines.push('Ketik *CEK* buat lihat data 👀');
 
     return lines.join('\n');
 }
