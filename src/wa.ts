@@ -1811,7 +1811,7 @@ Ketik MENU untuk bantuan.`;
                             await sock.sendMessage(remoteJid, { text: formatGuide });
                         } else {
                             // Input lain (mungkin emoji, stiker, dll)
-                            await sock.sendMessage(remoteJid, { text: '🤔 Ketik MENU untuk melihat pilihan.' });
+                            await sock.sendMessage(remoteJid, { text: 'Hai! 👋 Mau daftar sembako?\n\nKetik *1* untuk mulai~ 😊' });
                         }
                     }
                     continue;
