@@ -1507,7 +1507,8 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                     if (successCount > 0) {
                                         replyText = `✅ Berhasil menghapus ${successCount} data:\n- ${deletedNames.join('\n- ')}`;
                                     } else {
-                                        replyText = '❌ Gagal menghapus.';
+                                        // JIKA 0 DATA TERHAPUS: Berarti gagal karena izin (RLS) atau data sudah hilang
+                                        replyText = '❌ Gagal menghapus.\n\nKemungkinan penyebab:\n1. Izin database (RLS) memblokir bot.\n2. Data sudah dihapus sebelumnya.\n\n(Pastikan SERVICE_KEY sudah dipasang)';
                                     }
 
                                     adminContactCache.delete(senderPhone + '_data');

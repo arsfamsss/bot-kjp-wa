@@ -6,9 +6,10 @@ import { getWibTimeHHmm } from './time';
 
 const url = process.env.SUPABASE_URL!;
 const anonKey = process.env.SUPABASE_ANON_KEY!;
+const serviceKey = process.env.SUPABASE_SERVICE_KEY || anonKey;
 
-
-export const supabase = createClient(url, anonKey);
+// Gunakan Service Key jika ada (untuk Admin Delete bypass RLS), jika tidak fallback ke Anon Key
+export const supabase = createClient(url, serviceKey);
 
 // --- CACHE USER TERDAFTAR (In-Memory) ---
 // Map<PhoneNumber, PushName>
