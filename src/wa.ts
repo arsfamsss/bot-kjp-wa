@@ -1549,8 +1549,10 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
 
                                 if (excelDataRaw && excelDataRaw.length > 0) {
                                     // ENRICH & SORT BY NAME
+                                    // PRIORITAS: 1. Cache/LID (Nama Terbaru), 2. DB History (Nama Lama/Snapshot), 3. No HP
                                     const enriched = excelDataRaw.map((row: any) => {
-                                        const finalSender = row.sender_name || getRegisteredUserNameSync(row.sender_phone) || row.sender_phone;
+                                        const currentName = getRegisteredUserNameSync(row.sender_phone);
+                                        const finalSender = currentName || row.sender_name || row.sender_phone;
                                         return { ...row, sender_name: finalSender };
                                     });
 
@@ -1625,9 +1627,10 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
 
                                 if (excelDataRaw && excelDataRaw.length > 0) {
                                     // ENRICH & SORT BY NAME
+                                    // PRIORITAS: 1. Cache/LID (Nama Terbaru), 2. DB History (Nama Lama/Snapshot), 3. No HP
                                     const enriched = excelDataRaw.map((row: any) => {
-                                        // Prioritas Nama: 1. DB Row sender_name (jika ada), 2. Lookup Cache
-                                        const finalSender = row.sender_name || getRegisteredUserNameSync(row.sender_phone) || row.sender_phone;
+                                        const currentName = getRegisteredUserNameSync(row.sender_phone);
+                                        const finalSender = currentName || row.sender_name || row.sender_phone;
                                         return { ...row, sender_name: finalSender };
                                     });
 
