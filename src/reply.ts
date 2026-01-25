@@ -39,7 +39,6 @@ export function buildReplyForNewData(log: LogJson, totalDataToday?: number, loca
         lines.push('• Ketik *BATAL* → Batalkan (max 30 menit)');
         lines.push('• Atau kirim data lagi 📝');
         lines.push('');
-        lines.push('📍 Pengambilan: *BESOK* (H+1)');
 
         return lines.join('\n');
     }

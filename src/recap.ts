@@ -461,8 +461,39 @@ export async function generateExportData(
         }
     }
 
+    // === GENERATE SUMMARY PER PENGIRIM ===
     txtRows.push('────────────────────────────────────');
+    txtRows.push('📊 *RINGKASAN DATA MASUK:*');
     txtRows.push('');
+
+    // Gabungkan semua data untuk perhitungan ringkasan
+    const summaryMap = new Map<string, { name: string, total: number, pasarjaya: number, dharmajaya: number }>();
+
+    for (const row of (data as any[])) {
+        const phone = row.sender_phone;
+        if (!summaryMap.has(phone)) {
+            summaryMap.set(phone, {
+                name: getSenderName(phone),
+                total: 0,
+                pasarjaya: 0,
+                dharmajaya: 0
+            });
+        }
+        const stats = summaryMap.get(phone)!;
+        stats.total++;
+        if (row.lokasi === 'PASARJAYA') {
+            stats.pasarjaya++;
+        } else {
+            stats.dharmajaya++;
+        }
+    }
+
+    summaryMap.forEach((stats) => {
+        txtRows.push(`👤 *${stats.name}* (${stats.total} data)`);
+        if (stats.dharmajaya > 0) txtRows.push(`   • Dharmajaya Duri Kosambi: ${stats.dharmajaya}`);
+        if (stats.pasarjaya > 0) txtRows.push(`   • Pasarjaya Kedoya: ${stats.pasarjaya}`);
+        txtRows.push('');
+    });
     txtRows.push('✅ *Laporan selesai.*');
 
     const txtContent = txtRows.join('\n');

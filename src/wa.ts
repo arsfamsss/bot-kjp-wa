@@ -1529,6 +1529,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             if (!exportResult || exportResult.count === 0) {
                                 replyText = '📂 Belum ada data pendaftaran hari ini untuk diexport.';
                             } else {
+                                // 1. Kirim TXT
                                 const txtBuffer = Buffer.from(exportResult.txt, 'utf-8');
                                 await sock.sendMessage(remoteJid, {
                                     document: txtBuffer,
@@ -1536,7 +1537,26 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                     fileName: `${exportResult.filenameBase}.txt`,
                                     caption: `📄 Laporan Detail Data (${exportResult.count} data)`
                                 });
-                                replyText = '✅ Export data selesai.';
+
+                                // 2. Kirim Excel
+                                const { data: excelData } = await supabase
+                                    .from('data_harian')
+                                    .select('*')
+                                    .eq('processing_day_key', processingDayKey)
+                                    .order('sender_phone', { ascending: true })
+                                    .order('received_at', { ascending: true });
+
+                                if (excelData && excelData.length > 0) {
+                                    const excelBuffer = generateKJPExcel(excelData);
+                                    await sock.sendMessage(remoteJid, {
+                                        document: excelBuffer,
+                                        mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                                        fileName: `${exportResult.filenameBase}.xlsx`,
+                                        caption: `📊 Laporan Excel (${excelData.length} data)`
+                                    });
+                                }
+
+                                replyText = '✅ Export data (TXT & Excel) selesai.';
                             }
                             adminFlowByPhone.set(senderPhone, 'MENU');
                         } else if (normalized === '2') {
@@ -1572,6 +1592,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             if (!exportResult || exportResult.count === 0) {
                                 replyText = `📂 Tidak ada data pendaftaran pada tanggal ${displayDate}.`;
                             } else {
+                                // 1. Kirim TXT
                                 const txtBuffer = Buffer.from(exportResult.txt, 'utf-8');
                                 await sock.sendMessage(remoteJid, {
                                     document: txtBuffer,
@@ -1579,7 +1600,26 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                     fileName: `${exportResult.filenameBase}.txt`,
                                     caption: `📄 Laporan Detail Data ${displayDate} (${exportResult.count} data)`
                                 });
-                                replyText = '✅ Export data selesai.';
+
+                                // 2. Kirim Excel
+                                const { data: excelData } = await supabase
+                                    .from('data_harian')
+                                    .select('*')
+                                    .eq('processing_day_key', iso)
+                                    .order('sender_phone', { ascending: true })
+                                    .order('received_at', { ascending: true });
+
+                                if (excelData && excelData.length > 0) {
+                                    const excelBuffer = generateKJPExcel(excelData);
+                                    await sock.sendMessage(remoteJid, {
+                                        document: excelBuffer,
+                                        mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                                        fileName: `${exportResult.filenameBase}.xlsx`,
+                                        caption: `📊 Laporan Excel ${displayDate} (${excelData.length} data)`
+                                    });
+                                }
+
+                                replyText = '✅ Export data (TXT & Excel) selesai.';
                             }
                             adminFlowByPhone.set(senderPhone, 'MENU');
                         }
