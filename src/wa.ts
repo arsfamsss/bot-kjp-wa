@@ -1540,20 +1540,33 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                 });
 
                                 // 2. Kirim Excel
-                                const { data: excelData } = await supabase
+                                const { data: excelDataRaw } = await supabase
                                     .from('data_harian')
                                     .select('*')
                                     .eq('processing_day_key', processingDayKey)
                                     .order('sender_phone', { ascending: true })
                                     .order('received_at', { ascending: true });
 
-                                if (excelData && excelData.length > 0) {
-                                    const excelBuffer = generateKJPExcel(excelData);
+                                if (excelDataRaw && excelDataRaw.length > 0) {
+                                    // ENRICH & SORT BY NAME
+                                    const enriched = excelDataRaw.map((row: any) => {
+                                        const finalSender = row.sender_name || getRegisteredUserNameSync(row.sender_phone) || row.sender_phone;
+                                        return { ...row, sender_name: finalSender };
+                                    });
+
+                                    // Sort A-Z
+                                    enriched.sort((a, b) => {
+                                        const nA = (a.sender_name || '').toUpperCase();
+                                        const nB = (b.sender_name || '').toUpperCase();
+                                        return nA.localeCompare(nB);
+                                    });
+
+                                    const excelBuffer = generateKJPExcel(enriched);
                                     await sock.sendMessage(remoteJid, {
                                         document: excelBuffer,
                                         mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                                         fileName: `${exportResult.filenameBase}.xlsx`,
-                                        caption: `📊 Laporan Excel (${excelData.length} data)`
+                                        caption: `📊 Laporan Excel (${enriched.length} data)`
                                     });
                                 }
 
@@ -1603,20 +1616,34 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                 });
 
                                 // 2. Kirim Excel
-                                const { data: excelData } = await supabase
+                                const { data: excelDataRaw } = await supabase
                                     .from('data_harian')
                                     .select('*')
                                     .eq('processing_day_key', iso)
                                     .order('sender_phone', { ascending: true })
                                     .order('received_at', { ascending: true });
 
-                                if (excelData && excelData.length > 0) {
-                                    const excelBuffer = generateKJPExcel(excelData);
+                                if (excelDataRaw && excelDataRaw.length > 0) {
+                                    // ENRICH & SORT BY NAME
+                                    const enriched = excelDataRaw.map((row: any) => {
+                                        // Prioritas Nama: 1. DB Row sender_name (jika ada), 2. Lookup Cache
+                                        const finalSender = row.sender_name || getRegisteredUserNameSync(row.sender_phone) || row.sender_phone;
+                                        return { ...row, sender_name: finalSender };
+                                    });
+
+                                    // Sort Array by sender_name A-Z
+                                    enriched.sort((a, b) => {
+                                        const nA = (a.sender_name || '').toUpperCase();
+                                        const nB = (b.sender_name || '').toUpperCase();
+                                        return nA.localeCompare(nB);
+                                    });
+
+                                    const excelBuffer = generateKJPExcel(enriched);
                                     await sock.sendMessage(remoteJid, {
                                         document: excelBuffer,
                                         mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                                         fileName: `${exportResult.filenameBase}.xlsx`,
-                                        caption: `📊 Laporan Excel ${displayDate} (${excelData.length} data)`
+                                        caption: `📊 Laporan Excel ${displayDate} (${enriched.length} data)`
                                     });
                                 }
 

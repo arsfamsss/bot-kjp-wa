@@ -410,7 +410,14 @@ export async function generateExportData(
         txtRows.push('');
 
         let senderIdx = 1;
-        for (const phone of Object.keys(dharmajayaBySender)) {
+        // SORTING BY NAME
+        const sortedPhones = Object.keys(dharmajayaBySender).sort((a, b) => {
+            const nameA = getSenderName(a).toUpperCase();
+            const nameB = getSenderName(b).toUpperCase();
+            return nameA.localeCompare(nameB);
+        });
+
+        for (const phone of sortedPhones) {
             const items = dharmajayaBySender[phone];
             const senderName = getSenderName(phone);
 
@@ -437,7 +444,14 @@ export async function generateExportData(
         txtRows.push('');
 
         let senderIdx = 1;
-        for (const phone of Object.keys(pasarjayaBySender)) {
+        // SORTING BY NAME
+        const sortedPhones = Object.keys(pasarjayaBySender).sort((a, b) => {
+            const nameA = getSenderName(a).toUpperCase();
+            const nameB = getSenderName(b).toUpperCase();
+            return nameA.localeCompare(nameB);
+        });
+
+        for (const phone of sortedPhones) {
             const items = pasarjayaBySender[phone];
             const senderName = getSenderName(phone);
 
