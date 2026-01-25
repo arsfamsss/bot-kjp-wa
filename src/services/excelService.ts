@@ -28,7 +28,11 @@ export const generateKJPExcel = (data: any[]): Buffer => {
 
         return [
             index + 1, // No
-            item.nama || "",
+            // Format Nama: "Sender Name (Registered Name)" agar sama dengan TXT
+            // Jika sender_name ada dan beda dengan nama terdaftar
+            item.sender_name && item.sender_name !== item.nama
+                ? `${item.sender_name} (${item.nama})`
+                : (item.nama || ""),
             item.no_kjp || "",
             item.no_ktp || "",
             item.no_kk || "",
