@@ -2,18 +2,40 @@ import XLSX from 'xlsx-js-style';
 
 export const generateKJPExcel = (data: any[]): Buffer => {
     // 1. Prepare Header and Data
-    // Header: No, Nama, No KJP, No KTP, No KK, Tgl Lahir
-    const headers = ["No", "Nama", "No KJP", "No KTP", "No KK", "Tgl Lahir"];
+    // Header: No, Nama, No KJP, No KTP, No KK, Tgl Lahir, Lokasi
+    const headers = ["No", "Nama", "No KJP", "No KTP", "No KK", "Tgl Lahir", "Lokasi"];
 
     // Map data to array of arrays
-    const rows = data.map((item, index) => [
-        index + 1, // No
-        item.nama || "",
-        item.no_kjp || "", // Explicitly string to prevent scientific notation
-        item.no_ktp || "",
-        item.no_kk || "",
-        formatDateCell(item.tanggal_lahir, item.no_ktp) // Parse NIK if date missing, Format DD/MM/YYYY
-    ]);
+    const rows = data.map((item, index) => {
+        // Logika Penentuan Lokasi:
+        // 1. Jika di database sudah ada kolom lokasi, pakai itu.
+        // 2. Jika tidak, cek apakah ada tanggal lahir?
+        //    - Ada Tgl Lahir = PASARJAYA KEDOYA
+        //    - Tidak Ada Tgl Lahir = DHARMAJAYA DURI KOSAMBI
+
+        let lokasiFinal = "DHARMAJAYA DURI KOSAMBI"; // Default
+
+        if (item.lokasi === 'PASARJAYA') {
+            lokasiFinal = "PASARJAYA KEDOYA";
+        } else if (item.lokasi === 'DHARMAJAYA') {
+            lokasiFinal = "DHARMAJAYA DURI KOSAMBI";
+        } else {
+            // Fallback logic jika kolom lokasi kosong (data lama)
+            if (item.tanggal_lahir && item.tanggal_lahir.length > 5) {
+                lokasiFinal = "PASARJAYA KEDOYA";
+            }
+        }
+
+        return [
+            index + 1, // No
+            item.nama || "",
+            item.no_kjp || "",
+            item.no_ktp || "",
+            item.no_kk || "",
+            formatDateCell(item.tanggal_lahir, item.no_ktp), // Format Date
+            lokasiFinal
+        ];
+    });
 
     // Combine header and rows for data calculation
     const wsData = [headers, ...rows];
@@ -29,8 +51,9 @@ export const generateKJPExcel = (data: any[]): Buffer => {
             } catch { return dbDate; }
         }
 
-        // 2. Try Parse NIK
-        if (nik && nik.length >= 12) {
+        // 2. Try Parse NIK if DB Date is missing
+        // ONLY parse if date is absolutely missing or "-"
+        if ((!dbDate || dbDate === '-') && nik && nik.length >= 12) {
             try {
                 // NIK: 31 73 01 [DD] [MM] [YY] ...
                 // DD > 40 means Female (Subtract 40)
@@ -60,7 +83,7 @@ export const generateKJPExcel = (data: any[]): Buffer => {
             }
         }
 
-        return "-";
+        return dbDate || "-";
     }
 
     // 2. Create Worksheet
