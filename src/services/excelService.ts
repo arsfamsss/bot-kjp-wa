@@ -12,11 +12,56 @@ export const generateKJPExcel = (data: any[]): Buffer => {
         item.no_kjp || "", // Explicitly string to prevent scientific notation
         item.no_ktp || "",
         item.no_kk || "",
-        item.tanggal_lahir || "-" // Taken directly from DB, no parsing from NIK
+        formatDateCell(item.tanggal_lahir, item.no_ktp) // Parse NIK if date missing, Format DD/MM/YYYY
     ]);
 
     // Combine header and rows for data calculation
     const wsData = [headers, ...rows];
+
+    // Helper functions
+    function formatDateCell(dbDate: string | null, nik: string): string {
+        // 1. Try DB Date first
+        if (dbDate && dbDate.includes('-')) {
+            // Assume YYYY-MM-DD from DB -> Convert to DD/MM/YYYY
+            try {
+                const [y, m, d] = dbDate.split('-');
+                return `${d}/${m}/${y}`;
+            } catch { return dbDate; }
+        }
+
+        // 2. Try Parse NIK
+        if (nik && nik.length >= 12) {
+            try {
+                // NIK: 31 73 01 [DD] [MM] [YY] ...
+                // DD > 40 means Female (Subtract 40)
+                let day = parseInt(nik.substring(6, 8));
+                const month = parseInt(nik.substring(8, 10));
+                let year = parseInt(nik.substring(10, 12));
+
+                if (day > 40) day -= 40;
+
+                // Simple year pivot logic
+                // If year > current yy (e.g. 26), assume 19xx, else 20xx
+                // Or just assume 20xx for small numbers?
+                // Better: 
+                // KJP is mostly students (2000+) or parents (1970+).
+                // Let's use pivot 30. If > 30 -> 19xx. <= 30 -> 20xx.
+                const fullYear = year > 30 ? 1900 + year : 2000 + year;
+
+                const dStr = String(day).padStart(2, '0');
+                const mStr = String(month).padStart(2, '0');
+
+                // Validate date validity (e.g. month 1-12, day 1-31)
+                if (day > 0 && day <= 31 && month > 0 && month <= 12) {
+                    return `${dStr}/${mStr}/${fullYear}`;
+                }
+            } catch (e) {
+                // ignore error
+            }
+        }
+
+        return "-";
+    }
 
     // 2. Create Worksheet
     const ws = XLSX.utils.aoa_to_sheet(wsData);
