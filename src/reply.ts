@@ -27,7 +27,7 @@ export function buildReplyForNewData(
         const lines = [
             '✨ *DATA BERHASIL DISIMPAN!* ✨',
             '━━━━━━━━━━━━━━━━━━━━━━━━━━━━', // Separator panjang
-            `📥 *Data Baru Diterima: ${total} Ord*`
+            `📥 *Data Baru Diterima: ${total} Orang*`
         ];
 
         if (log.items && log.items.length > 0) {
