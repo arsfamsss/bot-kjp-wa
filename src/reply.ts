@@ -40,7 +40,8 @@ export function buildReplyForNewData(
                     // Tapi di request sebelumnya "NAMES ONLY".
                     // Lalu di request terbaru: "Budi No Kartu 1234567812345678"
                     // Oke kita ikuti request TERBARU.
-                    lines.push(`- ${item.parsed.nama} (Kartu: ${item.parsed.no_kjp})`);
+                    // Request format: "- Siti Aminah (5049488500001234)"
+                    lines.push(`- ${item.parsed.nama} (${item.parsed.no_kjp})`);
                 }
             });
         }
@@ -53,16 +54,20 @@ export function buildReplyForNewData(
             lines.push(`📊 Total hari ini: *${count} orang*`);
 
             allDataTodayItems.forEach((item, idx) => {
-                // Request: "1.Budi 1234567812345678"
-                lines.push(`${idx + 1}. ${item.nama} ${item.no_kjp}`);
+                // Request format: "1.Siti Aminah (5049488500001234)"
+                lines.push(`${idx + 1}.${item.nama} (${item.no_kjp})`);
             });
         } else if (totalDataToday !== undefined && totalDataToday > 0) {
             lines.push(`📊 Total hari ini: *${totalDataToday} orang*`);
         }
 
         lines.push('');
-        lines.push('Makasih ya Bu/Pak! 🙏');
-        lines.push('_(Mau cek nomor lengkap? Ketik *CEK*)_');
+        lines.push('LANGKAH SELANJUTNYA:');
+        lines.push('━━━━━━━━━━━━━━━━━━━━');
+        lines.push('* Ketik CEK → Lihat data lengkap');
+        lines.push('* Ketik BATAL → Batalkan (max 30 menit)');
+        lines.push('* Ketik HAPUS -> Hapus data');
+        lines.push('* Atau kirim data lagi 📝');
 
         return lines.join('\n');
     }

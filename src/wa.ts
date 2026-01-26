@@ -665,8 +665,9 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             await saveLogAndOkItems(logJson, messageText);
 
                             // Hitung total data hari ini SETELAH data disimpan
-                            const totalDataToday = await getTotalDataTodayForSender(senderPhone, processingDayKey);
-                            const replyDataText = buildReplyForNewData(logJson, totalDataToday, existingLocation);
+                            // Hitung total data hari ini SETELAH data disimpan
+                            const todayRecap = await getTodayRecapForSender(senderPhone, processingDayKey);
+                            const replyDataText = buildReplyForNewData(logJson, todayRecap.validCount, existingLocation, todayRecap.validItems);
                             await sock.sendMessage(remoteJid, { text: replyDataText });
                             console.log(`📤 Data pendaftaran (${existingLocation}) berhasil diproses untuk ${senderPhone}`);
                         } else {
