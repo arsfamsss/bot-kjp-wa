@@ -1,5 +1,6 @@
 // src/reply.ts
 import type { LogJson } from './types';
+import { ValidItemDetail } from './recap'; // Need actual type, not just implicit/dummy interface
 
 /**
  * Membangun pesan balasan untuk data pendaftaran baru
@@ -7,7 +8,12 @@ import type { LogJson } from './types';
  * @param totalDataToday - Total data valid yang sudah dikirim user hari ini (termasuk data baru)
  * @param locationContext - Konteks lokasi ('PASARJAYA' atau 'DHARMAJAYA')
  */
-export function buildReplyForNewData(log: LogJson, totalDataToday?: number, locationContext?: string): string {
+export function buildReplyForNewData(
+    log: LogJson,
+    totalDataToday?: number,
+    locationContext?: string,
+    allDataTodayItems?: ValidItemDetail[]
+): string {
     const isPasarjaya = locationContext === 'PASARJAYA';
     const stats = log.stats;
     const total = stats.total_blocks;
@@ -21,24 +27,37 @@ export function buildReplyForNewData(log: LogJson, totalDataToday?: number, loca
         const lines = [
             '✅ *MANTAP! Data sudah masuk~*',
             '',
-            `📥 Diterima: *${total} orang*`,
+            `📥 Diterima: *${total} orang*`
         ];
 
+        // Tampilkan DETAIL data yang diterima sekarang (Nama Saja, tanpa nomor kartu)
+        if (log.items && log.items.length > 0) {
+            log.items.forEach((item) => {
+                if (item.status === 'OK') {
+                    // Cukup nama, kartu disembunyikan agar ringkas
+                    lines.push(`- ${item.parsed.nama}`);
+                }
+            });
+        }
+
+        lines.push('');
+
         // Tampilkan total data hari ini jika tersedia
-        if (totalDataToday !== undefined && totalDataToday > 0) {
+        if (allDataTodayItems && allDataTodayItems.length > 0) {
+            const count = allDataTodayItems.length;
+            lines.push(`📊 Total hari ini: *${count} orang*`);
+
+            allDataTodayItems.forEach((item, idx) => {
+                // HANYA NAMA (User request: "jadi hanya nama aja yg di tampilkan")
+                lines.push(`${idx + 1}. ${item.nama}`);
+            });
+        } else if (totalDataToday !== undefined && totalDataToday > 0) {
             lines.push(`📊 Total hari ini: *${totalDataToday} orang*`);
         }
 
         lines.push('');
         lines.push('Makasih ya Bu/Pak! 🙏');
-        lines.push('');
-        lines.push('━━━━━━━━━━━━━━━━━━━━');
-        lines.push('📋 *LANGKAH SELANJUTNYA:*');
-        lines.push('━━━━━━━━━━━━━━━━━━━━');
-        lines.push('• Ketik *CEK* → Lihat data');
-        lines.push('• Ketik *BATAL* → Batalkan (max 30 menit)');
-        lines.push('• Atau kirim data lagi 📝');
-        lines.push('');
+        lines.push('_(Mau cek nomor lengkap? Ketik *CEK*)_');
 
         return lines.join('\n');
     }

@@ -615,8 +615,39 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                     }
                 }
 
+                // STRICT: Cek apakah user SUDAH menentukan lokasi sebelumnya
+                // Jika sudah pilih PASARJAYA, HARAM menerima data format DHARMAJAYA (4 baris)
+                // Jika sudah pilih DHARMAJAYA, data Pasarjaya tetap bisa diterima (upgrade)
+                const existingLocation = userLocationChoice.get(senderPhone);
+                let blockAutoDetect = false;
+
+                if (existingLocation === 'PASARJAYA' && autoDetectedFormat === 'DHARMAJAYA') {
+                    // Block! Karena ini berarti data Dharmajaya (4 baris) dikirim saat sesi Pasarjaya (5 baris)
+                    // Kita akan biarkan data ini LOLOS dari pengecekan ini agar jatuh ke logic "VALIDASI MANUAL" di bawah
+                    isRegistrationData = false;
+                    blockAutoDetect = true;
+                    // Nanti logic validasi di bawah akan mendeteksi baris kurang dan menolak
+                }
+
+                // STRICT: Jika user BELUM pilih lokasi, JANGAN langsung terima otomatis
+                // TAPI: Tanyakan dulu user mau daftar di mana
+                if (existingLocation === undefined && isRegistrationData) {
+                    // Block auto-process!
+                    isRegistrationData = false;
+                    blockAutoDetect = true;
+
+                    // Kirim pesan tanya lokasi
+                    await sock.sendMessage(remoteJid, {
+                        text: `⚠️ *Mohon Pilih Lokasi Dulu*\n\nData Anda sepertinya valid, tapi saya perlu tahu Anda mau ambil sembako di mana?\n\nKetik *1* untuk Pasarjaya\nKetik *2* untuk Dharmajaya`
+                    });
+
+                    // Set flow agar user memilih lokasi
+                    userFlowByPhone.set(senderPhone, 'SELECT_LOCATION');
+                    return; // Stop processing
+                }
+
                 // JIKA INI DATA PENDAFTARAN, LANGSUNG PROSES (BYPASS SEMUA FLOW STATE)
-                if (isRegistrationData && autoDetectedFormat) {
+                if (isRegistrationData && autoDetectedFormat && !blockAutoDetect) {
                     // Reset flow state agar tidak mengganggu
                     userFlowByPhone.set(senderPhone, 'NONE');
 
@@ -1898,14 +1929,80 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                         detectedFormat = 'DHARMAJAYA';
                     }
 
-                    // Gunakan format terdeteksi, atau fallback ke pilihan user, atau default DHARMAJAYA
-                    const userLocation = detectedFormat || userLocationChoice.get(senderPhone) || 'DHARMAJAYA';
-                    const minLines = userLocation === 'PASARJAYA' ? 5 : 4;
+                    // STRICT LOGIC:
+                    // 1. Cek User Choice Session (userLocationChoice)
+                    const existingLocation = userLocationChoice.get(senderPhone);
+                    const isNewUser = existingLocation === undefined;
 
-                    // Auto-save detected location untuk konsistensi session
-                    if (detectedFormat) {
-                        userLocationChoice.set(senderPhone, detectedFormat);
+                    // 2. Logic "Block jika format tidak sesuai user choice"
+                    // - Pasarjaya (5 baris) dikirim 4 baris => TOLAK (detectedFormat=DHARMAJAYA)
+                    // - Dharmajaya (4 baris) dikirim 5 baris => TOLAK (detectedFormat=PASARJAYA) -> Bisa debatable, tapi biar strict kita tolak
+                    let blockStrictMismatch = false;
+
+                    if (existingLocation === 'PASARJAYA' && detectedFormat === 'DHARMAJAYA') {
+                        // User sudah pilih Pasarjaya, tapi input 4 baris (terdeteksi Dharmajaya)
+                        blockStrictMismatch = true;
+                    } else if (existingLocation === 'DHARMAJAYA' && detectedFormat === 'PASARJAYA') {
+                        // User sudah pilih Dharmajaya (4 baris), tapi kirim format Pasarjaya (5 baris)
+                        // Kita TOLAK juga agar konsisten
+                        blockStrictMismatch = true;
                     }
+
+                    // 3. Logic "Tanya Dulu jika user baru"
+                    // Jika user belum pernah pilih lokasi (isNewUser) dan langsung kirim data valid,
+                    // KITA BLOCK DULU DAN TANYA LOKASI.
+                    // Kecuali jika anda ingin auto-accept User Baru. Tapi requestnya adalah "Tanya dulu".
+                    let blockAskLocation = false;
+                    if (isNewUser && detectedFormat) {
+                        blockAskLocation = true;
+                    }
+
+                    // --- EXECUTION BLOCKS ---
+
+                    if (blockAskLocation) {
+                        // Tolak halus dan minta pilih lokasi
+                        await sock.sendMessage(remoteJid, {
+                            text: `⚠️ *Mohon Pilih Lokasi Dulu*\n\nData Anda sepertinya valid, tapi saya perlu tahu Anda mau ambil sembako di mana?\n\nKetik *1* untuk Pasarjaya\nKetik *2* untuk Dharmajaya`
+                        });
+                        userFlowByPhone.set(senderPhone, 'SELECT_LOCATION');
+                        // Jangan continue, biarkan logic bawah skip karena if (lines.length >= minLines) akan kita guard
+                        // Tapi agar aman, kita return loop ini atau continue
+                        continue;
+                    }
+
+                    if (blockStrictMismatch) {
+                        if (existingLocation === 'PASARJAYA') {
+                            await sock.sendMessage(remoteJid, {
+                                text: `⚠️ *DATA TERTOLAK (Salah Format)*\n\nAnda memilih **PASARJAYA**, maka wajib kirim **5 Baris** (termasuk Tanggal Lahir).\n\nAnda hanya mengirim 4 baris.\nSilakan lengkapi data Anda dengan Tanggal Lahir di baris ke-5.`
+                            });
+                        } else {
+                            await sock.sendMessage(remoteJid, {
+                                text: `⚠️ *DATA TERTOLAK (Salah Format)*\n\nAnda memilih **DHARMAJAYA**, maka format data harus **4 Baris**.\n\nAnda mengirim 5 baris (dengan tanggal lahir).\nSilakan hapus baris tanggal lahir atau pilih lokasi Pasarjaya dari Menu.`
+                            });
+                        }
+                        continue;
+                    }
+
+                    // Jika lolos semua block, tentukan final Context
+                    // Jika user sudah punya choice, pakai choice. Jika baru (yg lolos), pakai detected.
+                    // Tapi karena kita sudah blockAskLocation=true untuk user baru, maka di sini pasti existingLocation ada ATAU (jika kita disable blockAskLocation nanti).
+                    // Untuk saat ini logicnya: Kita pakai existingLocation sebagai 'Truth'.
+                    // Kalau user maksa kirim PASARJAYA format saat mode DHARMAJAYA, mungkin kita terima (upgrade)?
+                    // Sesuai request: "Kalo sudah pilih Pasarjaya, HARUS 5 baris".
+
+                    // Final decision logic:
+                    let finalContext: 'PASARJAYA' | 'DHARMAJAYA' = existingLocation || detectedFormat || 'DHARMAJAYA';
+
+                    // Update session biar sinkron (misal upgrade dari Dharmajaya ke Pasarjaya jika diperbolehkan, tapi strict mode melarang sebaliknya)
+                    if (detectedFormat && !blockStrictMismatch && !isNewUser) {
+                        // Allow switch context IF it matches strict rules (e.g. Dharmajaya user sends 5 lines -> maybe allow? or strict reject?)
+                        // Request user hanya bilang "Kalau Pasarjaya harus 5 baris". Tidak bilang sebaliknya.
+                        // Kita update aja jika valid.
+                        userLocationChoice.set(senderPhone, detectedFormat);
+                        finalContext = detectedFormat;
+                    }
+
+                    const minLines = finalContext === 'PASARJAYA' ? 5 : 4;
 
                     if (lines.length >= minLines) {
                         const logJson = await processRawMessageToLogJson({
@@ -1915,24 +2012,28 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             receivedAt,
                             tanggal: tanggalWib,
                             processingDayKey,
-                            locationContext: userLocation // PASS CONTEXT
+                            locationContext: finalContext // PASS CONTEXT
                         });
 
                         // INJECT SENDER NAME (untuk disimpan di tabe data_harian)
                         logJson.sender_name = existingName || undefined;
 
                         if (logJson.stats.total_blocks > 0) {
+                            // Ambil detail data hari ini (fetch fresh data to show in reply)
+                            const { validCount, validItems } = await getTodayRecapForSender(senderPhone, processingDayKey);
+                            const totalTodayIncludingCurrent = validCount + (logJson.stats.ok_count || 0);
+
                             // STRICT VALIDATION:
                             // Jika ada sisa baris (remainder) yang gagal diparsing, TOLAK SELURUH PESAN.
                             // Jangan simpan partial clean data. User harus kirim ulang dengan benar.
                             if (logJson.failed_remainder_lines && logJson.failed_remainder_lines.length > 0) {
                                 // REJECTION REPLY
-                                const expectedLines = userLocation === 'PASARJAYA' ? 5 : 4;
+                                const expectedLines = finalContext === 'PASARJAYA' ? 5 : 4;
                                 replyText = [
                                     '❌ *DATA BELUM LENGKAP / FORMAT SALAH*',
                                     '',
                                     `⚠️ Anda mengirim data dengan jumlah baris yang tidak sesuai`,
-                                    `Lokasi: *${userLocation}*`,
+                                    `Lokasi: *${finalContext}*`,
                                     `Syarat: *${expectedLines} baris per data*`,
                                     '',
                                     '❌ *MASALAH:*',
@@ -1943,7 +2044,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                     'Jika daftar banyak orang, pisahkan dengan baris kosong/enter.',
                                     '',
                                     '👇 *CONTOH YANG BENAR:*',
-                                    userLocation === 'PASARJAYA'
+                                    finalContext === 'PASARJAYA'
                                         ? 'Siti Aminah\n5049488500001234\n3171234567890123\n3171098765432109\n15-08-1975'
                                         : 'Siti Aminah\n5049488500001234\n3171234567890123\n3171098765432109',
                                     '',
@@ -1953,13 +2054,16 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                 // DATA BERSIH (Valid Blocks Only & No Remainder) -> PROSES SIMPAN
                                 await saveLogAndOkItems(logJson, messageText);
 
-                                // Hitung total data hari ini SETELAH data disimpan
-                                const totalDataToday = await getTotalDataTodayForSender(senderPhone, processingDayKey);
-                                replyText = buildReplyForNewData(logJson, totalDataToday, userLocation);
+                                // Refresh total after saving - and get ITEMS (Pass true to force refresh if cache mechanism exists, but function doesn't support it yet)
+                                // Important: getTodayRecapForSender queries DB directly, so it will see the engaged inserted records.
+                                const { validCount: finalTotalCount, validItems: finalItems } = await getTodayRecapForSender(senderPhone, processingDayKey);
+
+                                // Pass 'finalItems' to buildReplyForNewData to show the Clean List of names
+                                replyText = buildReplyForNewData(logJson, finalTotalCount, finalContext, finalItems);
                             }
                         } else {
                             // Kasus langka: >= 4 baris tapi tidak ada blok valid satu pun?
-                            replyText = `⚠️ *Format Data Salah*\nPastikan format sesuai dengan lokasi **${userLocation}** (${minLines} baris per orang).`;
+                            replyText = `⚠️ *Format Data Salah*\nPastikan format sesuai dengan lokasi **${finalContext}** (${minLines} baris per orang).`;
                         }
                     }
                 }
