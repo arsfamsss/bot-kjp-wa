@@ -118,7 +118,7 @@ export async function checkDuplicateForItem(
             if (!item.parsed.nama) return null;
             const { data, error } = await supabase
                 .from('data_harian')
-                .select('nama, no_kjp, no_ktp, no_kk')
+                .select('nama, no_kjp, no_ktp, no_kk, sender_phone') // +sender_phone
                 .eq('processing_day_key', processingDayKey)
                 .ilike('nama', item.parsed.nama)
                 .limit(1);
@@ -131,7 +131,7 @@ export async function checkDuplicateForItem(
             if (!item.parsed.no_kjp) return null;
             const { data, error } = await supabase
                 .from('data_harian')
-                .select('nama, no_kjp, no_ktp, no_kk')
+                .select('nama, no_kjp, no_ktp, no_kk, sender_phone') // +sender_phone
                 .eq('processing_day_key', processingDayKey)
                 .eq('no_kjp', item.parsed.no_kjp)
                 .limit(1);
@@ -144,7 +144,7 @@ export async function checkDuplicateForItem(
             if (!item.parsed.no_ktp) return null;
             const { data, error } = await supabase
                 .from('data_harian')
-                .select('nama, no_kjp, no_ktp, no_kk')
+                .select('nama, no_kjp, no_ktp, no_kk, sender_phone') // +sender_phone
                 .eq('processing_day_key', processingDayKey)
                 .eq('no_ktp', item.parsed.no_ktp)
                 .limit(1);
@@ -172,10 +172,14 @@ export async function checkDuplicateForItem(
     // 1. Name
     if (nameDup) {
         const orig = nameDup;
+        const differentUser = (orig as any).sender_phone !== senderPhone;
+        const duplicateMsg = differentUser
+            ? 'Nama ini sudah didaftarkan oleh orang lain hari ini. Hubungi admin.'
+            : 'Nama sudah Anda daftarkan hari ini.';
+
         return markDup({
             kind: 'NAME',
-            safe_message:
-                'Nama sudah terdaftar hari ini. Jika orang berbeda tapi nama sama, tambahkan 4 digit terakhir Nomor Kartu di belakang nama (contoh: BUDI-1234).',
+            safe_message: duplicateMsg,
             original_data: {
                 nama: orig.nama || '',
                 no_kjp: orig.no_kjp || '',
@@ -188,9 +192,14 @@ export async function checkDuplicateForItem(
     // 2. KJP
     if (kjpDup) {
         const orig = kjpDup;
+        const differentUser = (orig as any).sender_phone !== senderPhone;
+        const duplicateMsg = differentUser
+            ? 'Nomor Kartu ini sudah didaftarkan oleh pengguna lain hari ini. Hubungi admin.'
+            : 'No Kartu sudah Anda daftarkan hari ini.';
+
         return markDup({
             kind: 'NO_KJP',
-            safe_message: 'No Kartu sudah terdaftar hari ini.',
+            safe_message: duplicateMsg,
             original_data: {
                 nama: orig.nama || '',
                 no_kjp: orig.no_kjp || '',
@@ -203,9 +212,14 @@ export async function checkDuplicateForItem(
     // 3. KTP
     if (ktpDup) {
         const orig = ktpDup;
+        const differentUser = (orig as any).sender_phone !== senderPhone;
+        const duplicateMsg = differentUser
+            ? 'Nomor KTP ini sudah didaftarkan oleh pengguna lain hari ini. Hubungi admin.'
+            : 'No KTP sudah Anda daftarkan hari ini.';
+
         return markDup({
             kind: 'NO_KTP',
-            safe_message: 'No KTP sudah digunakan hari ini.',
+            safe_message: duplicateMsg,
             original_data: {
                 nama: orig.nama || '',
                 no_kjp: orig.no_kjp || '',
