@@ -613,7 +613,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                     'Tapi data yang dikirim formatnya *4 Baris*.',
                                     '',
                                     '💡 *SOLUSI:*',
-                                    '1. Jika ingin pindah ke *Dharmajaya*, ketik *2*.',
+                                    '1. Jika ingin pindah ke *Dharmajaya*, ketik *1*.',
                                     '2. Jika tetap di *Pasarjaya*, lengkapi baris ke-5 dengan *Tanggal Lahir*.'
                                 ].join('\n');
                             } else {
@@ -659,7 +659,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                     'Tapi data yang dikirim formatnya *5 Baris* (ada Tanggal Lahir?).',
                                     '',
                                     '💡 *SOLUSI:*',
-                                    '1. Jika ingin pindah ke *Pasarjaya*, ketik *1*.',
+                                    '1. Jika ingin pindah ke *Pasarjaya*, ketik *2*.',
                                     '2. Jika tetap di *Dharmajaya*, hapus baris tanggal lahirnya.'
                                 ].join('\n');
                             } else {
