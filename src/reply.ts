@@ -62,9 +62,9 @@ export function buildReplyForNewData(
         lines.push('');
         lines.push('👇 *MENU LAINNYA*'); // Diganti dari MENU BOT
         lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        lines.push('1️⃣ Ketik *CEK*   → 🧐 Cek Rekap');
-        lines.push('2️⃣ Ketik *BATAL* → 🔙 Batal Input');
-        lines.push('3️⃣ Ketik *HAPUS* → 🗑️ Hapus Data');
+        lines.push('🔹 Ketik *CEK*   → 🧐 Cek Rekap');
+        lines.push('🔹 Ketik *BATAL* → 🔙 Batal Input');
+        lines.push('🔹 Ketik *HAPUS* → 🗑️ Hapus Data');
         lines.push('');
         lines.push('_Silakan kirim data lagi jika ada..._ 📝');
 
