@@ -60,7 +60,7 @@ export function buildReplyForNewData(
         }
 
         lines.push('');
-        lines.push('🤖 *MENU BOT*');
+        lines.push('👇 *MENU LAINNYA*'); // Diganti dari MENU BOT
         lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         lines.push('1️⃣ Ketik *CEK*   → 🧐 Cek Rekap');
         lines.push('2️⃣ Ketik *BATAL* → 🔙 Batal Input');
