@@ -25,49 +25,48 @@ export function buildReplyForNewData(
 
     if (failed === 0 && !hasRemainder) {
         const lines = [
-            '✅ *MANTAP! Data sudah masuk~*',
-            '',
-            `📥 Diterima: *${total} orang*`
+            '✨ *DATA BERHASIL DISIMPAN!* ✨',
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━', // Separator panjang
+            `📥 *Data Baru Diterima: ${total} Ord*`
         ];
 
         if (log.items && log.items.length > 0) {
             log.items.forEach((item) => {
                 if (item.status === 'OK') {
-                    // Tampilkan Nama + Pesan ringkas
-                    // Request: "Budi No Kartu 1234567812345678"
-                    // Kita samarkan sedikit atau tampilkan full? User minta:
-                    // "Budi No Kartu 1234567812345678" -> Full di contoh user
-                    // Tapi di request sebelumnya "NAMES ONLY".
-                    // Lalu di request terbaru: "Budi No Kartu 1234567812345678"
-                    // Oke kita ikuti request TERBARU.
-                    // Request format: "- Siti Aminah (5049488500001234)"
-                    lines.push(`- ${item.parsed.nama} (${item.parsed.no_kjp})`);
+                    // Request format: "🟢 Siti Aminah (5049...)" -> Tambah bullet/emoji
+                    lines.push(`✅ *${item.parsed.nama}*`);
+                    lines.push(`     🆔 ${item.parsed.no_kjp}`); // Indent card
                 }
             });
         }
 
         lines.push('');
+        lines.push('📈 *UPDATE TOTAL HARI INI*');
 
         // Tampilkan total data hari ini jika tersedia
         if (allDataTodayItems && allDataTodayItems.length > 0) {
             const count = allDataTodayItems.length;
-            lines.push(`📊 Total hari ini: *${count} orang*`);
+            lines.push(`🔥 Total: *${count} Orang*`);
+            lines.push('────────────────────────────'); // Separator tipis
 
             allDataTodayItems.forEach((item, idx) => {
-                // Request format: "1.Siti Aminah (5049488500001234)"
-                lines.push(`${idx + 1}.${item.nama} (${item.no_kjp})`);
+                // Request format: "1. Siti Aminah (5049...)"
+                // Bikin bold namanya biar jelas
+                lines.push(`${idx + 1}. *${item.nama}*`);
+                lines.push(`   └ ${item.no_kjp}`); // Tree style structure
             });
         } else if (totalDataToday !== undefined && totalDataToday > 0) {
-            lines.push(`📊 Total hari ini: *${totalDataToday} orang*`);
+            lines.push(`🔥 Total: *${totalDataToday} Orang*`);
         }
 
         lines.push('');
-        lines.push('LANGKAH SELANJUTNYA:');
-        lines.push('━━━━━━━━━━━━━━━━━━━━');
-        lines.push('* Ketik CEK → Lihat data lengkap');
-        lines.push('* Ketik BATAL → Batalkan (max 30 menit)');
-        lines.push('* Ketik HAPUS -> Hapus data');
-        lines.push('* Atau kirim data lagi 📝');
+        lines.push('🤖 *MENU BOT*');
+        lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        lines.push('1️⃣ Ketik *CEK*   → 🧐 Cek Rekap');
+        lines.push('2️⃣ Ketik *BATAL* → 🔙 Batal Input');
+        lines.push('3️⃣ Ketik *HAPUS* → 🗑️ Hapus Data');
+        lines.push('');
+        lines.push('_Silakan kirim data lagi jika ada..._ 📝');
 
         return lines.join('\n');
     }

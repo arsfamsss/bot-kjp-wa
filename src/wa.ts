@@ -606,9 +606,28 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             isValidFormat = false;
                             // Cek apakah mungkin dia kirim 4 baris (kasus salah format umum)
                             if (dataLines.length % 4 === 0) {
-                                rejectionReason = '❌ *Format Salah untuk Pasarjaya*\nAnda memilih Pasarjaya, data harus **5 BARIS** (termasuk Tanggal Lahir).\nData yang Anda kirim terdeteksi 4 baris.';
+                                rejectionReason = [
+                                    '❌ *FORMAT TIDAK COCOK*',
+                                    '',
+                                    'Anda sedang di mode: *PASARJAYA (Wajib 5 Baris)*',
+                                    'Tapi data yang dikirim formatnya *4 Baris*.',
+                                    '',
+                                    '💡 *SOLUSI:*',
+                                    '1. Jika ini data Dharmajaya, ketik *2* untuk pindah lokasi.',
+                                    '2. Jika ini data Pasarjaya, mohon lengkapi baris ke-5 dengan *Tanggal Lahir*.'
+                                ].join('\n');
                             } else {
-                                rejectionReason = '❌ *Jumlah Baris Tidak Sesuai*\nUntuk Pasarjaya, data harus kelipatan 5 baris (Nama, KJP, KTP, KK, Tanggal Lahir).';
+                                rejectionReason = [
+                                    '❌ *JUMLAH BARIS SALAH*',
+                                    'Untuk *Pasarjaya*, format harus 5 baris per orang:',
+                                    '1. Nama',
+                                    '2. Kartu',
+                                    '3. KTP',
+                                    '4. KK',
+                                    '5. Tanggal Lahir',
+                                    '',
+                                    'Silakan periksa kembali ketikan Anda.'
+                                ].join('\n');
                             }
                         } else {
                             // Cek apakah baris ke-5 adalah tanggal?
@@ -623,7 +642,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             }
                             if (!allDatesValid) {
                                 isValidFormat = false;
-                                rejectionReason = '❌ *Format Tanggal Salah*\nBaris ke-5 harus berupa Tanggal Lahir (DD-MM-YYYY).';
+                                rejectionReason = '❌ *Format Tanggal Salah*\nBaris ke-5 harus berupa Tanggal Lahir (Contoh: 23-04-2020).';
                             } else {
                                 isValidFormat = true;
                             }
@@ -633,9 +652,27 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                         if (dataLines.length % 4 !== 0) {
                             isValidFormat = false;
                             if (dataLines.length % 5 === 0) {
-                                rejectionReason = '❌ *Format Salah untuk Dharmajaya*\nAnda memilih Dharmajaya, data harus **4 BARIS** (Tanpa Tanggal Lahir).\nData yang Anda kirim terdeteksi 5 baris.';
+                                rejectionReason = [
+                                    '❌ *FORMAT TIDAK COCOK*',
+                                    '',
+                                    'Anda sedang di mode: *DHARMAJAYA (Wajib 4 Baris)*',
+                                    'Tapi data yang dikirim formatnya *5 Baris* (ada Tanggal Lahir?).',
+                                    '',
+                                    '💡 *SOLUSI:*',
+                                    '1. Jika ini data Pasarjaya, ketik *1* untuk pindah lokasi.',
+                                    '2. Jika ini data Dharmajaya, hapus baris tanggal lahirnya.'
+                                ].join('\n');
                             } else {
-                                rejectionReason = '❌ *Jumlah Baris Tidak Sesuai*\nUntuk Dharmajaya, data harus kelipatan 4 baris (Nama, KJP, KTP, KK).';
+                                rejectionReason = [
+                                    '❌ *JUMLAH BARIS SALAH*',
+                                    'Untuk *Dharmajaya*, format harus 4 baris per orang:',
+                                    '1. Nama',
+                                    '2. Kartu',
+                                    '3. KTP',
+                                    '4. KK',
+                                    '',
+                                    'Silakan periksa kembali ketikan Anda.'
+                                ].join('\n');
                             }
                         } else {
                             isValidFormat = true;
