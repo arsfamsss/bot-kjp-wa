@@ -28,7 +28,11 @@ export type AdminFlowState =
     | 'EXPORT_SELECT_DATE'
     | 'EXPORT_CUSTOM_DATE'
     | 'SETTING_CLOSE_TIME'
-    | 'SETTING_CLOSE_MSG';
+    | 'SETTING_CLOSE_TIME_MENU'
+    | 'SETTING_CLOSE_TIME_START'
+    | 'SETTING_CLOSE_TIME_END'
+    | 'SETTING_CLOSE_MSG'
+    | 'SETTING_CLOSE_MSG_MENU';
 
 // Draft broadcast untuk penjadwalan/preview
 export type BroadcastDraft = {

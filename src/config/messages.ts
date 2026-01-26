@@ -158,3 +158,17 @@ export const ADMIN_MENU_MESSAGE = [
 
 // --- DAFTAR NOMOR ADMIN ---
 export const ADMIN_PHONES_RAW = ['085641411818', '08568511113'];
+
+// --- TEMPLATE PESAN TUTUP (UNIFIED) ---
+export const CLOSE_MESSAGE_TEMPLATE_UNIFIED = [
+    '⛔ *MOHON MAAF LAYANAN SEDANG TUTUP* ⛔',
+    '',
+    'Saat ini sistem sedang istirahat untuk *Maintenance* dan *Rekapitulasi Data Harian*.',
+    '',
+    'Data yang dikirim sekarang TIDAK AKAN DIPROSES. 🛑',
+    '',
+    'Silakan kirim datanya lagi nanti pada pukul:',
+    '👉 *{JAM_BUKA} WIB*',
+    '',
+    'Terima kasih atas pengertiannya. 🙏'
+].join('\n');

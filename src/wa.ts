@@ -64,6 +64,7 @@ import {
     ADMIN_LAUNCHER_LINE,
     ADMIN_MENU_MESSAGE,
     ADMIN_PHONES_RAW,
+    CLOSE_MESSAGE_TEMPLATE_UNIFIED,
 } from './config/messages';
 import {
     normalizePhone,
@@ -1182,37 +1183,31 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             // FEATURE: ATUR JAM TUTUP
                             const currentSettings = await getBotSettings();
                             const currentTimeStr = formatCloseTimeString(currentSettings);
-                            adminFlowByPhone.set(senderPhone, 'SETTING_CLOSE_TIME');
+                            adminFlowByPhone.set(senderPhone, 'SETTING_CLOSE_TIME_MENU');
+
                             replyText = [
                                 '⏰ *ATUR JAM TUTUP BOT*',
                                 '',
-                                `📌 Pengaturan Saat Ini: *${currentTimeStr}*`,
+                                `📌 Saat ini tutup jam: *${currentTimeStr}*`,
                                 '',
-                                'Ketik jam tutup baru dengan format:',
-                                '*JAM_MULAI JAM_SELESAI*',
-                                '',
-                                'Contoh: *04:01 06:00*',
-                                '(Artinya bot tutup jam 04:01 sampai 06:00 WIB)',
+                                'Pilih metode pengaturan:',
+                                '1️⃣ Input Manual (Wizard)',
+                                '2️⃣ Tutup Sekarang (Set Start=Now)',
                                 '',
                                 '_Ketik 0 untuk batal._'
                             ].join('\n');
                         } else if (normalized === '14') {
-                            // FEATURE: EDIT TEMPLATE PESAN TUTUP
+                            // FEATURE: EDIT TEMPLATE PESAN TUTUP (NEW FLOW)
                             const currentSettings = await getBotSettings();
-                            adminFlowByPhone.set(senderPhone, 'SETTING_CLOSE_MSG');
+                            adminFlowByPhone.set(senderPhone, 'SETTING_CLOSE_MSG_MENU');
                             replyText = [
                                 '📝 *EDIT TEMPLATE PESAN TUTUP*',
                                 '',
-                                '📌 *Template Saat Ini:*',
-                                '─────────────────',
-                                currentSettings.close_message_template,
-                                '─────────────────',
+                                'Pilih template:',
+                                '1️⃣ Gunakan Template Standar (Maintenance & Rekapitulasi)',
+                                '2️⃣ Custom (Edit Sendiri)',
                                 '',
-                                '*Placeholder yang tersedia:*',
-                                '• {JAM_TUTUP} = Jam tutup (misal: 04.01 - 06.00 WIB)',
-                                '• {JAM_BUKA} = Jam buka (misal: 06.01)',
-                                '',
-                                'Ketik template baru atau ketik 0 untuk batal.'
+                                '_Ketik 0 untuk batal._'
                             ].join('\n');
                         } else replyText = '⚠️ Pilihan tidak dikenali.';
                     } else if (currentAdminFlow === 'SEARCH_DATA') {
@@ -1783,48 +1778,130 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             }
                             adminFlowByPhone.set(senderPhone, 'MENU');
                         }
-                    } else if (currentAdminFlow === 'SETTING_CLOSE_TIME') {
-                        // Admin input jam tutup baru: "04:01 06:00"
-                        const parts = rawTrim.split(/\s+/);
-                        if (parts.length !== 2) {
-                            replyText = '⚠️ Format salah. Gunakan: JAM_MULAI JAM_SELESAI\nContoh: 04:01 06:00\n\nKetik 0 untuk batal.';
+                    } else if (currentAdminFlow === 'SETTING_CLOSE_TIME_MENU') {
+                        // SUB-MENU JAM TUTUP
+                        if (normalized === '1') {
+                            // 1. Manual -> Wizard Start
+                            adminFlowByPhone.set(senderPhone, 'SETTING_CLOSE_TIME_START');
+                            replyText = '⏰ *INPUT MANUAL*\n\nSilakan masukkan jam mulai tutup (Format HH:mm).\nContoh: *04:00*\n\n_Ketik 0 untuk batal._';
+                        } else if (normalized === '2') {
+                            // 2. Tutup Sekarang -> Set Start=Now, Ask End
+                            const now = new Date();
+                            // Adjust timezone to WIB manually if needed, or rely on system time (User said "skrg 20:30", server seems local). 
+                            // Safety: use getWibIsoDate/DateParser utils or simple formatting if server is WIB.
+                            // Assuming server time is correct or we use simple format:
+                            const h = String(now.getHours()).padStart(2, '0');
+                            const m = String(now.getMinutes()).padStart(2, '0');
+                            const timeNow = `${h}:${m}`;
+
+                            // Simpan start time di broadcastDraftMap (hacky but efficient temp storage)
+                            broadcastDraftMap.set(senderPhone, { targets: [], message: timeNow }); // Store START_TIME in 'message'
+
+                            adminFlowByPhone.set(senderPhone, 'SETTING_CLOSE_TIME_END');
+                            replyText = `⏰ *TUTUP SEKARANG (${timeNow})*\n\nOke, bot akan tutup mulai jam ${timeNow}.\n\nSekarang, jam berapa bot akan *BUKA KEMBALI*? (Format HH:mm)\nContoh: *08:00*\n\n_Ketik 0 untuk batal._`;
                         } else {
-                            const timePattern = /^(\d{1,2}):(\d{2})$/;
-                            const match1 = parts[0].match(timePattern);
-                            const match2 = parts[1].match(timePattern);
+                            replyText = '⚠️ Pilih 1 atau 2. Ketik 0 untuk batal.';
+                        }
 
-                            if (!match1 || !match2) {
-                                replyText = '⚠️ Format jam salah. Gunakan HH:MM (contoh: 04:01)\n\nKetik 0 untuk batal.';
+                    } else if (currentAdminFlow === 'SETTING_CLOSE_TIME_START') {
+                        // Wizard Step 1: Input Start Time
+                        const timePattern = /^(\d{1,2}):(\d{2})$/;
+                        const match = rawTrim.match(timePattern);
+                        if (!match) {
+                            replyText = '⚠️ Format jam salah. Gunakan HH:mm (contoh: 04:01). Ketik 0 untuk batal.';
+                        } else {
+                            const h = parseInt(match[1]);
+                            const m = parseInt(match[2]);
+                            if (h > 23 || m > 59) {
+                                replyText = '⚠️ Jam tidak valid (00-23, 00-59).';
                             } else {
-                                const startHour = parseInt(match1[1]);
-                                const startMin = parseInt(match1[2]);
-                                const endHour = parseInt(match2[1]);
-                                const endMin = parseInt(match2[2]);
+                                // Valid. Simpan sementara di draft map
+                                const validTime = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+                                broadcastDraftMap.set(senderPhone, { targets: [], message: validTime }); // Store START_TIME
 
-                                if (startHour > 23 || startMin > 59 || endHour > 23 || endMin > 59) {
-                                    replyText = '⚠️ Jam tidak valid. Jam harus 00-23, menit 00-59.';
-                                } else {
-                                    // Update settings
-                                    const success = await updateBotSettings({
-                                        close_hour_start: startHour,
-                                        close_minute_start: startMin,
-                                        close_hour_end: endHour,
-                                        close_minute_end: endMin
-                                    });
-
-                                    if (success) {
-                                        clearBotSettingsCache();
-                                        const newTimeStr = `${String(startHour).padStart(2, '0')}.${String(startMin).padStart(2, '0')} - ${String(endHour).padStart(2, '0')}.${String(endMin).padStart(2, '0')} WIB`;
-                                        replyText = `✅ *JAM TUTUP BERHASIL DIUBAH*\n\nJam tutup baru: *${newTimeStr}*\n\nBot akan menolak input data pada jam tersebut.`;
-                                    } else {
-                                        replyText = '❌ Gagal menyimpan pengaturan. Coba lagi.';
-                                    }
-                                    adminFlowByPhone.set(senderPhone, 'MENU');
-                                }
+                                adminFlowByPhone.set(senderPhone, 'SETTING_CLOSE_TIME_END');
+                                replyText = `✅ Mulai tutup: *${validTime}*\n\nSelanjutnya, jam berapa bot akan *BUKA KEMBALI*? (Format HH:mm)\nContoh: *06:00*`;
                             }
                         }
+
+                    } else if (currentAdminFlow === 'SETTING_CLOSE_TIME_END') {
+                        // Wizard Step 2: Input End Time & Execute
+                        const timePattern = /^(\d{1,2}):(\d{2})$/;
+                        const match = rawTrim.match(timePattern);
+                        if (!match) {
+                            replyText = '⚠️ Format jam salah. Gunakan HH:mm (contoh: 06:00). Ketik 0 untuk batal.';
+                        } else {
+                            const hEnd = parseInt(match[1]);
+                            const mEnd = parseInt(match[2]);
+                            if (hEnd > 23 || mEnd > 59) {
+                                replyText = '⚠️ Jam tidak valid (00-23, 00-59).';
+                            } else {
+                                // Ambil start time dari temp storage
+                                const draft = broadcastDraftMap.get(senderPhone);
+                                const startTimeStr = draft?.message || '00:00'; // Fallback unlikely
+                                const [hStartStr, mStartStr] = startTimeStr.split(':');
+                                const hStart = parseInt(hStartStr);
+                                const mStart = parseInt(mStartStr);
+
+                                // Save Settings
+                                const success = await updateBotSettings({
+                                    close_hour_start: hStart,
+                                    close_minute_start: mStart,
+                                    close_hour_end: hEnd,
+                                    close_minute_end: mEnd
+                                });
+
+                                if (success) {
+                                    clearBotSettingsCache();
+                                    const timeRange = `${startTimeStr} s.d ${String(hEnd).padStart(2, '0')}:${String(mEnd).padStart(2, '0')} WIB`;
+                                    replyText = `✅ *JAM TUTUP BERHASIL DIUBAH*\n\nBot akan tutup pada:\n🕒 *${timeRange}*\n\nUser tidak bisa input data pada jam tersebut.`;
+                                } else {
+                                    replyText = '❌ Gagal menyimpan pengaturan.';
+                                }
+
+                                broadcastDraftMap.delete(senderPhone); // Clean up
+                                adminFlowByPhone.set(senderPhone, 'MENU');
+                            }
+                        }
+
+                    } else if (currentAdminFlow === 'SETTING_CLOSE_MSG_MENU') {
+                        // SUB-MENU EDIT PESAN TUTUP
+                        if (normalized === '1') {
+                            // 1. Template Standar
+                            const success = await updateBotSettings({
+                                close_message_template: CLOSE_MESSAGE_TEMPLATE_UNIFIED
+                            });
+                            if (success) {
+                                clearBotSettingsCache();
+                                replyText = [
+                                    '✅ *TEMPLATE BERHASIL DIGANTI*',
+                                    '',
+                                    'Sekarang menggunakan *Template Standar* (Maintenance & Rekapitulasi).',
+                                    'Bot akan otomatis mengisi jam buka kembali.'
+                                ].join('\n');
+                            } else {
+                                replyText = '❌ Gagal menyimpan template.';
+                            }
+                            adminFlowByPhone.set(senderPhone, 'MENU');
+                        } else if (normalized === '2') {
+                            // 2. Custom -> Lanjut ke flow manual lama
+                            const currentSettings = await getBotSettings();
+                            adminFlowByPhone.set(senderPhone, 'SETTING_CLOSE_MSG');
+                            replyText = [
+                                '📝 *EDIT TEMPLATE CUSTOM*',
+                                '',
+                                'Silakan copy teks di bawah ini, edit sesuai keinginan, lalu kirim balik.',
+                                '',
+                                '```' + currentSettings.close_message_template + '```',
+                                '',
+                                '_(Ketik 0 untuk batal)_'
+                            ].join('\n');
+                        } else {
+                            replyText = '⚠️ Pilih 1 atau 2.';
+                        }
+
                     } else if (currentAdminFlow === 'SETTING_CLOSE_MSG') {
-                        // Admin input template pesan tutup baru
+                        // Handler SIMPAN Custom Message
                         if (rawTrim.length < 10) {
                             replyText = '⚠️ Template terlalu pendek. Minimal 10 karakter.\n\nKetik 0 untuk batal.';
                         } else {
@@ -1835,9 +1912,9 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             if (success) {
                                 clearBotSettingsCache();
                                 replyText = [
-                                    '✅ *TEMPLATE PESAN TUTUP BERHASIL DIUBAH*',
+                                    '✅ *TEMPLATE CUSTOM DISIMPAN*',
                                     '',
-                                    '📝 Template baru:',
+                                    '📝 Preview:',
                                     '─────────────────',
                                     rawTrim,
                                     '─────────────────'
