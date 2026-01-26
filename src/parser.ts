@@ -36,6 +36,66 @@ export function extractDigits(input: string): string {
 
 // --- BAGIAN 2: PARSING LOGIC ---
 
+/// --- HELPER: CLEAN NAME ---
+function cleanName(raw: string): string {
+    // 1. Hapus penomoran di awal (1. , 2. , 1), 2) dll)
+    // Regex: ^\s*\d+[\.\)\s]+\s*
+    let cleaned = raw.replace(/^\s*\d+[\.\)\s]+\s*/, '');
+
+    // 2. Hapus kata "nama" (case insensitive) di awal
+    // Regex: ^\s*nama\s+
+    cleaned = cleaned.replace(/^\s*nama\s+/i, '');
+
+    // 3. Ganti titik di tengah menjadi spasi, TAPI jangan ganti titik di akhir kalimat
+    // Strategi: Split by '.' lalu join ' '
+    cleaned = cleaned.split('.').join(' ');
+
+    // 4. Rapikan spasi berlebih
+    return cleaned.replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Mem-parsing 1 blok data (4 baris atau 5 baris) menjadi object LogItem.
+ * Ini adalah langkah awal parsing, belum termasuk validasi lengkap atau cek duplikat.
+ *
+ * @param lines Array of strings representing a block (e.g., 4 or 5 lines).
+ * @param index Index of this block in the overall message.
+ * @param processingDayKey Key for the processing day (YYYY-MM-DD).
+ * @param locationContext Optional location context ('PASARJAYA' | 'DHARMAJAYA').
+ * @returns LogItem object with initial parsed fields and status.
+ */
+export function parseBlockToItem(lines: string[], index: number, processingDayKey: string, locationContext?: string): LogItem {
+    // Pastikan lines minimal ada (walau kosong)
+    const rawNama = lines[0] || '';
+    const parsedNama = cleanName(rawNama);
+
+    const result: LogItem = {
+        index,
+        original_lines: lines,
+        status: 'OK', // Default OK, nanti divalidasi
+        errors: [],
+        parsed: {
+            nama: parsedNama,
+            no_kjp: lines[1] || '',
+            no_ktp: lines[2] || '',
+            no_kk: lines[3] || '',
+        },
+        duplicate_info: null,
+    };
+
+    // Tambahkan parsing tanggal lahir jika lokasi PASARJAYA dan ada baris ke-5
+    if (locationContext === 'PASARJAYA' && lines.length >= 5) {
+        result.parsed.tanggal_lahir = parseFlexibleDate(lines[4]);
+    }
+
+    // Set lokasi
+    if (locationContext) {
+        result.parsed.lokasi = locationContext;
+    }
+
+    return result;
+}
+
 // Parsing logic with Auto-Split feature
 export function parseRawMessageToLines(text: string): string[] {
     // SANITASI AWAL: Bersihkan karakter invisible dan format aneh

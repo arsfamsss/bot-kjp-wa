@@ -381,6 +381,57 @@ export async function deleteDailyDataByIndex(
 
     return { success: true, deletedName: item.nama };
 }
+
+export async function deleteDailyDataByIndices(
+    senderPhone: string,
+    processingDayKey: string,
+    indices: number[]
+): Promise<{ success: boolean; deletedCount: number }> {
+    // 1. Ambil data untuk mapping index ke ID
+    const { data, error } = await supabase
+        .from('data_harian')
+        .select('id')
+        .eq('processing_day_key', processingDayKey)
+        .eq('sender_phone', senderPhone)
+        .order('received_at', { ascending: true });
+
+    if (error || !data || data.length === 0) return { success: false, deletedCount: 0 };
+
+    // 2. Filter ID berdasarkan index yang diminta
+    // Ingat: indices dari user adalah 1-based
+    const idsToDelete: number[] = [];
+    indices.forEach(idx => {
+        if (idx > 0 && idx <= data.length) {
+            idsToDelete.push(data[idx - 1].id);
+        }
+    });
+
+    if (idsToDelete.length === 0) return { success: false, deletedCount: 0 };
+
+    // 3. Hapus by IDs
+    const { error: delError, count } = await supabase
+        .from('data_harian')
+        .delete({ count: 'exact' })
+        .in('id', idsToDelete);
+
+    if (delError) return { success: false, deletedCount: 0 };
+
+    return { success: true, deletedCount: count ?? 0 };
+}
+
+export async function deleteAllDailyDataForSender(
+    senderPhone: string,
+    processingDayKey: string
+): Promise<{ success: boolean; deletedCount: number }> {
+    const { error, count } = await supabase
+        .from('data_harian')
+        .delete({ count: 'exact' })
+        .eq('processing_day_key', processingDayKey)
+        .eq('sender_phone', senderPhone);
+
+    if (error) return { success: false, deletedCount: 0 };
+    return { success: true, deletedCount: count ?? 0 };
+}
 // --- HAPUS DATA TERAKHIR (UNTUK FITUR BATAL/UNDO) ---
 export async function deleteLastSubmission(
     senderPhone: string,

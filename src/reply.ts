@@ -30,12 +30,17 @@ export function buildReplyForNewData(
             `📥 Diterima: *${total} orang*`
         ];
 
-        // Tampilkan DETAIL data yang diterima sekarang (Nama Saja, tanpa nomor kartu)
         if (log.items && log.items.length > 0) {
             log.items.forEach((item) => {
                 if (item.status === 'OK') {
-                    // Cukup nama, kartu disembunyikan agar ringkas
-                    lines.push(`- ${item.parsed.nama}`);
+                    // Tampilkan Nama + Pesan ringkas
+                    // Request: "Budi No Kartu 1234567812345678"
+                    // Kita samarkan sedikit atau tampilkan full? User minta:
+                    // "Budi No Kartu 1234567812345678" -> Full di contoh user
+                    // Tapi di request sebelumnya "NAMES ONLY".
+                    // Lalu di request terbaru: "Budi No Kartu 1234567812345678"
+                    // Oke kita ikuti request TERBARU.
+                    lines.push(`- ${item.parsed.nama} (Kartu: ${item.parsed.no_kjp})`);
                 }
             });
         }
@@ -48,8 +53,8 @@ export function buildReplyForNewData(
             lines.push(`📊 Total hari ini: *${count} orang*`);
 
             allDataTodayItems.forEach((item, idx) => {
-                // HANYA NAMA (User request: "jadi hanya nama aja yg di tampilkan")
-                lines.push(`${idx + 1}. ${item.nama}`);
+                // Request: "1.Budi 1234567812345678"
+                lines.push(`${idx + 1}. ${item.nama} ${item.no_kjp}`);
             });
         } else if (totalDataToday !== undefined && totalDataToday > 0) {
             lines.push(`📊 Total hari ini: *${totalDataToday} orang*`);
