@@ -597,7 +597,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                     let detectedFormat = existingLocation; // 'PASARJAYA' or 'DHARMAJAYA'
                     let rejectionReason = '';
 
-                    const looksLikeDatePatternCheck = /^\d{1,2}[-\/\.]\d{1,2}[-\/\.]\d{2,4}$/;
+                    // const looksLikeDatePatternCheck = ... (REMOVED: logic moved to looksLikeDate())
 
                     if (existingLocation === 'PASARJAYA') {
                         // WAJIB 5 BARIS per orang
@@ -614,8 +614,10 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             // Cek apakah baris ke-5 adalah tanggal?
                             let allDatesValid = true;
                             for (let i = 4; i < dataLines.length; i += 5) {
-                                if (!looksLikeDatePatternCheck.test(dataLines[i]?.trim() || '')) {
+                                // Use shared robust date checker
+                                if (!looksLikeDate(dataLines[i])) {
                                     allDatesValid = false;
+                                    console.log(`[DEBUG] Date validation failed for: ${dataLines[i]}`);
                                     break;
                                 }
                             }

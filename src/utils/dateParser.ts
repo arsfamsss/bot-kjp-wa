@@ -14,6 +14,13 @@ export function parseFlexibleDate(input: string): string | null {
     // Normalize: trim, collapse multiple spaces, uppercase
     let raw = input.trim().toUpperCase();
 
+    // 0. Remove common labels (TGL, LAHIR, TANGGAL, etc.)
+    // Regex: remove "TGL", "TANGGAL", "LAHIR", "LHR", "THN", "TAHUN", "DATE", "BIRTH"
+    // and cleanup potential delimiters (: or -) appearing after them
+    raw = raw.replace(/\b(TGL|TANGGAL|LAHIR|LHR|THN|TAHUN|DATE|BIRTH)\b/g, '')
+        .replace(/[:=]/g, ' ') // remove colons
+        .trim();
+
     // Month names mapping
     const monthNames: { [key: string]: number } = {
         'JAN': 1, 'JANUARI': 1, 'JANUARY': 1,
@@ -122,22 +129,29 @@ export function looksLikeDate(input: string): boolean {
 
     const raw = input.trim().toUpperCase();
 
+    // Remove common labels first just like in parseFlexibleDate
+    const rawClean = raw.replace(/\b(TGL|TANGGAL|LAHIR|LHR|THN|TAHUN|DATE|BIRTH)\b/g, '')
+        .replace(/[:=]/g, ' ')
+        .trim();
+
     // Contains month name?
     const monthKeywords = ['JAN', 'FEB', 'MAR', 'APR', 'MEI', 'MAY', 'JUN', 'JUL',
         'AGU', 'AGT', 'SEP', 'OKT', 'OCT', 'NOV', 'NOP', 'DES', 'DEC'];
-    if (monthKeywords.some(m => raw.includes(m))) return true;
+    if (monthKeywords.some(m => rawClean.includes(m))) return true;
 
-    // Remove all non-alphanumeric
-    const cleaned = raw.replace(/[\s\-\/\.]+/g, ' ').trim();
+    // Remove all non-alphanumeric to check patterns
+    const cleaned = rawClean.replace(/[\s\-\/\.]+/g, ' ').trim();
 
-    // Pattern: DD MM YYYY (with spaces)
-    if (/^\d{1,2}\s+\d{1,2}\s+\d{2,4}$/.test(cleaned)) return true;
+    // Pattern: DD MM YYYY (with spaces) - Strict anchors are fine if we cleaned tokens, 
+    // BUT better to rely on finding a sequence
+    // Check for "DD MM YYYY" sequence
+    if (/\b\d{1,2}\s+\d{1,2}\s+\d{2,4}\b/.test(cleaned)) return true;
 
-    // Pattern: DD-MM-YYYY style (original separators)
-    if (/^\d{1,2}[\s\-\/\.]+\d{1,2}[\s\-\/\.]+\d{2,4}$/.test(raw)) return true;
+    // Pattern: DD-MM-YYYY style (original separators) - Search anywhere
+    if (/\d{1,2}[\s\-\/\.]+\d{1,2}[\s\-\/\.]+\d{2,4}/.test(rawClean)) return true;
 
     // Pattern: DDMMYYYY (8 digits) or DDMMYY (6 digits)
-    const digitsOnly = raw.replace(/\D/g, '');
+    const digitsOnly = rawClean.replace(/\D/g, '');
     if (digitsOnly.length === 6 || digitsOnly.length === 8) {
         // Check if it looks like a valid date
         const d = parseInt(digitsOnly.substring(0, 2));
