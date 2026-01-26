@@ -12,16 +12,7 @@ import { parseFlexibleDate } from './utils/dateParser';
  * - Rapikan spasi
  * - Simpan sebagai UPPERCASE (case-insensitive)
  */
-function cleanName(text: string): string {
-    if (!text) return '';
-
-    let cleaned = text.replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '');
-    // Hanya ambil karakter huruf, angka, spasi, titik, koma, strip, petik (nama orang umum)
-    // [a-zA-Z0-9\s.,'-]
-    cleaned = cleaned.replace(/[^a-zA-Z0-9\s.,'-]/g, '');
-    cleaned = cleaned.replace(/\s+/g, ' ').trim();
-    return cleaned.toUpperCase();
-}
+// (Function cleanName moved to Helper section below)
 
 /**
  * Membersihkan nomor:
@@ -64,14 +55,14 @@ function cleanName(raw: string): string {
  * @param locationContext Optional location context ('PASARJAYA' | 'DHARMAJAYA').
  * @returns LogItem object with initial parsed fields and status.
  */
-export function parseBlockToItem(lines: string[], index: number, processingDayKey: string, locationContext?: string): LogItem {
+export function parseBlockToItem(lines: string[], index: number, processingDayKey: string, locationContext?: 'PASARJAYA' | 'DHARMAJAYA'): LogItem {
     // Pastikan lines minimal ada (walau kosong)
     const rawNama = lines[0] || '';
     const parsedNama = cleanName(rawNama);
 
     const result: LogItem = {
         index,
-        original_lines: lines,
+        raw_lines: lines,
         status: 'OK', // Default OK, nanti divalidasi
         errors: [],
         parsed: {
