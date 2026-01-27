@@ -1,0 +1,201 @@
+# Panduan Deploy & Update Bot ke VPS
+
+## 1. Cara Login ke VPS (Metode Tercepat)
+
+Tidak perlu membuka web Vultr. Gunakan terminal di komputer Anda (PowerShell atau CMD).
+
+### Langkah Login:
+1. Buka PowerShell atau Command Prompt
+2. Salin dan jalankan perintah berikut:
+
+   ssh root@149.28.146.42
+
+3. Masukkan password ketika diminta:
+
+   }V2d)x.2hb{drPTX
+
+
+**Catatan Penting:** Saat mengetik password, kursor tidak akan bergerak. Ini adalah fitur keamanan yang normal. Ketik password lengkap, lalu tekan Enter.
+
+---
+
+## 2. Protokol Update & Verifikasi
+
+### Langkah 1: Eksekusi Script Update
+
+Jalankan perintah update seperti biasa:
+
+update-bot bot-wa-1 kjp-bot
+
+
+### Langkah 2: Aturan 30 Detik (Observasi)
+
+⏱️ **Tunggu 20-30 detik** setelah script selesai sebelum menutup terminal.
+
+**Alasan:** Bot memerlukan waktu untuk:
+- Melakukan handshake dengan WhatsApp
+- Menginisialisasi koneksi database
+- Memuat konfigurasi dan state
+
+### Langkah 3: Verifikasi Lapis 1 - Status Resource
+
+Periksa apakah bot berhasil berjalan dengan memeriksa PID (Process ID) dan penggunaan RAM:
+bash
+pm2 status
+
+
+**Interpretasi Hasil:**
+
+✅ **KONDISI AMAN:**
+- Kolom `mem` menunjukkan angka (contoh: `120mb`)
+- Kolom `pid` memiliki nomor process (contoh: `1234`)
+
+❌ **KONDISI BAHAYA:**
+- Kolom `mem` menunjukkan `0b`
+- Kolom `pid` bertuliskan `N/A`
+
+**Tindakan:** Jika kondisi bahaya bertahan lebih dari 1 menit, lakukan Hard Reset (lihat bagian Troubleshooting).
+
+### Langkah 4: Verifikasi Lapis 2 - Log Koneksi
+
+Periksa log untuk memastikan bot berhasil terhubung:
+bash
+pm2 logs kjp-bot --lines 20
+
+
+**Yang Harus Dicari:**
+
+✅ **Sukses:** Muncul pesan:
+
+✅ WhatsApp Terhubung! Siap menerima pesan.
+
+
+❌ **Gagal:** Log berhenti di `Connecting...` atau muncul error berwarna merah
+
+**Tindakan:** Jika gagal, periksa kembali atau lakukan restart bot.
+
+### Langkah 5: Verifikasi Lapis 3 - Real Chat Test
+
+Uji langsung dengan mengirim pesan ke bot:
+
+1. Ambil HP Anda
+2. Kirim pesan sederhana ke nomor bot (contoh: `"Ping"` atau `"P"`)
+3. Tunggu respons
+
+**Interpretasi:**
+
+✅ **100% Berhasil:** Bot membalas pesan Anda  
+❌ **Gagal:** Hanya centang satu atau tidak ada balasan
+
+**Tindakan:** Jika gagal, periksa log kembali untuk mencari error.
+
+---
+
+## 3. Troubleshooting - Bot "0b" atau Tidak Berjalan
+
+### 🚨 Apa yang Harus Dilakukan?
+
+Jika setelah update bot menunjukkan status `0b` (tidak ada penggunaan memory), **JANGAN** melakukan update ulang.
+
+### Solusi: Clean Start
+
+Lakukan langkah berikut secara berurutan:
+
+bash
+# 1. Hapus instance bot yang error
+pm2 delete kjp-bot
+
+# 2. Pindah ke direktori bot
+cd /opt/bots/bot-wa-1
+
+# 3. Start ulang bot dengan konfigurasi bersih
+pm2 start dist/index.js --name kjp-bot
+
+# 4. Simpan konfigurasi PM2
+pm2 save
+
+
+### Verifikasi Setelah Clean Start
+
+Ulangi langkah verifikasi (Langkah 3-5) untuk memastikan bot berjalan normal.
+
+---
+
+## 4. Catatan Tambahan
+
+### 💡 Tips: Menghadapi Chat Pending
+
+Ketika bot mengalami downtime (mati sementara):
+- Pesan yang masuk saat bot mati **TIDAK** akan diproses secara otomatis
+- Pesan tersebut akan tertunda (pending)
+- Setelah bot aktif kembali, pesan lama mungkin perlu dikirim ulang oleh pengirim
+
+**Rekomendasi:** Informasikan kepada pengguna jika terjadi maintenance untuk meminimalkan pesan yang tertunda.
+
+---
+
+## 5. Checklist Cepat
+
+Gunakan checklist ini setiap kali melakukan update:
+
+- [ ] Login ke VPS
+- [ ] Jalankan perintah `update-bot bot-wa-1 kjp-bot`
+- [ ] Tunggu 20-30 detik
+- [ ] Cek `pm2 status` - pastikan mem > 0b dan pid terisi
+- [ ] Cek `pm2 logs kjp-bot --lines 20` - pastikan ada pesan "WhatsApp Terhubung"
+- [ ] Test kirim pesan dari HP - pastikan bot membalas
+- [ ] Jika semua OK, update berhasil! ✅
+
+---
+
+## 6. Perintah-Perintah Berguna
+
+### Monitoring
+
+bash
+# Lihat status semua bot
+pm2 status
+
+# Lihat log real-time
+pm2 logs kjp-bot
+
+# Lihat log 50 baris terakhir
+pm2 logs kjp-bot --lines 50
+
+# Monitor penggunaan resource
+pm2 monit
+
+
+### Management
+
+bash
+# Restart bot
+pm2 restart kjp-bot
+
+# Stop bot
+pm2 stop kjp-bot
+
+# Delete bot dari PM2
+pm2 delete kjp-bot
+
+# Simpan konfigurasi PM2 saat ini
+pm2 save
+
+# Reload semua bot dengan zero downtime
+pm2 reload all
+
+
+### Troubleshooting Lanjutan
+
+bash
+# Flush log jika terlalu penuh
+pm2 flush
+
+# Reset PM2 (hati-hati!)
+pm2 kill
+pm2 resurrect
+
+
+---
+
+**Dokumen terakhir diperbarui:** Januari 2026
