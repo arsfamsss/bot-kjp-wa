@@ -16,13 +16,13 @@ export const generateKJPExcel = (data: any[]): Buffer => {
         let lokasiFinal = "DHARMAJAYA DURI KOSAMBI"; // Default
 
         if (item.lokasi === 'PASARJAYA') {
-            lokasiFinal = "PASARJAYA KEDOYA";
+            lokasiFinal = "PASARJAYA";
         } else if (item.lokasi === 'DHARMAJAYA') {
             lokasiFinal = "DHARMAJAYA DURI KOSAMBI";
         } else {
             // Fallback logic jika kolom lokasi kosong (data lama)
             if (item.tanggal_lahir && item.tanggal_lahir.length > 5) {
-                lokasiFinal = "PASARJAYA KEDOYA";
+                lokasiFinal = "PASARJAYA";
             }
         }
 

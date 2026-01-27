@@ -23,7 +23,7 @@ export const FORMAT_DAFTAR_MESSAGE = [
     '',
     'Mau ambil sembako dimana?',
     '',
-    '1️⃣ *PASARJAYA* *Kedoya*',
+    '1️⃣ *PASARJAYA*',
     '2️⃣ *DHARMAJAYA* *Duri Kosambi*',
     '',
     'Ketik 1 atau 2 ya',

@@ -587,7 +587,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                     if (!existingLocation) {
                         // TOLAK VALID DATA sekalipun, jika belum pilih lokasi
                         await sock.sendMessage(remoteJid, {
-                            text: `⚠️ *Mohon Pilih Lokasi Dulu*\n\nData Anda sepertinya valid, tapi saya perlu tahu Anda mau ambil sembako di mana?\n\nKetik *1* untuk Pasarjaya Kedoya\nKetik *2* untuk Dharmajaya Duri Kosambi`
+                            text: `⚠️ *Mohon Pilih Lokasi Dulu*\n\nData Anda sepertinya valid, tapi saya perlu tahu Anda mau ambil sembako di mana?\n\nKetik *1* untuk Pasarjaya\nKetik *2* untuk Dharmajaya Duri Kosambi`
                         });
                         userFlowByPhone.set(senderPhone, 'SELECT_LOCATION');
                         return; // Selesai
@@ -2137,7 +2137,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                     if (blockAskLocation) {
                         // Tolak halus dan minta pilih lokasi
                         await sock.sendMessage(remoteJid, {
-                            text: `⚠️ *Mohon Pilih Lokasi Dulu*\n\nData Anda sepertinya valid, tapi saya perlu tahu Anda mau ambil sembako di mana?\n\nKetik *1* untuk Pasarjaya\nKetik *2* untuk Dharmajaya`
+                            text: `⚠️ *Mohon Pilih Lokasi Dulu*\n\nData Anda sepertinya valid, tapi saya perlu tahu Anda mau ambil sembako di mana?\n\nKetik *1* untuk Pasarjaya\nKetik *2* untuk Dharmajaya Duri Kosambi`
                         });
                         userFlowByPhone.set(senderPhone, 'SELECT_LOCATION');
                         // Jangan continue, biarkan logic bawah skip karena if (lines.length >= minLines) akan kita guard

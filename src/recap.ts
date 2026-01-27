@@ -141,7 +141,7 @@ export function buildReplyForTodayRecap(
         validItems.forEach((item, i) => {
             // Tentukan lokasi pengambilan
             const lokasiLabel = item.lokasi === 'PASARJAYA'
-                ? '📍 Kedoya'
+                ? '📍 PASARJAYA'
                 : '📍 Duri Kosambi';
 
             lines.push(`┌── ${i + 1}. *${item.nama}*`);
@@ -301,7 +301,7 @@ export async function getGlobalRecap(
 
         // Tampilkan Pasarjaya
         if (pasarjayaItems.length > 0) {
-            lines.push(`*Pasarjaya Kedoya* : ${pasarjayaItems.length}`);
+            lines.push(`*PASARJAYA* : ${pasarjayaItems.length}`);
             pasarjayaItems.forEach((item: any) => {
                 const itemKey = endKey ? ` (${String(item.processing_day_key).split('-').reverse().join('-')})` : '';
                 const tglLahir = item.tanggal_lahir ? formatDateDMY(item.tanggal_lahir) : '';
@@ -440,7 +440,7 @@ export async function generateExportData(
 
     // === GERAI PASARJAYA ===
     if (Object.keys(pasarjayaBySender).length > 0) {
-        txtRows.push('*Gerai Pasarjaya Kedoya*');
+        txtRows.push('*Gerai PASARJAYA*');
         txtRows.push('');
 
         let senderIdx = 1;
@@ -467,7 +467,7 @@ export async function generateExportData(
                 txtRows.push(`KTP ${item.no_ktp}`);
                 txtRows.push(`KK ${item.no_kk}`);
                 if (tglLahir) txtRows.push(`${tglLahir}`);
-                txtRows.push(`Lokasi: Kedoya`);
+                txtRows.push(`Lokasi: PASARJAYA`);
                 txtRows.push('');
             });
 
@@ -505,7 +505,7 @@ export async function generateExportData(
     summaryMap.forEach((stats) => {
         txtRows.push(`👤 *${stats.name}* (${stats.total} data)`);
         if (stats.dharmajaya > 0) txtRows.push(`   • Dharmajaya Duri Kosambi: ${stats.dharmajaya}`);
-        if (stats.pasarjaya > 0) txtRows.push(`   • Pasarjaya Kedoya: ${stats.pasarjaya}`);
+        if (stats.pasarjaya > 0) txtRows.push(`   • PASARJAYA: ${stats.pasarjaya}`);
         txtRows.push('');
     });
     txtRows.push('✅ *Laporan selesai.*');
