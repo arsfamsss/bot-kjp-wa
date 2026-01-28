@@ -66,7 +66,7 @@ export const FORMAT_DAFTAR_DHARMAJAYA = [
     '',
     '📝 Kirim data dalam *4 BARIS*:',
     '',
-    '1. Nama lengkap',
+    '1. Nama',
     '2. Nomor Kartu KJP',
     '3. Nomor KTP',
     '4. Nomor KK',
