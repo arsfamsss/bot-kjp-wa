@@ -4,7 +4,7 @@
 // --- TYPE DEFINITIONS ---
 
 // State alur menu user
-export type UserFlowState = 'NONE' | 'CHECK_DATA_MENU' | 'CHECK_DATA_SPECIFIC_DATE' | 'DELETE_DATA' | 'SELECT_LOCATION';
+export type UserFlowState = 'NONE' | 'CHECK_DATA_MENU' | 'CHECK_DATA_SPECIFIC_DATE' | 'DELETE_DATA' | 'SELECT_LOCATION' | 'SELECT_PASARJAYA_SUB' | 'INPUT_MANUAL_LOCATION';
 
 // State alur menu admin
 export type AdminFlowState =
@@ -63,3 +63,6 @@ export const adminContactCache = new Map<string, { phone_number: string; push_na
 
 // Cache user list untuk admin delete data harian
 export const adminUserListCache = new Map<string, { phone: string; name: string; count: number }[]>();
+
+// Simpan data pendaftaran sementara sebelum pilih lokasi
+export const pendingRegistrationData = new Map<string, string>();

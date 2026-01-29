@@ -55,7 +55,7 @@ function cleanName(raw: string): string {
  * @param locationContext Optional location context ('PASARJAYA' | 'DHARMAJAYA').
  * @returns LogItem object with initial parsed fields and status.
  */
-export function parseBlockToItem(lines: string[], index: number, processingDayKey: string, locationContext?: 'PASARJAYA' | 'DHARMAJAYA'): LogItem {
+export function parseBlockToItem(lines: string[], index: number, processingDayKey: string, locationContext?: 'PASARJAYA' | 'DHARMAJAYA', specificLocation?: string): LogItem {
     // Pastikan lines minimal ada (walau kosong)
     const rawNama = lines[0] || '';
     const parsedNama = cleanName(rawNama);
@@ -80,7 +80,9 @@ export function parseBlockToItem(lines: string[], index: number, processingDayKe
     }
 
     // Set lokasi
-    if (locationContext) {
+    if (specificLocation) {
+        result.parsed.lokasi = specificLocation as any; // Allow string
+    } else if (locationContext) {
         result.parsed.lokasi = locationContext;
     }
 
@@ -292,8 +294,9 @@ export async function processRawMessageToLogJson(params: {
     tanggal: string; // YYYY-MM-DD (kalender WIB)
     processingDayKey: string; // YYYY-MM-DD (periode operasional)
     locationContext?: 'PASARJAYA' | 'DHARMAJAYA'; // New Param
+    specificLocation?: string; // New Param: "PASARJAYA - Jakgrosir"
 }): Promise<LogJson> {
-    const { text, senderPhone, messageId, receivedAt, tanggal, processingDayKey, locationContext } = params;
+    const { text, senderPhone, messageId, receivedAt, tanggal, processingDayKey, locationContext, specificLocation } = params;
 
     // Determine lines per block based on location
     const location = locationContext || 'DEFAULT';
@@ -307,6 +310,14 @@ export async function processRawMessageToLogJson(params: {
 
     // 2) parse & validasi format
     let items = blocks.map((block, i) => validateBlockToItem(block, i + 1, location));
+    // Manual Update parsed.lokasi if specificLocation provided (because validateBlockToItem resets it via buildParsedFields)
+    // Actually validateBlockToItem calls buildParsedFields which sets lokasi based on 'location' arg ('PASARJAYA').
+    // We need to override it if specificLocation is present.
+    if (specificLocation) {
+        items.forEach(it => {
+            if (it.parsed) it.parsed.lokasi = specificLocation as any;
+        });
+    }
 
     // 3) duplikat DI DALAM 1 PESAN
     // ✅ PENTING: KK BOLEH SAMA DALAM 1 PESAN (Sesuai Request)
@@ -376,7 +387,7 @@ export async function processRawMessageToLogJson(params: {
         items,
 
         failed_remainder_lines: remainder.length > 0 ? remainder : undefined,
-        lokasi: location !== 'DEFAULT' ? location : undefined // Simpan lokasi di log
+        lokasi: specificLocation || (location !== 'DEFAULT' ? location : undefined) // Simpan lokasi spesifik di log
     };
 
     return logJson;

@@ -140,8 +140,8 @@ export function buildReplyForTodayRecap(
         lines.push('');
         validItems.forEach((item, i) => {
             // Tentukan lokasi pengambilan
-            const lokasiLabel = item.lokasi === 'PASARJAYA'
-                ? '📍 PASARJAYA'
+            const lokasiLabel = item.lokasi && item.lokasi.startsWith('PASARJAYA')
+                ? `📍 ${item.lokasi}` // Tampilkan full: "PASARJAYA - Jakgrosir"
                 : '📍 Duri Kosambi';
 
             lines.push(`┌── ${i + 1}. *${item.nama}*`);
@@ -283,8 +283,8 @@ export async function getGlobalRecap(
         lines.push(`📥 Jumlah Data: ${items.length}`);
 
         // --- GROUPING PER LOKASI ---
-        const dharmajayaItems = items.filter((i: any) => i.lokasi === 'DHARMAJAYA' || !i.lokasi);
-        const pasarjayaItems = items.filter((i: any) => i.lokasi === 'PASARJAYA');
+        const dharmajayaItems = items.filter((i: any) => !i.lokasi || (!i.lokasi.startsWith('PASARJAYA')));
+        const pasarjayaItems = items.filter((i: any) => i.lokasi && i.lokasi.startsWith('PASARJAYA'));
 
         let globalIndex = 1;
 
@@ -379,8 +379,8 @@ export async function generateExportData(
     const displayDate = processingDayKey.split('-').reverse().join('-');
 
     // --- Group by Lokasi terlebih dahulu, lalu by Sender ---
-    const dharmajayaData = (data as any[]).filter((i: any) => i.lokasi === 'DHARMAJAYA' || !i.lokasi);
-    const pasarjayaData = (data as any[]).filter((i: any) => i.lokasi === 'PASARJAYA');
+    const dharmajayaData = (data as any[]).filter((i: any) => !i.lokasi || (!i.lokasi.startsWith('PASARJAYA')));
+    const pasarjayaData = (data as any[]).filter((i: any) => i.lokasi && i.lokasi.startsWith('PASARJAYA'));
 
     // Group Dharmajaya by sender
     const dharmajayaBySender: Record<string, any[]> = {};
@@ -470,7 +470,9 @@ export async function generateExportData(
                 txtRows.push(`KTP ${item.no_ktp}`);
                 txtRows.push(`KK ${item.no_kk}`);
                 if (tglLahir) txtRows.push(`${tglLahir}`);
-                txtRows.push(`Lokasi: PASARJAYA`);
+                if (tglLahir) txtRows.push(`${tglLahir}`);
+                // LINE 6: Lokasi
+                txtRows.push(`${item.lokasi || 'PASARJAYA'}`);
                 txtRows.push('');
             });
 
@@ -498,7 +500,7 @@ export async function generateExportData(
         }
         const stats = summaryMap.get(phone)!;
         stats.total++;
-        if (row.lokasi === 'PASARJAYA') {
+        if (row.lokasi && row.lokasi.startsWith('PASARJAYA')) {
             stats.pasarjaya++;
         } else {
             stats.dharmajaya++;

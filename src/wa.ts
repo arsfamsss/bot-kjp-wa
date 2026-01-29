@@ -65,6 +65,8 @@ import {
     ADMIN_MENU_MESSAGE,
     ADMIN_PHONES_RAW,
     CLOSE_MESSAGE_TEMPLATE_UNIFIED,
+    MENU_PASARJAYA_LOCATIONS, // NEW
+    PASARJAYA_MAPPING, // NEW
 } from './config/messages';
 import {
     normalizePhone,
@@ -83,6 +85,7 @@ import {
     broadcastDraftMap,
     adminContactCache,
     adminUserListCache,
+    pendingRegistrationData, // NEW
 } from './state';
 
 const AUTH_FOLDER = 'auth_info_baileys';
@@ -583,9 +586,13 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                 if (potentialData) {
                     const existingLocation = userLocationChoice.get(senderPhone);
 
+
                     // --- ATURAN 1: WAJIB PILIH LOKASI DULU ---
                     if (!existingLocation) {
-                        // TOLAK VALID DATA sekalipun, jika belum pilih lokasi
+                        // SIMPAN DATA SEMENTARA
+                        pendingRegistrationData.set(senderPhone, messageText);
+
+                        // Minta pilih lokasi (Format Lama) tapi nanti 1 akan trigger menu baru
                         await sock.sendMessage(remoteJid, {
                             text: `⚠️ *Mohon Pilih Lokasi Dulu*\n\nData Anda sepertinya valid, tapi saya perlu tahu Anda mau ambil sembako di mana?\n\nKetik *1* untuk Pasarjaya\nKetik *2* untuk Dharmajaya Duri Kosambi`
                         });
@@ -772,7 +779,10 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                         // Hapus SEMUA
                         const res = await deleteAllDailyDataForSender(senderPhone, processingDayKey);
                         if (res.success) {
-                            replyText = `✅ Sukses menghapus *${res.deletedCount}* data (SEMUA).`;
+                            const namesStr = res.deletedNames && res.deletedNames.length > 0
+                                ? `: *${res.deletedNames.join(', ')}*`
+                                : '';
+                            replyText = `✅ Sukses menghapus *${res.deletedCount}* data (SEMUA)${namesStr}.`;
                             userFlowByPhone.set(senderPhone, 'NONE');
                         } else {
                             replyText = '❌ Gagal menghapus data. Silakan coba lagi.';
@@ -788,10 +798,19 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             const indices = parts.map(Number);
                             const res = await deleteDailyDataByIndices(senderPhone, processingDayKey, indices);
                             if (res.success && res.deletedCount > 0) {
-                                replyText = `✅ Sukses menghapus *${res.deletedCount}* data.`;
+                                const namesStr = res.deletedNames && res.deletedNames.length > 0
+                                    ? `: *${res.deletedNames.join(', ')}*`
+                                    : '';
+                                replyText = `✅ Sukses menghapus *${res.deletedCount}* data${namesStr}.`;
                                 userFlowByPhone.set(senderPhone, 'NONE');
+
+                                // Cek sisa data
+                                const { validCount } = await getTodayRecapForSender(senderPhone, processingDayKey);
+                                if (validCount > 0) {
+                                    replyText += `\n\nSisa data: ${validCount}`;
+                                }
                             } else {
-                                replyText = '❌ Gagal menghapus. Pastikan nomor urut benar dan coba lagi.';
+                                replyText = '❌ Gagal menghapus. Pastikan nomor urut benar.';
                             }
                         }
                     }
@@ -802,22 +821,209 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                     }
                 }
                 else if (currentUserFlow === 'SELECT_LOCATION') {
-                    // Handler untuk pilihan lokasi pendaftaran - menggunakan template dari messages.ts
+                    // Logic Unified: Pilihan 1 -> Menu Pasarjaya, Pilihan 2 -> Dharmajaya (Auto Process Pending)
                     if (normalized === '1') {
-                        userLocationChoice.set(senderPhone, 'PASARJAYA');
-                        userFlowByPhone.set(senderPhone, 'NONE');
-                        replyText = FORMAT_DAFTAR_PASARJAYA;
+                        // MENU SUB-LOKASI PASARJAYA
+                        replyText = MENU_PASARJAYA_LOCATIONS;
+                        userFlowByPhone.set(senderPhone, 'SELECT_PASARJAYA_SUB');
                     } else if (normalized === '2') {
+                        // DHARMAJAYA (AUTO)
                         userLocationChoice.set(senderPhone, 'DHARMAJAYA');
-                        userFlowByPhone.set(senderPhone, 'NONE');
-                        replyText = FORMAT_DAFTAR_DHARMAJAYA;
+
+                        // Cek apakah ada data pending yang menunggu diproses?
+                        const pendingData = pendingRegistrationData.get(senderPhone);
+                        if (pendingData) {
+                            // PROSES DATA PENDING (DHARMAJAYA: Langsung pakai, tanpa ubah nama)
+                            // Kita "pura-pura" user mengirim pesan data itu sekarang
+                            // Set flow to NONE agar tidak loop
+                            userFlowByPhone.set(senderPhone, 'NONE');
+                            // Hapus pending
+                            pendingRegistrationData.delete(senderPhone);
+
+                            // Call process logic RECURSIVELY (simulate message)
+                            // Tapi karena kita di dalam loop, kita bisa set `messageText` = pendingData dan `jump`?
+                            // Solusi aman: Kita panggil logic parse & save di sini langsung (copy logic sedikit dr bawah)
+                            // ATAU: Kita inject messageText baru dan biarkan logic bawah jalan? -> Susah.
+                            // BEST PRACTICE: Kita kirim pesan sukses manual di sini jika berhasil.
+                            // TAPI Validasi line count dll ada di bawah.
+                            // TRY: Kita modify `messageText` variable dan biarkan loop continue ke bawah? 
+                            // -> TIDAK BISA, karena `messageText` const, dan logic pendaftaran ada di `if (potentialData)`.
+                            // SOLUSI: Kita reply dulu "Lokasi terpilih", lalu minta user kirim ulang? NO.
+                            // SOLUSI PRO: Panggil logic validasi & save yang di-extract jadi fungsi? Atau copy-paste logic core.
+
+                            // UNTUK SIMPLIFIKASI DAN KEAMANAN, KITA PAKAI CARA "INJECT" SEDERHANA:
+                            // Kita kirim pesan ke user "Sedang memproses..."
+                            await sock.sendMessage(remoteJid, { text: '🔄 Memproses data untuk Dharmajaya...' });
+
+                            // Re-run logic pendaftaran dengan messageText = pendingData & existingLocation = DHARMAJAYA
+                            // Hacky but works without refactoring whole file:
+                            // Kita set userLocationChoice sudah 'DHARMAJAYA' (done above).
+                            // Kita panggil ulang handler dengan teks pending. 
+                            // TAPI kita butuh function terpisah.
+                            // ---
+                            // ALTERNATIF MUDAH: Minta kirim ulang (JANGAN). User marah.
+                            // ---
+                            // ALTERNATIF BENAR: Refactor logic process ke function `handleRegistrationData`.
+                            // TAPI berhubung instruksi cuma boleh edit file, kita buat blok process di sini.
+
+                            // --- BLOK PROSES DATA PENDING ---
+                            const lines = parseRawMessageToLines(pendingData);
+                            const minLines = 4;
+                            if (lines.length >= minLines) { // Harusnya valid
+                                const logJson = await processRawMessageToLogJson({
+                                    text: pendingData,
+                                    senderPhone,
+                                    messageId: msg.key.id,
+                                    receivedAt,
+                                    tanggal: tanggalWib,
+                                    processingDayKey,
+                                    locationContext: 'DHARMAJAYA'
+                                });
+                                logJson.sender_name = existingName || undefined;
+
+                                if (logJson.stats.total_blocks > 0 && (!logJson.failed_remainder_lines || logJson.failed_remainder_lines.length === 0)) {
+                                    await saveLogAndOkItems(logJson, pendingData);
+                                    const { validCount, validItems } = await getTodayRecapForSender(senderPhone, processingDayKey);
+                                    replyText = buildReplyForNewData(logJson, validCount, 'DHARMAJAYA', validItems);
+                                    userFlowByPhone.set(senderPhone, 'NONE'); // Reset flow
+                                    // replyText will be sent below
+                                } else {
+                                    replyText = '❌ *Data Dharmajaya Gagal Proses*\nPastikan format 4 baris per orang.';
+                                    userFlowByPhone.set(senderPhone, 'NONE');
+                                }
+                            } else {
+                                replyText = '❌ *Data Tidak Lengkap*\nMinimal 4 baris.';
+                                userFlowByPhone.set(senderPhone, 'NONE');
+                            }
+                            // --- END BLOK ---
+
+                        } else {
+                            // User pilih lokasi tapi belum pernah kirim data -> Kirim Format Panduan
+                            userFlowByPhone.set(senderPhone, 'NONE');
+                            replyText = FORMAT_DAFTAR_DHARMAJAYA;
+                        }
                     } else if (normalized === '0') {
                         userFlowByPhone.set(senderPhone, 'NONE');
+                        pendingRegistrationData.delete(senderPhone);
                         replyText = '✅ Pendaftaran dibatalkan.';
                     } else {
                         replyText = '⚠️ Pilih 1 (Pasarjaya) atau 2 (Dharmajaya). Ketik 0 untuk batal.';
                     }
-                    await sock.sendMessage(remoteJid, { text: replyText });
+                    if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
+                    continue;
+                }
+                else if (currentUserFlow === 'SELECT_PASARJAYA_SUB') {
+                    // HANDLER MENU PASARJAYA (1-5)
+                    if (normalized === '0') {
+                        // Back to None
+                        userFlowByPhone.set(senderPhone, 'NONE');
+                        pendingRegistrationData.delete(senderPhone);
+                        replyText = '✅ Batal pilih lokasi.';
+                    } else if (normalized === '5') {
+                        // MANUAL INPUT
+                        userFlowByPhone.set(senderPhone, 'INPUT_MANUAL_LOCATION');
+                        replyText = '📝 Silakan ketik nama lokasinya saja (Contoh: *Pasar Rumput*):';
+                    } else if (PASARJAYA_MAPPING[normalized]) {
+                        // PILIHAN 1-4 (VALID)
+                        const lokasiName = PASARJAYA_MAPPING[normalized];
+                        userLocationChoice.set(senderPhone, 'PASARJAYA');
+
+                        // CEK PENDING DATA
+                        const pendingData = pendingRegistrationData.get(senderPhone);
+                        if (pendingData) {
+                            await sock.sendMessage(remoteJid, { text: `🔄 Memproses data untuk Pasarjaya (${lokasiName})...` });
+
+                            // PROSES DATA PENDING + PASS SPECIFIC LOCATION
+                            // Logic Baru: Jangan inject text, tapi pass parameter specificLocation
+
+                            const logJson = await processRawMessageToLogJson({
+                                text: pendingData,
+                                senderPhone,
+                                messageId: msg.key.id,
+                                receivedAt,
+                                tanggal: tanggalWib,
+                                processingDayKey,
+                                locationContext: 'PASARJAYA',
+                                specificLocation: `PASARJAYA - ${lokasiName}` // PASS SPECIFIC LOCATION HERE
+                            });
+                            logJson.sender_name = existingName || undefined;
+
+                            // Logic Save & Reply (Copied for safety)
+                            if (logJson.stats.total_blocks > 0 && (!logJson.failed_remainder_lines || logJson.failed_remainder_lines.length === 0)) {
+                                await saveLogAndOkItems(logJson, pendingData);
+                                const { validCount, validItems } = await getTodayRecapForSender(senderPhone, processingDayKey);
+                                replyText = buildReplyForNewData(logJson, validCount, 'PASARJAYA', validItems);
+                                userFlowByPhone.set(senderPhone, 'NONE');
+                                pendingRegistrationData.delete(senderPhone);
+                            } else {
+                                // Gagal (Mungkin kurang tanggal lahir / baris)
+                                replyText = '❌ *Data Pasarjaya Gagal Proses*\nPastikan format 5 baris (Nama, Kartu, KTP, KK, Tgl Lahir).\nDan pastikan Tanggal Lahir benar.';
+                                userFlowByPhone.set(senderPhone, 'NONE');
+                                // Jangan delete pending? Biar user bisa coba lagi?
+                                // Ah delete saja biar bersih, user kirim ulang yang benar.
+                                pendingRegistrationData.delete(senderPhone);
+                            }
+                        } else {
+                            // User pilih lokasi manual (tanpa pending data) -> Kirim Format Panduan
+                            userFlowByPhone.set(senderPhone, 'NONE');
+                            replyText = FORMAT_DAFTAR_PASARJAYA;
+                        }
+                    } else {
+                        replyText = '⚠️ Pilihan salah. Ketik 1-5, atau 0 batal.';
+                    }
+                    if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
+                    continue;
+                }
+                else if (currentUserFlow === 'INPUT_MANUAL_LOCATION') {
+                    // HANDLER INPUT LOKASI MANUAL
+                    const lokasiName = rawTrim; // Ambil input user sebagai nama lokasi
+                    // Validasi minimal panjang
+                    if (lokasiName.length < 3) {
+                        replyText = '⚠️ Nama lokasi terlalu pendek. Coba lagi atau ketik 0 batal.';
+                        if (rawTrim === '0') {
+                            userFlowByPhone.set(senderPhone, 'NONE');
+                            pendingRegistrationData.delete(senderPhone);
+                            replyText = '✅ Batal.';
+                        }
+                    } else {
+                        userLocationChoice.set(senderPhone, 'PASARJAYA');
+
+                        // CEK PENDING DATA (Copy logic from above/Shared Logic ideally)
+                        const pendingData = pendingRegistrationData.get(senderPhone);
+                        if (pendingData) {
+                            await sock.sendMessage(remoteJid, { text: `🔄 Memproses data untuk Pasarjaya (${lokasiName})...` });
+
+                            const logJson = await processRawMessageToLogJson({
+                                text: pendingData,
+                                senderPhone,
+                                messageId: msg.key.id,
+                                receivedAt,
+                                tanggal: tanggalWib,
+                                processingDayKey,
+                                locationContext: 'PASARJAYA',
+                                specificLocation: `PASARJAYA - ${lokasiName}` // PASS SPECIFIC LOCATION HERE
+                            });
+                            logJson.sender_name = existingName || undefined;
+
+                            if (logJson.stats.total_blocks > 0 && (!logJson.failed_remainder_lines || logJson.failed_remainder_lines.length === 0)) {
+                                await saveLogAndOkItems(logJson, pendingData);
+                                const { validCount, validItems } = await getTodayRecapForSender(senderPhone, processingDayKey);
+                                replyText = buildReplyForNewData(logJson, validCount, 'PASARJAYA', validItems);
+                                userFlowByPhone.set(senderPhone, 'NONE');
+                                pendingRegistrationData.delete(senderPhone);
+                            } else {
+                                replyText = '❌ *Data Pasarjaya Gagal Proses*\nPastikan format 5 baris (Nama, Kartu, KTP, KK, Tgl Lahir).\nDan pastikan Tanggal Lahir benar.';
+                                userFlowByPhone.set(senderPhone, 'NONE');
+                                pendingRegistrationData.delete(senderPhone);
+                            }
+                        } else {
+                            // User pilih lokasi manual (tanpa pending data) -> Kirim Format Panduan tapi bingung mau format apa
+                            // Harusnya format daftar pasarjaya biasa
+                            userFlowByPhone.set(senderPhone, 'NONE');
+                            replyText = FORMAT_DAFTAR_PASARJAYA;
+                        }
+                    }
+                    if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
                     continue;
                 }
 
@@ -871,7 +1077,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                 // FIX: Tambah syarat currentAdminFlow === 'NONE'
                 if (normalized === '3' && currentUserFlow === 'NONE' && currentAdminFlow === 'NONE') {
                     // 1. Ambil data hari ini untuk ditampilkan
-                    const { validItems, validCount } = await getTodayRecapForSender(senderPhone, processingDayKey);
+                    const { validCount, validItems } = await getTodayRecapForSender(senderPhone, processingDayKey);
 
                     if (validCount === 0) {
                         replyText = '⚠️ *DATA KOSONG*\n\nBelum ada data pendaftaran hari ini yang bisa dihapus.';
@@ -1935,7 +2141,11 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
 
                 // --- CUSTOMER MENU ---
                 if (normalized === '1' || normalized.includes('DAFTAR')) {
-                    // New Flow: Ask for Location - menggunakan template dari messages.ts
+                    // New Flow: Ask for Location -> Trigger Menu Bertingkat if 1 chosen
+                    // Check pending data? No, this is fresh menu.
+                    // Just Reset Pending to be safe
+                    pendingRegistrationData.delete(senderPhone);
+
                     userFlowByPhone.set(senderPhone, 'SELECT_LOCATION');
                     replyText = FORMAT_DAFTAR_MESSAGE;
                 } else if (normalized === '2' || normalized.startsWith('CEK')) {
@@ -2010,17 +2220,22 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                 }
                             }
 
+                            // Cek apakah sukses
                             if (successCount > 0) {
-                                replyText = [
-                                    '✅ *DATA BERHASIL DIHAPUS*',
-                                    '',
-                                    `${successCount} data telah dihapus:`,
-                                    deletedNames.map(n => `- ${n}`).join('\n'),
-                                    '',
-                                    '💡 _Ketik *CEK* untuk melihat sisa data Anda._'
-                                ].join('\n');
+                                // PERBAIKAN: Tampilkan nama yang dihapus
+                                const deletedNameStr = deletedNames.length > 0 ? ` *${deletedNames.join(', ')}*` : '';
+                                replyText = `✅ Sukses menghapus ${successCount} data${deletedNameStr}.`;
+
+                                // Jika data habis, reset flow
+                                const { validCount } = await getTodayRecapForSender(senderPhone, processingDayKey);
+                                if (validCount === 0) {
+                                    userFlowByPhone.set(senderPhone, 'NONE');
+                                } else {
+                                    // Tampilkan sisa data
+                                    replyText += `\n\nSisa data: ${validCount}`;
+                                }
                             } else {
-                                replyText = '❌ Gagal menghapus. Pastikan nomor urut benar.';
+                                replyText = '❌ Gagal menghapus data. Pastikan nomor urut benar.';
                             }
                         }
                     }

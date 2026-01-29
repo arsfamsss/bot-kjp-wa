@@ -30,14 +30,34 @@ export const FORMAT_DAFTAR_MESSAGE = [
     'Ketik 0 kalau batal 😊',
 ].join('\n');
 
+// --- MENU & MAPPING LOKASI PASARJAYA (NEW) ---
+export const MENU_PASARJAYA_LOCATIONS = [
+    '📍 *LOKASI PENGAMBILAN*',
+    '',
+    '1. 🏭 Jakgrosir Kedoya',
+    '2. 🏙️ Gerai Rusun Pesakih',
+    '3. 🏪 Mini DC Kec. Cengkareng',
+    '4. 🛒 Jakmart Bambu Larangan',
+    '5. 📝 *Lokasi Lain...*',
+    '',
+    '_Silakan balas dengan angka pilihanmu!_',
+    '_(Ketik 0 untuk batal)_'
+].join('\n');
+
+export const PASARJAYA_MAPPING: Record<string, string> = {
+    '1': 'Jakgrosir Kedoya',
+    '2': 'Gerai Rusun Pesakih',
+    '3': 'Mini DC Kec. Cengkareng',
+    '4': 'Jakmart Bambu Larangan'
+};
+
 // --- FORMAT DAFTAR PASARJAYA (5 baris) ---
 export const FORMAT_DAFTAR_PASARJAYA = [
-    '✅ *LOKASI: PASARJAYA*',
+    '✅ *LOKASI TERPILIH: PASARJAYA*',
     '',
     '📝 Kirim data dalam *5 BARIS*:',
-    '📍 _Tulis lokasi pengambilan di samping nama ya~_',
     '',
-    '1. Nama *(lokasi pengambilan)*',
+    '1. Nama',
     '2. Nomor Kartu KJP',
     '3. Nomor KTP',
     '4. Nomor KK',
@@ -46,7 +66,7 @@ export const FORMAT_DAFTAR_PASARJAYA = [
     '━━━━━━━━━━━━━━━━━━━━',
     '📌 *CONTOH:*',
     '',
-    'Agus *(Kedoya)*',
+    'Agus',
     'KJP 5049488500001234',
     'KTP 3171234567890123',
     'KK 3171098765432109',
