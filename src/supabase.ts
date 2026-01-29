@@ -167,89 +167,72 @@ export async function checkDuplicateForItem(
         })(),
     ]);
 
-    // EVALUASI HASIL (Prioritas 1 -> 4)
+    // EVALUASI HASIL (Aggregate All Errors)
+    const errorMessages: string[] = [];
+    let conflictFound = false;
+    let firstDupData: any = null; // Untuk mengisi original_data (sekadar representasi salah satu)
+
+    // Helper untuk ambil nama owner
+    // Jika sender_phone sama dengan current user, berarti dia double input sendiri
+    const getOwnerName = (dupData: any) => {
+        if ((dupData as any).sender_phone === senderPhone) {
+            return 'Anda sendiri';
+        }
+        // Jika beda orang, tampilkan namanya
+        return (dupData as any).nama ? (dupData as any).nama.toUpperCase() : 'ORANG LAIN';
+    };
 
     // 1. Name
     if (nameDup) {
-        const orig = nameDup;
-        const differentUser = (orig as any).sender_phone !== senderPhone;
-        const duplicateMsg = differentUser
-            ? 'Nama ini sudah didaftarkan oleh orang lain hari ini. Hubungi admin.'
-            : 'Nama sudah Anda daftarkan hari ini.';
-
-        return markDup({
-            kind: 'NAME',
-            safe_message: duplicateMsg,
-            original_data: {
-                nama: orig.nama || '',
-                no_kjp: orig.no_kjp || '',
-                no_ktp: orig.no_ktp || '',
-                no_kk: orig.no_kk || '',
-            },
-        });
+        conflictFound = true;
+        firstDupData = firstDupData || nameDup;
+        const owner = getOwnerName(nameDup);
+        errorMessages.push(`• 👤 Nama sudah terdaftar atas nama *${owner}*`);
     }
 
     // 2. KJP
     if (kjpDup) {
-        const orig = kjpDup;
-        const differentUser = (orig as any).sender_phone !== senderPhone;
-        const duplicateMsg = differentUser
-            ? 'Nomor Kartu ini sudah didaftarkan oleh pengguna lain hari ini. Hubungi admin.'
-            : 'No Kartu sudah Anda daftarkan hari ini.';
-
-        return markDup({
-            kind: 'NO_KJP',
-            safe_message: duplicateMsg,
-            original_data: {
-                nama: orig.nama || '',
-                no_kjp: orig.no_kjp || '',
-                no_ktp: orig.no_ktp || '',
-                no_kk: orig.no_kk || '',
-            },
-        });
+        conflictFound = true;
+        firstDupData = firstDupData || kjpDup;
+        const owner = getOwnerName(kjpDup);
+        errorMessages.push(`• 💳 No KJP sudah terdaftar atas nama *${owner}*`);
     }
 
     // 3. KTP
     if (ktpDup) {
-        const orig = ktpDup;
-        const differentUser = (orig as any).sender_phone !== senderPhone;
-        const duplicateMsg = differentUser
-            ? 'Nomor KTP ini sudah didaftarkan oleh pengguna lain hari ini. Hubungi admin.'
-            : 'No KTP sudah Anda daftarkan hari ini.';
-
-        return markDup({
-            kind: 'NO_KTP',
-            safe_message: duplicateMsg,
-            original_data: {
-                nama: orig.nama || '',
-                no_kjp: orig.no_kjp || '',
-                no_ktp: orig.no_ktp || '',
-                no_kk: orig.no_kk || '',
-            },
-        });
+        conflictFound = true;
+        firstDupData = firstDupData || ktpDup;
+        const owner = getOwnerName(ktpDup);
+        errorMessages.push(`• 🪪 No KTP sudah terdaftar atas nama *${owner}*`);
     }
 
     // 4. KK
     if (kkDup) {
-        const existingSender = kkDup.sender_phone;
+        // Khusus KK, kita hanya anggap duplikat jika PUNYA ORANG LAIN
+        // (Satu keluarga boleh pakai KK sama, tapi kalau beda sender_phone berarti aneh/double input keluarga)
+        const existingSender = (kkDup as any).sender_phone;
         if (existingSender !== senderPhone) {
-            const firstSeenAt = kkDup.received_at ? String(kkDup.received_at) : null;
-            const timeWib = firstSeenAt ? getWibTimeHHmm(new Date(firstSeenAt)) : '??.??';
-            const orig = kkDup;
-
-            return markDup({
-                kind: 'NO_KK_OTHER',
-                first_seen_at: firstSeenAt,
-                first_seen_wib_time: timeWib,
-                safe_message: `No KK sudah digunakan hari ini oleh nomor WA lain pada jam ${timeWib} WIB.`,
-                original_data: {
-                    nama: orig.nama || '',
-                    no_kjp: orig.no_kjp || '',
-                    no_ktp: orig.no_ktp || '',
-                    no_kk: orig.no_kk || '',
-                },
-            });
+            conflictFound = true;
+            firstDupData = firstDupData || kkDup;
+            const owner = getOwnerName(kkDup);
+            errorMessages.push(`• 🏠 No KK sudah digunakan oleh *${owner}*`);
         }
+    }
+
+    if (conflictFound) {
+        // Gabungkan semua pesan error
+        const finalMsg = errorMessages.join('\n');
+
+        return markDup({
+            kind: 'NAME', // Default kind, tidak terlalu ngefek karena kita pakai safe_message
+            safe_message: finalMsg,
+            original_data: firstDupData ? {
+                nama: firstDupData.nama || '',
+                no_kjp: firstDupData.no_kjp || '',
+                no_ktp: firstDupData.no_ktp || '',
+                no_kk: firstDupData.no_kk || '',
+            } : null,
+        });
     }
 
     return item;

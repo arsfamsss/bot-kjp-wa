@@ -179,7 +179,10 @@ export function buildReplyForInvalidDetails(
         lines.push('- Tidak ada data gagal.');
     } else {
         for (const item of detailItems) {
-            lines.push(`- ${item.nama} → ${item.reason}`);
+            lines.push(`❌ *${item.nama}*`);
+            // reason sudah berupa multiline string dari logic supabase
+            lines.push(item.reason);
+            lines.push(''); // Jarak antar item
         }
     }
     return lines.join('\n');
