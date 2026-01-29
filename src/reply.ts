@@ -143,28 +143,49 @@ export function buildReplyForNewData(
             lines.push(`   → Kurang baris (harus ${expectedLines} baris/orang)`);
         }
 
-        // Contoh format yang benar - sesuai lokasi (lebih simpel)
-        lines.push('');
-        lines.push('━━━━━━━━━━━━━━━━━━━━');
-        lines.push('💡 *Contoh yang bener:*');
+        // CONTOH FORMAT YANG BENAR:
+        // HANYA TAMPILKAN JIKA:
+        // 1. Ada error FORMAT (bukan cuma duplikat)
+        // 2. ATAU ada Data tidak lengkap (remainder)
+        const hasFormatError = log.items.some(i => i.status === 'SKIP_FORMAT');
+        const showExample = hasFormatError || hasRemainder;
 
-        if (isPasarjaya) {
-            lines.push('Siti Aminah');
-            lines.push('5049488500001234');
-            lines.push('3171234567890123');
-            lines.push('3171098765432109');
-            lines.push('15-08-1975');
-        } else {
-            lines.push('Siti Aminah');
-            lines.push('5049488500001234');
-            lines.push('3171234567890123');
-            lines.push('3171098765432109');
+        if (showExample) {
+            lines.push('');
+            lines.push('━━━━━━━━━━━━━━━━━━━━');
+            lines.push('💡 *Contoh yang bener:*');
+
+            if (isPasarjaya) {
+                lines.push('Siti Aminah');
+                lines.push('5049488500001234');
+                lines.push('3171234567890123');
+                lines.push('3171098765432109');
+                lines.push('15-08-1975');
+            } else {
+                lines.push('Siti Aminah');
+                lines.push('5049488500001234');
+                lines.push('3171234567890123');
+                lines.push('3171098765432109');
+            }
+            lines.push('━━━━━━━━━━━━━━━━━━━━');
         }
-        lines.push('━━━━━━━━━━━━━━━━━━━━');
     }
 
     lines.push('');
-    lines.push('Ketik *CEK* buat lihat data 👀');
+    lines.push('');
+
+    // Cek apakah ada duplikat dengan ORANG LAIN (pesan tidak mengandung 'Anda sendiri')
+    const hasConflictWithOther = log.items.some(i =>
+        i.status === 'SKIP_DUPLICATE' &&
+        i.duplicate_info?.safe_message &&
+        !i.duplicate_info.safe_message.includes('Anda sendiri')
+    );
+
+    if (hasConflictWithOther) {
+        lines.push('Silahkan Hub Admin 📞 08568511113');
+    } else {
+        lines.push('Ketik *CEK* buat lihat data 👀');
+    }
 
     return lines.join('\n');
 }

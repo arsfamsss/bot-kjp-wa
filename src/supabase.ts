@@ -175,10 +175,8 @@ export async function checkDuplicateForItem(
     // Helper untuk ambil nama owner
     // Jika sender_phone sama dengan current user, berarti dia double input sendiri
     const getOwnerName = (dupData: any) => {
-        if ((dupData as any).sender_phone === senderPhone) {
-            return 'Anda sendiri';
-        }
-        // Jika beda orang, tampilkan namanya
+        // PERMINTAAN USER: Selalu tampilkan nama pemilik data, jangan "Anda sendiri"
+        // Agar user tahu data ini tabrakan dengan siapa (walaupun inputan dia sebelumnya)
         return (dupData as any).nama ? (dupData as any).nama.toUpperCase() : 'ORANG LAIN';
     };
 
