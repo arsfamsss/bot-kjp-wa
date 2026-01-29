@@ -110,7 +110,7 @@ export function buildReplyForNewData(
             lines.push(`❌ *${namaLabel}*`);
 
             if (item.status === 'SKIP_DUPLICATE') {
-                lines.push(`   → Sudah terdaftar hari ini`);
+                lines.push(item.duplicate_info?.safe_message ?? '   → Sudah terdaftar hari ini');
             } else if (item.status === 'SKIP_FORMAT') {
                 item.errors.forEach((err) => {
                     let friendlyMsg = '';
