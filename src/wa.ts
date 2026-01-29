@@ -863,9 +863,13 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                     }
                 }
 
+                // Prioritas Cek Admin Flow agar tidak tertabrak menu user
+                const currentAdminFlow = adminFlowByPhone.get(senderPhone) ?? 'NONE';
+
                 // MENU HANDLER: 3 (HAPUS)
                 // Kita pindahkan ke sini agar tidak "kalah" sama logic lain
-                if (normalized === '3' && currentUserFlow === 'NONE') {
+                // FIX: Tambah syarat currentAdminFlow === 'NONE'
+                if (normalized === '3' && currentUserFlow === 'NONE' && currentAdminFlow === 'NONE') {
                     // 1. Ambil data hari ini untuk ditampilkan
                     const { validItems, validCount } = await getTodayRecapForSender(senderPhone, processingDayKey);
 
@@ -906,7 +910,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                 const dmyExample = processingDayKey.split('-').reverse().join('-');
 
                 const getPastKey = (daysBack: number) => shiftIsoDate(processingDayKey, -daysBack);
-                const currentAdminFlow = adminFlowByPhone.get(senderPhone) ?? 'NONE';
+
 
                 const openAdminMenu = async () => {
                     adminFlowByPhone.set(senderPhone, 'MENU');
