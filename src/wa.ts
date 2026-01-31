@@ -53,7 +53,7 @@ import {
     renderCloseMessage,
     clearBotSettingsCache,
 } from './supabase';
-import { getProcessingDayKey, getWibIsoDate, shiftIsoDate, isSystemClosed } from './time';
+import { getProcessingDayKey, getWibIsoDate, shiftIsoDate, isSystemClosed, getWibParts } from './time';
 import { parseFlexibleDate, looksLikeDate } from './utils/dateParser';
 import {
     MENU_MESSAGE,
@@ -80,6 +80,7 @@ import {
     BroadcastDraft,
     userFlowByPhone,
     userLocationChoice, // IMPORTED
+    userSpecificLocationChoice, // NEW - Lokasi spesifik (contoh: "PASARJAYA - Jakgrosir Kedoya")
     adminFlowByPhone,
     pendingDelete,
     broadcastDraftMap,
@@ -927,6 +928,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                         // PILIHAN 1-4 (VALID)
                         const lokasiName = PASARJAYA_MAPPING[normalized];
                         userLocationChoice.set(senderPhone, 'PASARJAYA');
+                        userSpecificLocationChoice.set(senderPhone, `PASARJAYA - ${lokasiName}`); // STORE SPECIFIC LOCATION
 
                         // CEK PENDING DATA
                         const pendingData = pendingRegistrationData.get(senderPhone);
@@ -987,6 +989,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                         }
                     } else {
                         userLocationChoice.set(senderPhone, 'PASARJAYA');
+                        userSpecificLocationChoice.set(senderPhone, `PASARJAYA - ${lokasiName}`); // STORE SPECIFIC LOCATION
 
                         // CEK PENDING DATA (Copy logic from above/Shared Logic ideally)
                         const pendingData = pendingRegistrationData.get(senderPhone);
@@ -1401,8 +1404,10 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                 `📌 Saat ini tutup jam: *${currentTimeStr}*`,
                                 '',
                                 'Pilih metode pengaturan:',
-                                '1️⃣ Input Manual (Wizard)',
-                                '2️⃣ Tutup Sekarang (Set Start=Now)',
+                                '1️⃣ Input Manual (Harian)',
+                                '2️⃣ Tutup Sekarang (Darurat)',
+                                '3️⃣ Tutup Jangka Panjang (Libur)',
+                                '4️⃣ Buka Sekarang (Force Open)',
                                 '',
                                 '_Ketik 0 untuk batal._'
                             ].join('\n');
@@ -1989,28 +1994,138 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             adminFlowByPhone.set(senderPhone, 'MENU');
                         }
                     } else if (currentAdminFlow === 'SETTING_CLOSE_TIME_MENU') {
-                        // SUB-MENU JAM TUTUP
+                        // SUB-MENU JAM TUTUP (UPDATED)
                         if (normalized === '1') {
-                            // 1. Manual -> Wizard Start
+                            // 1. Manual -> Wizard Start (Harian)
                             adminFlowByPhone.set(senderPhone, 'SETTING_CLOSE_TIME_START');
-                            replyText = '⏰ *INPUT MANUAL*\n\nSilakan masukkan jam mulai tutup (Format HH:mm).\nContoh: *04:00*\n\n_Ketik 0 untuk batal._';
+                            replyText = '⏰ *INPUT JAM TUTUP HARIAN*\n\nSilakan masukkan jam mulai tutup (Format HH:mm).\nContoh: *04:00*\n\n_Ketik 0 untuk batal._';
                         } else if (normalized === '2') {
-                            // 2. Tutup Sekarang -> Set Start=Now, Ask End
-                            const now = new Date();
-                            // Adjust timezone to WIB manually if needed, or rely on system time (User said "skrg 20:30", server seems local). 
-                            // Safety: use getWibIsoDate/DateParser utils or simple formatting if server is WIB.
-                            // Assuming server time is correct or we use simple format:
-                            const h = String(now.getHours()).padStart(2, '0');
-                            const m = String(now.getMinutes()).padStart(2, '0');
-                            const timeNow = `${h}:${m}`;
+                            // 2. Tutup Sekarang (Harian/Force)
+                            // FIX TIMEZONE: Use getWibParts
+                            const nowParts = getWibParts(new Date());
+                            const timeNow = `${String(nowParts.hour).padStart(2, '0')}:${String(nowParts.minute).padStart(2, '0')}`;
 
-                            // Simpan start time di broadcastDraftMap (hacky but efficient temp storage)
-                            broadcastDraftMap.set(senderPhone, { targets: [], message: timeNow }); // Store START_TIME in 'message'
+                            // Simpan start time di broadcastDraftMap (temp)
+                            broadcastDraftMap.set(senderPhone, { targets: [], message: timeNow }); // Store START_TIME
 
                             adminFlowByPhone.set(senderPhone, 'SETTING_CLOSE_TIME_END');
-                            replyText = `⏰ *TUTUP SEKARANG (${timeNow})*\n\nOke, bot akan tutup mulai jam ${timeNow}.\n\nSekarang, jam berapa bot akan *BUKA KEMBALI*? (Format HH:mm)\nContoh: *08:00*\n\n_Ketik 0 untuk batal._`;
+                            replyText = `⏰ *TUTUP SEKARANG (${timeNow})*\n\nOke, bot akan tutup mulai jam ${timeNow}.\n\nSekarang, jam berapa bot akan *BUKA KEMBALI* (besok/nanti)? (Format HH:mm)\nContoh: *08:00*\n\n_Ketik 0 untuk batal._`;
+                        } else if (normalized === '3') {
+                            // 3. Tutup Jangka Panjang (LIBUR) -- NEW FEATURE
+                            adminFlowByPhone.set(senderPhone, 'SETTING_CLOSE_LONG_TERM');
+                            replyText = [
+                                '🗓️ *TUTUP JANGKA PANJANG (LIBUR)*',
+                                '',
+                                'Bot akan tutup mulai *SEKARANG*.',
+                                'Silakan masukkan *Tanggal Buka Kembali*.',
+                                '',
+                                'Format yang diterima:',
+                                '• Jumlah Hari (contoh: *3* artinya libur 3 hari)',
+                                '• Tanggal (contoh: *05-02-2026*)',
+                                '',
+                                '_Ketik 0 untuk batal._'
+                            ].join('\n');
+                        } else if (normalized === '4') {
+                            // 4. BUKA SEKARANG (Force Open / Cancel Maintenance)
+                            // Matikan mode libur & Reset jam tutup harian ke 00:00 (Tidak ada maintenance)
+                            const success = await updateBotSettings({
+                                manual_close_start: null,
+                                manual_close_end: null,
+                                close_hour_start: 0,
+                                close_minute_start: 0,
+                                close_hour_end: 0,
+                                close_minute_end: 0
+                            });
+
+                            if (success) {
+                                clearBotSettingsCache();
+                                replyText = `✅ *BOT BERHASIL DIBUKA*\n\nSemua mode tutup (Harian/Libur) telah dinonaktifkan.\nBot sekarang *ONLINE 24 JAM*.\n\n_Untuk mengaktifkan maintenance harian lagi, pilih menu 1._`;
+                            } else {
+                                replyText = '❌ Gagal update setting.';
+                            }
+                            adminFlowByPhone.set(senderPhone, 'MENU');
                         } else {
-                            replyText = '⚠️ Pilih 1 atau 2. Ketik 0 untuk batal.';
+                            replyText = '⚠️ Pilih 1, 2, 3, atau 4. Ketik 0 untuk batal.';
+                        }
+
+                    } else if (currentAdminFlow === 'SETTING_CLOSE_LONG_TERM') {
+                        // Handler Input Tutup Jangka Panjang
+                        const input = rawTrim;
+
+                        // Cek apakah angka (Jumlah Hari)
+                        if (/^\d+$/.test(input)) {
+                            const days = parseInt(input);
+                            if (days > 0 && days < 365) {
+                                // Hitung tanggal buka = NOW + Days
+                                const now = new Date();
+                                const endDate = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+                                // Set jam buka ke 06:00 WIB (Default start day) agar rapi? Atau jam saat ini?
+                                // Biasanya libur selesai pagi hari. Kita set ke jam 00:00 atau jam 06:00?
+                                // Mari set ke jam yang sama saat ini, atau default ke 00:00.
+                                // Untuk keamanan, kita set ke jam saat ini.
+
+                                const startIso = now.toISOString();
+                                const endIso = endDate.toISOString();
+
+                                const success = await updateBotSettings({
+                                    manual_close_start: startIso,
+                                    manual_close_end: endIso
+                                });
+
+                                if (success) {
+                                    clearBotSettingsCache();
+                                    replyText = `✅ *MODA LIBUR AKTIF*\n\nBot tutup selama *${days} hari*.\nBuka kembali: *${endDate.toLocaleDateString('id-ID')}*`;
+                                } else {
+                                    replyText = '❌ Gagal menyimpan pengaturan.';
+                                }
+                                adminFlowByPhone.set(senderPhone, 'MENU');
+                            } else {
+                                replyText = '⚠️ Jumlah hari tidak wajar. Masukkan 1-30. Ketik 0 batal.';
+                            }
+                        }
+                        // Cek apakah Tanggal (DD-MM-YYYY)
+                        else {
+                            const iso = parseFlexibleDate(input); // returns YYYY-MM-DD
+                            if (iso) {
+                                // Set target buka jam 00:00 atau jam 06:00 pada tanggal tersebut?
+                                // ISO string from dateParser usually is YYYY-MM-DD.
+                                // Let's make it YYYY-MM-DDT06:00:00 (Pagi)
+                                const endIso = `${iso}T06:00:00.000Z`; // UTC? No wait.
+                                // We need proper ISO string handling.
+                                // parseFlexibleDate usage:
+                                // if input 05-02-2026 -> 2026-02-05
+
+                                // Create Date Object from that
+                                const startDate = new Date();
+                                const targetDate = new Date(iso); // This defaults to UTC 00:00 usually
+                                targetDate.setHours(6, 0, 0, 0); // Set to 06:00 Local/Server?
+
+                                // Validasi: Tanggal harus masa depan
+                                if (targetDate <= startDate) {
+                                    replyText = '⚠️ Tanggal harus di masa depan.';
+                                } else {
+                                    const success = await updateBotSettings({
+                                        manual_close_start: startDate.toISOString(),
+                                        manual_close_end: targetDate.toISOString()
+                                    });
+
+                                    if (success) {
+                                        clearBotSettingsCache();
+                                        const dateDisplay = targetDate.toLocaleDateString('id-ID');
+                                        replyText = `✅ *MODA LIBUR AKTIF*\n\nBot tutup sampai tanggal *${dateDisplay}* (Pukul 06:00).`;
+                                    } else {
+                                        replyText = '❌ Gagal menyimpan.';
+                                    }
+                                    adminFlowByPhone.set(senderPhone, 'MENU');
+                                }
+                            } else {
+                                if (input === '0') {
+                                    replyText = '✅ Batal.';
+                                    adminFlowByPhone.set(senderPhone, 'MENU');
+                                } else {
+                                    replyText = '⚠️ Format tidak dikenali. Masukkan jumlah hari (3) atau tanggal (25-02-2026).';
+                                }
+                            }
                         }
 
                     } else if (currentAdminFlow === 'SETTING_CLOSE_TIME_START') {
@@ -2053,18 +2168,20 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                 const hStart = parseInt(hStartStr);
                                 const mStart = parseInt(mStartStr);
 
-                                // Save Settings
+                                // Saat set harian, matikan Manual Override (Libur) jika ada
                                 const success = await updateBotSettings({
                                     close_hour_start: hStart,
                                     close_minute_start: mStart,
                                     close_hour_end: hEnd,
-                                    close_minute_end: mEnd
+                                    close_minute_end: mEnd,
+                                    manual_close_start: null, // Reset Long Term
+                                    manual_close_end: null
                                 });
 
                                 if (success) {
                                     clearBotSettingsCache();
                                     const timeRange = `${startTimeStr} s.d ${String(hEnd).padStart(2, '0')}:${String(mEnd).padStart(2, '0')} WIB`;
-                                    replyText = `✅ *JAM TUTUP BERHASIL DIUBAH*\n\nBot akan tutup pada:\n🕒 *${timeRange}*\n\nUser tidak bisa input data pada jam tersebut.`;
+                                    replyText = `✅ *JAM TUTUP HARIAN BERHASIL DIUBAH*\n\nBot akan tutup pada:\n🕒 *${timeRange}*\n\nUser tidak bisa input data pada jam tersebut.`;
                                 } else {
                                     replyText = '❌ Gagal menyimpan pengaturan.';
                                 }
@@ -2142,9 +2259,10 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                 // --- CUSTOMER MENU ---
                 if (normalized === '1' || normalized.includes('DAFTAR')) {
                     // New Flow: Ask for Location -> Trigger Menu Bertingkat if 1 chosen
-                    // Check pending data? No, this is fresh menu.
-                    // Just Reset Pending to be safe
+                    // RESET LOCATION STATE -> User harus pilih lokasi baru setiap sesi baru
                     pendingRegistrationData.delete(senderPhone);
+                    userLocationChoice.delete(senderPhone);
+                    userSpecificLocationChoice.delete(senderPhone);
 
                     userFlowByPhone.set(senderPhone, 'SELECT_LOCATION');
                     replyText = FORMAT_DAFTAR_MESSAGE;
@@ -2399,6 +2517,9 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                     const minLines = finalContext === 'PASARJAYA' ? 5 : 4;
 
                     if (lines.length >= minLines) {
+                        // Ambil lokasi spesifik dari session sebelumnya (jika ada)
+                        const storedSpecificLocation = userSpecificLocationChoice.get(senderPhone);
+
                         const logJson = await processRawMessageToLogJson({
                             text: messageText,
                             senderPhone,
@@ -2406,7 +2527,8 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             receivedAt,
                             tanggal: tanggalWib,
                             processingDayKey,
-                            locationContext: finalContext // PASS CONTEXT
+                            locationContext: finalContext, // PASS CONTEXT
+                            specificLocation: storedSpecificLocation // PASS STORED SPECIFIC LOCATION
                         });
 
                         // INJECT SENDER NAME (untuk disimpan di tabe data_harian)

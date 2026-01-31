@@ -32,7 +32,8 @@ export type AdminFlowState =
     | 'SETTING_CLOSE_TIME_START'
     | 'SETTING_CLOSE_TIME_END'
     | 'SETTING_CLOSE_MSG'
-    | 'SETTING_CLOSE_MSG_MENU';
+    | 'SETTING_CLOSE_MSG_MENU'
+    | 'SETTING_CLOSE_LONG_TERM';
 
 // Draft broadcast untuk penjadwalan/preview
 export type BroadcastDraft = {
@@ -48,6 +49,9 @@ export const userFlowByPhone = new Map<string, UserFlowState>();
 
 // Pilihan lokasi user (Pasarjaya vs Dharmajaya)
 export const userLocationChoice = new Map<string, 'PASARJAYA' | 'DHARMAJAYA'>();
+
+// Pilihan lokasi spesifik user (contoh: "PASARJAYA - Jakgrosir Kedoya")
+export const userSpecificLocationChoice = new Map<string, string>();
 
 // State per pengirim untuk alur menu Admin
 export const adminFlowByPhone = new Map<string, AdminFlowState>();

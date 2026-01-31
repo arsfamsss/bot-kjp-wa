@@ -42,7 +42,22 @@ export function isSystemClosed(date: Date, settings?: {
     close_minute_start: number;
     close_hour_end: number;
     close_minute_end: number;
+    manual_close_start?: string | null;
+    manual_close_end?: string | null;
 }): boolean {
+    // 1. CEK TUTUP JANGKA PANJANG (MANUAL OVERRIDE)
+    if (settings?.manual_close_start && settings?.manual_close_end) {
+        const start = new Date(settings.manual_close_start).getTime();
+        const end = new Date(settings.manual_close_end).getTime();
+        const now = date.getTime();
+
+        // Jika sekarang berada di rentang tutup manual
+        if (now >= start && now <= end) {
+            return true;
+        }
+    }
+
+    // 2. CEK JAM TUTUP HARIAN
     const p = getWibParts(date);
     const minutes = p.hour * 60 + p.minute;
 
@@ -54,7 +69,20 @@ export function isSystemClosed(date: Date, settings?: {
         ? settings.close_hour_end * 60 + settings.close_minute_end
         : 6 * 60 + 0;    // 06:00
 
-    return minutes >= startClose && minutes <= endClose;
+    // LOGIKA HARIAN:
+    // Jika Start == End (misal 00:00 - 00:00), anggap fitur matikan (Tidak pernah tutup)
+    if (startClose === endClose) {
+        return false;
+    }
+
+    if (startClose < endClose) {
+        // Normal: Tutup 09:00 s/d 12:00
+        return minutes >= startClose && minutes <= endClose;
+    } else {
+        // Lintas Hari: Tutup 23:00 s/d 04:00
+        // Artinya: Tutup jika (>= 23:00) ATAU (<= 04:00)
+        return minutes >= startClose || minutes <= endClose;
+    }
 }
 
 /**

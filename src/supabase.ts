@@ -787,6 +787,8 @@ export interface BotSettings {
     close_hour_end: number;      // Jam selesai tutup (0-23)
     close_minute_end: number;    // Menit selesai tutup (0-59)
     close_message_template: string; // Template pesan saat bot tutup
+    manual_close_start?: string | null; // ISO Date String (Null if not active)
+    manual_close_end?: string | null;   // ISO Date String
 }
 
 // Default settings jika belum ada di database
@@ -804,7 +806,9 @@ const DEFAULT_BOT_SETTINGS: BotSettings = {
 📌 Data yang Anda kirim sekarang *tidak akan diproses*.
 Silakan kirim ulang setelah jam buka untuk pendaftaran besok.
 
-_Terima kasih atas pengertiannya._ 🙏`
+_Terima kasih atas pengertiannya._ 🙏`,
+    manual_close_start: null,
+    manual_close_end: null
 };
 
 // Cache untuk settings (agar tidak query terus)
@@ -837,6 +841,8 @@ export async function getBotSettings(): Promise<BotSettings> {
             close_hour_end: data.close_hour_end ?? DEFAULT_BOT_SETTINGS.close_hour_end,
             close_minute_end: data.close_minute_end ?? DEFAULT_BOT_SETTINGS.close_minute_end,
             close_message_template: data.close_message_template ?? DEFAULT_BOT_SETTINGS.close_message_template,
+            manual_close_start: data.manual_close_start || null,
+            manual_close_end: data.manual_close_end || null
         };
 
         return botSettingsCache;
@@ -884,11 +890,46 @@ export function formatCloseTimeString(settings: BotSettings): string {
 
 // Helper untuk mendapatkan string jam buka
 export function formatOpenTimeString(settings: BotSettings): string {
-    return `${String(settings.close_hour_end).padStart(2, '0')}.${String(settings.close_minute_end + 1).padStart(2, '0')}`;
+    // FIX: Menit 60 Bug
+    // Logic lama: settings.close_minute_end + 1
+    // Logic baru: gunakan Date object atau aritmatika sederhana
+    let m = settings.close_minute_end + 1;
+    let h = settings.close_hour_end;
+
+    if (m >= 60) {
+        m = 0;
+        h = (h + 1) % 24;
+    }
+
+    return `${String(h).padStart(2, '0')}.${String(m).padStart(2, '0')}`;
 }
 
 // Render template pesan tutup dengan placeholder
 export function renderCloseMessage(settings: BotSettings): string {
+    // Cek apakah sedang dalam MODE TUTUP PANJANG (Manual Override)?
+    // Jika manual_close_end masih berlaku (di masa depan), tampilkan pesan khusus
+    if (settings.manual_close_start && settings.manual_close_end) {
+        const now = new Date(); // Server Time (Asumsi WIB atau UTC). Better check with proper timezone if possible.
+        const end = new Date(settings.manual_close_end);
+
+        // Simple check: if valid dates
+        if (!isNaN(end.getTime())) {
+            // Format End Date: DD MMM YYYY Jam HH:mm
+            // Gunakan Intl untuk WIB
+            const dateStr = end.toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', day: '2-digit', month: 'long', year: 'numeric' });
+            const timeStr = end.toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', hour12: false }).replace(':', '.');
+
+            const jamBuka = `${dateStr} Pukul ${timeStr} WIB`;
+
+            // Custom Message for Long Term Close
+            return settings.close_message_template
+                .replace(/{JAM_TUTUP}/g, 'LIBUR SEMENTARA')
+                .replace(/{JAM_BUKA}/g, jamBuka)
+                .replace('(Maintenance Harian)', '(Sedang Libur/Tutup)');
+        }
+    }
+
+    // Default Harian
     const jamTutup = formatCloseTimeString(settings);
     const jamBuka = formatOpenTimeString(settings);
 
