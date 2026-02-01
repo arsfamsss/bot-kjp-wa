@@ -81,7 +81,7 @@ export function parseBlockToItem(lines: string[], index: number, processingDayKe
 
     // Set lokasi
     if (specificLocation) {
-        result.parsed.lokasi = specificLocation as any; // Allow string
+        result.parsed.lokasi = specificLocation;
     } else if (locationContext) {
         result.parsed.lokasi = locationContext;
     }
@@ -315,7 +315,7 @@ export async function processRawMessageToLogJson(params: {
     // We need to override it if specificLocation is present.
     if (specificLocation) {
         items.forEach(it => {
-            if (it.parsed) it.parsed.lokasi = specificLocation as any;
+            if (it.parsed) it.parsed.lokasi = specificLocation;
         });
     }
 

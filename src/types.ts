@@ -8,7 +8,7 @@ export interface ParsedFields {
     no_ktp: string;
     no_kk: string;
     tanggal_lahir?: string | null; // Format YYYY-MM-DD
-    lokasi?: 'PASARJAYA' | 'DHARMAJAYA'; // New Field
+    lokasi?: string; // Full location string: "PASARJAYA - Jakgrosir Kedoya" or "DHARMAJAYA"
 }
 
 export interface ItemError {

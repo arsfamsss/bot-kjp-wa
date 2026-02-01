@@ -581,15 +581,25 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                 // 1. Apakah ini terlihat seperti data pendaftaran (minimal 4 baris)?
                 const dataLines = parseRawMessageToLines(messageText);
 
+                // DEBUG: Trace Incoming Message & State
+                const currentSpecificLoc = userSpecificLocationChoice.get(senderPhone);
+                console.log(`[DEBUG] MSG from ${senderPhone} | Flow: ${currentUserFlow} | LocChoice: ${currentLocation} | SpecificLoc: ${currentSpecificLoc} | MsgShort: ${messageText.slice(0, 20).replace(/\n/g, ' ')}...`);
+
                 // Basic check: Minimal 4 baris
                 const potentialData = dataLines.length >= 4;
 
-                if (potentialData) {
+                // Skip validation block jika user sedang dalam flow yang butuh memilih sub-lokasi
+                // Biar handler flow yang proses data-nya
+                const skipDataValidation = (currentUserFlow as string) === 'SELECT_PASARJAYA_SUB' || (currentUserFlow as string) === 'INPUT_MANUAL_LOCATION';
+
+                if (potentialData && !skipDataValidation) {
                     const existingLocation = userLocationChoice.get(senderPhone);
 
 
                     // --- ATURAN 1: WAJIB PILIH LOKASI DULU ---
-                    if (!existingLocation) {
+                    // EXCEPTION: Jika user sedang dalam flow SELECT_PASARJAYA_SUB atau INPUT_MANUAL_LOCATION,
+                    // biarkan handler flow yang proses (jangan intercept di sini)
+                    if (!existingLocation && currentUserFlow !== 'SELECT_PASARJAYA_SUB' && currentUserFlow !== 'INPUT_MANUAL_LOCATION') {
                         // SIMPAN DATA SEMENTARA
                         pendingRegistrationData.set(senderPhone, messageText);
 
@@ -694,6 +704,9 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                         // Reset flow state agar tidak mengganggu
                         userFlowByPhone.set(senderPhone, 'NONE');
 
+                        // Ambil lokasi spesifik dari session (jika ada)
+                        const storedSpecificLocation = userSpecificLocationChoice.get(senderPhone);
+
                         const logJson = await processRawMessageToLogJson({
                             text: messageText,
                             senderPhone,
@@ -701,7 +714,8 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             receivedAt,
                             tanggal: tanggalWib,
                             processingDayKey,
-                            locationContext: existingLocation // MUST MATCH existingLocation
+                            locationContext: existingLocation, // MUST MATCH existingLocation
+                            specificLocation: storedSpecificLocation // Pass stored specific location
                         });
 
                         // INJECT SENDER NAME
@@ -929,6 +943,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                         const lokasiName = PASARJAYA_MAPPING[normalized];
                         userLocationChoice.set(senderPhone, 'PASARJAYA');
                         userSpecificLocationChoice.set(senderPhone, `PASARJAYA - ${lokasiName}`); // STORE SPECIFIC LOCATION
+                        console.log(`[DEBUG] SET Specific Location for ${senderPhone}: PASARJAYA - ${lokasiName}`);
 
                         // CEK PENDING DATA
                         const pendingData = pendingRegistrationData.get(senderPhone);
@@ -971,7 +986,30 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             replyText = FORMAT_DAFTAR_PASARJAYA;
                         }
                     } else {
-                        replyText = '⚠️ Pilihan salah. Ketik 1-5, atau 0 batal.';
+                        // Cek apakah user kirim data langsung (5+ baris) bukan pilihan angka
+                        const inputLines = parseRawMessageToLines(messageText);
+                        if (inputLines.length >= 5 && inputLines.length % 5 === 0) {
+                            // User kirim data Pasarjaya langsung, simpan pending dan tanya sub-lokasi lagi
+                            pendingRegistrationData.set(senderPhone, messageText);
+                            replyText = [
+                                '📍 *PILIH LOKASI PENGAMBILAN DULU*',
+                                '',
+                                '✅ Data Anda sudah tersimpan sementara.',
+                                'Silakan pilih lokasi pengambilannya:',
+                                '',
+                                '1. 🏭 Jakgrosir Kedoya',
+                                '2. 🏙️ Gerai Rusun Pesakih',
+                                '3. 🏪 Mini DC Kec. Cengkareng',
+                                '4. 🛒 Jakmart Bambu Larangan',
+                                '5. 📝 Lokasi Lain...',
+                                '',
+                                '_Ketik angka pilihanmu! (1-5)_',
+                                '_(Ketik 0 untuk batal)_'
+                            ].join('\n');
+                            // Flow tetap SELECT_PASARJAYA_SUB
+                        } else {
+                            replyText = '⚠️ Pilihan salah. Ketik 1-5, atau 0 batal.';
+                        }
                     }
                     if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
                     continue;
@@ -990,6 +1028,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                     } else {
                         userLocationChoice.set(senderPhone, 'PASARJAYA');
                         userSpecificLocationChoice.set(senderPhone, `PASARJAYA - ${lokasiName}`); // STORE SPECIFIC LOCATION
+                        console.log(`[DEBUG] SET Specific Location (Manual) for ${senderPhone}: PASARJAYA - ${lokasiName}`);
 
                         // CEK PENDING DATA (Copy logic from above/Shared Logic ideally)
                         const pendingData = pendingRegistrationData.get(senderPhone);
@@ -2263,6 +2302,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                     pendingRegistrationData.delete(senderPhone);
                     userLocationChoice.delete(senderPhone);
                     userSpecificLocationChoice.delete(senderPhone);
+                    console.log(`[DEBUG] DELETE Specific Location for ${senderPhone} (RESET MENU)`);
 
                     userFlowByPhone.set(senderPhone, 'SELECT_LOCATION');
                     replyText = FORMAT_DAFTAR_MESSAGE;
@@ -2519,6 +2559,31 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                     if (lines.length >= minLines) {
                         // Ambil lokasi spesifik dari session sebelumnya (jika ada)
                         const storedSpecificLocation = userSpecificLocationChoice.get(senderPhone);
+                        console.log(`[DEBUG] GET Specific Location for ${senderPhone}: ${storedSpecificLocation}`);
+
+                        // VALIDASI BARU: Jika PASARJAYA tapi belum pilih lokasi spesifik, minta pilih dulu
+                        if (finalContext === 'PASARJAYA' && !storedSpecificLocation) {
+                            // Simpan data pending agar tidak perlu kirim ulang
+                            pendingRegistrationData.set(senderPhone, messageText);
+                            userFlowByPhone.set(senderPhone, 'SELECT_PASARJAYA_SUB');
+                            await sock.sendMessage(remoteJid, {
+                                text: [
+                                    '📍 *PILIH LOKASI PENGAMBILAN DULU*',
+                                    '',
+                                    'Data Anda sudah terdeteksi format Pasarjaya (5 baris).',
+                                    'Tapi saya perlu tahu lokasi pengambilannya dimana?',
+                                    '',
+                                    '1. 🏭 Jakgrosir Kedoya',
+                                    '2. 🏙️ Gerai Rusun Pesakih',
+                                    '3. 🏪 Mini DC Kec. Cengkareng',
+                                    '4. 🛒 Jakmart Bambu Larangan',
+                                    '5. 📝 Lokasi Lain...',
+                                    '',
+                                    '_Ketik angka pilihanmu! (1-5)_'
+                                ].join('\n')
+                            });
+                            continue;
+                        }
 
                         const logJson = await processRawMessageToLogJson({
                             text: messageText,

@@ -8,18 +8,20 @@ export const generateKJPExcel = (data: any[]): Buffer => {
     // Map data to array of arrays
     const rows = data.map((item, index) => {
         // Logika Penentuan Lokasi:
-        // 1. Jika di database sudah ada kolom lokasi, pakai itu.
-        // 2. Jika tidak, cek apakah ada tanggal lahir?
-        //    - Ada Tgl Lahir = PASARJAYA KEDOYA
+        // 1. Jika di database sudah ada kolom lokasi dengan format spesifik, pakai itu.
+        //    Format: "PASARJAYA - Jakgrosir Kedoya" atau "DHARMAJAYA"
+        // 2. Jika tidak, atau format lama, cek apakah ada tanggal lahir?
+        //    - Ada Tgl Lahir = PASARJAYA
         //    - Tidak Ada Tgl Lahir = DHARMAJAYA DURI KOSAMBI
 
         let lokasiFinal = "DHARMAJAYA DURI KOSAMBI"; // Default
 
-        if (item.lokasi === 'PASARJAYA') {
-            lokasiFinal = "PASARJAYA";
+        if (item.lokasi && item.lokasi.startsWith('PASARJAYA')) {
+            // Gunakan lokasi spesifik dari database (mis: "PASARJAYA - Jakgrosir Kedoya")
+            lokasiFinal = item.lokasi;
         } else if (item.lokasi === 'DHARMAJAYA') {
             lokasiFinal = "DHARMAJAYA DURI KOSAMBI";
-        } else {
+        } else if (!item.lokasi) {
             // Fallback logic jika kolom lokasi kosong (data lama)
             if (item.tanggal_lahir && item.tanggal_lahir.length > 5) {
                 lokasiFinal = "PASARJAYA";

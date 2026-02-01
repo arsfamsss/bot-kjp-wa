@@ -302,20 +302,31 @@ export async function getGlobalRecap(
             });
         }
 
-        // Tampilkan Pasarjaya
+        // Tampilkan Pasarjaya - Dikelompokkan berdasarkan lokasi spesifik
         if (pasarjayaItems.length > 0) {
-            lines.push(`*PASARJAYA* : ${pasarjayaItems.length}`);
-            pasarjayaItems.forEach((item: any) => {
-                const itemKey = endKey ? ` (${String(item.processing_day_key).split('-').reverse().join('-')})` : '';
-                const tglLahir = item.tanggal_lahir ? formatDateDMY(item.tanggal_lahir) : '';
-                lines.push(`   ${globalIndex}. ${item.nama}${itemKey}`);
-                lines.push(`   KK  ${item.no_kk}`);
-                lines.push(`   KTP ${item.no_ktp}`);
-                lines.push(`   KJP ${item.no_kjp}`);
-                if (tglLahir) lines.push(`   ${tglLahir}`);
-                lines.push('');
-                globalIndex++;
-            });
+            // Group by specific location
+            const pasarjayaByLocation: Record<string, any[]> = {};
+            for (const item of pasarjayaItems) {
+                const locKey = item.lokasi || 'PASARJAYA';
+                if (!pasarjayaByLocation[locKey]) pasarjayaByLocation[locKey] = [];
+                pasarjayaByLocation[locKey].push(item);
+            }
+
+            // Tampilkan per lokasi spesifik
+            for (const [locName, locItems] of Object.entries(pasarjayaByLocation)) {
+                lines.push(`*${locName}* : ${locItems.length}`);
+                locItems.forEach((item: any) => {
+                    const itemKey = endKey ? ` (${String(item.processing_day_key).split('-').reverse().join('-')})` : '';
+                    const tglLahir = item.tanggal_lahir ? formatDateDMY(item.tanggal_lahir) : '';
+                    lines.push(`   ${globalIndex}. ${item.nama}${itemKey}`);
+                    lines.push(`   KK  ${item.no_kk}`);
+                    lines.push(`   KTP ${item.no_ktp}`);
+                    lines.push(`   KJP ${item.no_kjp}`);
+                    if (tglLahir) lines.push(`   ${tglLahir}`);
+                    lines.push('');
+                    globalIndex++;
+                });
+            }
         }
     });
 
@@ -441,42 +452,58 @@ export async function generateExportData(
         }
     }
 
-    // === GERAI PASARJAYA ===
+    // === GERAI PASARJAYA - Dikelompokkan per Lokasi Spesifik ===
     if (Object.keys(pasarjayaBySender).length > 0) {
-        txtRows.push('*Gerai PASARJAYA*');
-        txtRows.push('');
+        // Pertama, kita kelompokkan semua data Pasarjaya berdasarkan lokasi spesifik
+        const pasarjayaByLocation: Record<string, Record<string, any[]>> = {};
 
-        let senderIdx = 1;
-        // SORTING BY NAME
-        const sortedPhones = Object.keys(pasarjayaBySender).sort((a, b) => {
-            const nameA = getSenderName(a).toUpperCase();
-            const nameB = getSenderName(b).toUpperCase();
-            return nameA.localeCompare(nameB);
-        });
+        for (const [phone, items] of Object.entries(pasarjayaBySender)) {
+            for (const item of items) {
+                const locKey = item.lokasi || 'PASARJAYA';
+                if (!pasarjayaByLocation[locKey]) pasarjayaByLocation[locKey] = {};
+                if (!pasarjayaByLocation[locKey][phone]) pasarjayaByLocation[locKey][phone] = [];
+                pasarjayaByLocation[locKey][phone].push(item);
+            }
+        }
 
-        for (const phone of sortedPhones) {
-            const items = pasarjayaBySender[phone];
-            const senderName = getSenderName(phone);
-
-            txtRows.push(`👤 *PENGIRIM ${senderIdx}: ${senderName}*`);
-            txtRows.push(`📱 WA: ${phone}`);
-            txtRows.push(`📥 Jumlah Data: ${items.length}`);
+        // Tampilkan per lokasi spesifik
+        for (const [locName, senderMap] of Object.entries(pasarjayaByLocation)) {
+            // Hitung total items di lokasi ini
+            const totalLocItems = Object.values(senderMap).reduce((sum, arr) => sum + arr.length, 0);
+            txtRows.push(`*Gerai ${locName}*`);
             txtRows.push('');
 
-            items.forEach((item: any) => {
-                const tglLahir = item.tanggal_lahir ? formatDateDMY(item.tanggal_lahir) : '';
-                txtRows.push(`${senderName} (${item.nama})`);
-                txtRows.push(`KJP ${item.no_kjp}`);
-                txtRows.push(`KTP ${item.no_ktp}`);
-                txtRows.push(`KK ${item.no_kk}`);
-                if (tglLahir) txtRows.push(`${tglLahir}`);
-                if (tglLahir) txtRows.push(`${tglLahir}`);
-                // LINE 6: Lokasi
-                txtRows.push(`${item.lokasi || 'PASARJAYA'}`);
-                txtRows.push('');
+            let senderIdx = 1;
+            // SORTING BY NAME
+            const sortedPhones = Object.keys(senderMap).sort((a, b) => {
+                const nameA = getSenderName(a).toUpperCase();
+                const nameB = getSenderName(b).toUpperCase();
+                return nameA.localeCompare(nameB);
             });
 
-            senderIdx++;
+            for (const phone of sortedPhones) {
+                const items = senderMap[phone];
+                const senderName = getSenderName(phone);
+
+                txtRows.push(`👤 *PENGIRIM ${senderIdx}: ${senderName}*`);
+                txtRows.push(`📱 WA: ${phone}`);
+                txtRows.push(`📥 Jumlah Data: ${items.length}`);
+                txtRows.push('');
+
+                items.forEach((item: any) => {
+                    const tglLahir = item.tanggal_lahir ? formatDateDMY(item.tanggal_lahir) : '';
+                    txtRows.push(`${senderName} (${item.nama})`);
+                    txtRows.push(`KJP ${item.no_kjp}`);
+                    txtRows.push(`KTP ${item.no_ktp}`);
+                    txtRows.push(`KK ${item.no_kk}`);
+                    if (tglLahir) txtRows.push(`${tglLahir}`);
+                    // LINE 6: Lokasi spesifik
+                    txtRows.push(`${item.lokasi || 'PASARJAYA'}`);
+                    txtRows.push('');
+                });
+
+                senderIdx++;
+            }
         }
     }
 
