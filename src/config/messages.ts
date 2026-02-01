@@ -12,9 +12,10 @@ export const MENU_MESSAGE = [
     '1️⃣ *DAFTAR* → Kirim data antrean',
     '2️⃣ *CEK* → Lihat data saya',
     '3️⃣ *HAPUS* → Hapus data',
-    '4️⃣ *BANTUAN* → Tanya-tanya',
+    '4️⃣ *EDIT* → Ganti Data Salah',
+    '5️⃣ *BANTUAN* → Tanya-tanya',
     '',
-    'Ketik angkanya ya~ (1/2/3/4) 😊',
+    'Ketik angkanya ya~ (1-5) 😊',
 ].join('\n');
 
 // --- FORMAT DAFTAR (Dipanggil saat user ketik 1) ---
@@ -131,6 +132,9 @@ export const FAQ_MESSAGE = [
     '',
     '*T: Cara hapus data?*',
     'J: Ketik *HAPUS 1* atau *HAPUS 1,2,3*',
+    '',
+    '*T: Data salah input?*',
+    'J: Ketik *EDIT* untuk perbaiki',
     '',
     '*T: Kapan bisa ambil?*',
     'J: Besok (H+1 setelah daftar)',

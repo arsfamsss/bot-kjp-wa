@@ -29,6 +29,35 @@ export type TodayRecapResult = {
     detailItems: TodayInvalidItem[];
 };
 
+export type EditableItemDetail = {
+    id: number;
+    nama: string;
+    no_kjp: string;
+    no_ktp: string;
+    no_kk: string;
+    lokasi?: string;
+    tanggal_lahir?: string;
+};
+
+export async function getEditableItemsForSender(
+    senderPhone: string,
+    processingDayKey: string
+): Promise<EditableItemDetail[]> {
+    const { data, error } = await supabase
+        .from('data_harian')
+        .select('id, nama, no_kjp, no_ktp, no_kk, lokasi, tanggal_lahir')
+        .eq('sender_phone', senderPhone)
+        .eq('processing_day_key', processingDayKey)
+        .order('received_at', { ascending: true });
+
+    if (error) {
+        console.error('Error fetching editable items:', error);
+        return [];
+    }
+
+    return (data || []) as EditableItemDetail[];
+}
+
 // --- BAGIAN 1: REKAP PRIBADI (BERDASARKAN processing_day_key) ---
 export async function getTodayRecapForSender(
     senderPhone: string,

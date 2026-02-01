@@ -17,6 +17,7 @@ import { makeInMemoryStore } from './store';
 import { processRawMessageToLogJson, parseRawMessageToLines } from './parser';
 import {
     getTodayRecapForSender,
+    getEditableItemsForSender,
     buildReplyForTodayRecap,
     getGlobalRecap,
     buildReplyForInvalidDetails,
@@ -52,6 +53,7 @@ import {
     formatCloseTimeString,
     renderCloseMessage,
     clearBotSettingsCache,
+    updateDailyDataField, // PATCH 2
 } from './supabase';
 import { getProcessingDayKey, getWibIsoDate, shiftIsoDate, isSystemClosed, getWibParts } from './time';
 import { parseFlexibleDate, looksLikeDate } from './utils/dateParser';
@@ -87,6 +89,9 @@ import {
     adminContactCache,
     adminUserListCache,
     pendingRegistrationData, // NEW
+    editSessionByPhone, // NEW
+    EditSession,
+    editSessionByPhone as editSessionMap,
 } from './state';
 
 const AUTH_FOLDER = 'auth_info_baileys';
@@ -576,6 +581,320 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                 const currentUserFlow = userFlowByPhone.get(senderPhone) || 'NONE';
                 const currentLocation = userLocationChoice.get(senderPhone) || 'DHARMAJAYA'; // Default to old style (Dharmajaya) if unknown
 
+                // --- EDIT FLOW HANDLER (PATCH 1 START) ---
+                if (currentUserFlow === 'EDIT_PICK_RECORD') {
+                    const session = editSessionMap.get(senderPhone);
+                    if (!session) {
+                        replyText = '❌ Sesi edit kedaluwarsa. Ulangi ketik EDIT.';
+                        userFlowByPhone.set(senderPhone, 'NONE');
+                    } else if (normalized === '0' || normalized === 'BATAL') {
+                        replyText = '✅ Edit dibatalkan.';
+                        userFlowByPhone.set(senderPhone, 'NONE');
+                        editSessionMap.delete(senderPhone);
+                    } else {
+                        // User input nomor urut
+                        const idx = parseInt(normalized);
+                        if (isNaN(idx) || idx < 1 || idx > session.recordsToday.length) {
+                            replyText = '⚠️ Nomor tidak valid. Ketik sesuai angka di daftar, atau 0 batal.';
+                        } else {
+                            // Valid Index -> Move to Pick Field
+                            const record = session.recordsToday[idx - 1];
+                            session.selectedIndex = idx;
+                            session.selectedRecordId = record.id;
+
+                            // Determine Type (Dharmajaya vs Pasarjaya)
+                            // Logic: if lokasi starts with 'PASARJAYA' OR has tanggal_lahir -> PASARJAYA
+                            // Else -> DHARMAJAYA
+                            const isPasarjaya = (record.lokasi && record.lokasi.startsWith('PASARJAYA')) || !!record.tanggal_lahir;
+                            session.selectedType = isPasarjaya ? 'PASARJAYA' : 'DHARMAJAYA';
+
+                            // Determine Display Location
+                            let displayLocation = 'Duri Kosambi'; // Default for Dharmajaya
+                            if (isPasarjaya) {
+                                if (record.lokasi && record.lokasi.includes('-')) {
+                                    displayLocation = record.lokasi.split('-')[1].trim();
+                                } else {
+                                    displayLocation = 'Pasarjaya';
+                                }
+                            }
+
+                            editSessionMap.set(senderPhone, session); // update session
+                            userFlowByPhone.set(senderPhone, 'EDIT_PICK_FIELD');
+
+                            // Build Menu Fields
+                            const isP = session.selectedType === 'PASARJAYA';
+                            const fields = [
+                                '1️⃣ Nama',
+                                '2️⃣ Nomor Kartu',
+                                '3️⃣ Nomor KTP (NIK)',
+                                '4️⃣ Nomor KK',
+                                isP ? '5️⃣ Tanggal Lahir' : '5️⃣ BATAL', // If Dharmajaya, 5 is Batal (or just limit to 4?) -> Plan says 5 is Batal for Dharma
+                                isP ? '6️⃣ BATAL' : ''
+                            ].filter(Boolean);
+
+                            replyText = [
+                                `📝 *EDIT DATA KE-${idx}*`,
+                                `👤 Nama: ${record.nama}`,
+                                `📍 Lokasi: ${displayLocation}`,
+                                '',
+                                'Pilih data yang ingin diubah:',
+                                ...fields,
+                                '',
+                                '_Ketik angka pilihanmu._'
+                            ].join('\n');
+                        }
+                    }
+                    if (replyText) {
+                        await sock.sendMessage(remoteJid, { text: replyText });
+                        continue;
+                    }
+                }
+                else if (currentUserFlow === 'EDIT_PICK_FIELD') {
+                    const session = editSessionMap.get(senderPhone);
+                    if (!session) {
+                        replyText = '❌ Sesi edit kedaluwarsa. Ulangi ketik EDIT.';
+                        userFlowByPhone.set(senderPhone, 'NONE');
+                    } else {
+                        const isPasarjaya = session.selectedType === 'PASARJAYA';
+                        const choice = parseInt(normalized);
+
+                        // Mapping Choice -> Field Key
+                        let fieldKey = '';
+                        let isCancel = false;
+
+                        if (choice === 1) fieldKey = 'nama';
+                        else if (choice === 2) fieldKey = 'no_kjp';
+                        else if (choice === 3) fieldKey = 'no_ktp';
+                        else if (choice === 4) fieldKey = 'no_kk';
+                        else if (choice === 5) {
+                            if (isPasarjaya) fieldKey = 'tanggal_lahir';
+                            else isCancel = true;
+                        }
+                        else if (choice === 6 && isPasarjaya) isCancel = true;
+                        else if (choice === 0) isCancel = true;
+                        else {
+                            // Invalid choice
+                            replyText = '⚠️ Pilihan salah. Ketik angka menu.';
+                        }
+
+                        if (isCancel) {
+                            replyText = '✅ Edit dibatalkan.';
+                            userFlowByPhone.set(senderPhone, 'NONE');
+                            editSessionMap.delete(senderPhone);
+                        } else if (fieldKey) {
+                            // VALID FIELD SELECTED
+                            session.selectedFieldKey = fieldKey;
+
+                            const fieldLabel = {
+                                'nama': 'Nama',
+                                'no_kjp': 'Nomor Kartu',
+                                'no_ktp': 'Nomor KTP',
+                                'no_kk': 'Nomor KK',
+                                'tanggal_lahir': 'Tanggal Lahir'
+                            }[session.selectedFieldKey!] || session.selectedFieldKey!;
+
+                            // UPDATE SESSION
+                            editSessionMap.set(senderPhone, session);
+                            userFlowByPhone.set(senderPhone, 'EDIT_INPUT_VALUE');
+
+                            replyText = [
+                                `📝 *EDIT ${(fieldLabel || 'DATA').toUpperCase()}*`,
+                                '',
+                                `Silakan ketik nilai baru untuk ${fieldLabel}.`,
+                                '',
+                                '_Ketik 0 untuk batal._'
+                            ].join('\n');
+                        }
+                    }
+
+                    if (replyText) {
+                        await sock.sendMessage(remoteJid, { text: replyText });
+                        continue;
+                    }
+                }
+                // PATCH 2: INPUT VALUE & CONFIRMATION
+                else if (currentUserFlow === 'EDIT_INPUT_VALUE') {
+                    const session = editSessionMap.get(senderPhone);
+                    if (!session) {
+                        replyText = '❌ Sesi edit kedaluwarsa. Ulangi ketik EDIT.';
+                        userFlowByPhone.set(senderPhone, 'NONE');
+                    } else if (normalized === '0' || normalized === 'BATAL') {
+                        replyText = '✅ Edit dibatalkan.';
+                        userFlowByPhone.set(senderPhone, 'NONE');
+                        editSessionMap.delete(senderPhone);
+                    } else {
+                        // VALIDASI INPUT NILAI BARU
+                        const rawVal = rawTrim;
+                        let cleanVal = rawVal;
+                        let isValid = true;
+                        let errorMsg = '';
+
+                        // Clean Value based on field type
+                        if (session.selectedFieldKey === 'nama') {
+                            // Validasi Nama: Minimal 3 huruf
+                            cleanVal = rawVal.replace(/^\d+[\.\)\s]+\s*/, '') // Hapus nomor urut di depan
+                                .replace(/[^\w\s\.\,\-\']/gi, '') // Hapus karakter aneh
+                                .trim().toUpperCase();
+                            if (cleanVal.length < 3) {
+                                isValid = false;
+                                errorMsg = '⚠️ Nama terlalu pendek. Minimal 3 huruf.';
+                            }
+                        } else if (['no_kjp', 'no_ktp', 'no_kk'].includes(session.selectedFieldKey!)) {
+                            // Validasi Angka
+                            cleanVal = rawVal.replace(/\D/g, ''); // Ambil angka saja
+                            const len = cleanVal.length;
+
+                            if (session.selectedFieldKey === 'no_kjp') {
+                                if (len < 16 || len > 18) {
+                                    isValid = false;
+                                    errorMsg = '⚠️ Nomor Kartu harus 16-18 digit.';
+                                } else if (!cleanVal.startsWith('504948')) {
+                                    isValid = false;
+                                    errorMsg = '⚠️ Nomor Kartu harus diawali 504948.';
+                                }
+                            } else {
+                                // KTP / KK
+                                if (len !== 16) {
+                                    isValid = false;
+                                    errorMsg = `⚠️ Nomor ${session.selectedFieldKey === 'no_ktp' ? 'KTP' : 'KK'} harus 16 digit.`;
+                                }
+                            }
+                        } else if (session.selectedFieldKey === 'tanggal_lahir') {
+                            // Validasi Tanggal
+                            const iso = parseFlexibleDate(rawVal); // returns YYYY-MM-DD or null
+                            if (!iso) {
+                                isValid = false;
+                                errorMsg = '⚠️ Format tanggal salah. Gunakan DD-MM-YYYY (Contoh: 15-05-2005).';
+                            } else {
+                                cleanVal = iso; // Simpan format ISO untuk display/db (tapi user input DMY)
+                            }
+                        }
+
+                        if (!isValid) {
+                            replyText = `${errorMsg}\n\nSilakan ketik ulang atau 0 untuk batal.`;
+                        } else {
+                            // VALIDASI LOLOS -> KONFIRMASI
+                            session.newValue = cleanVal;
+                            editSessionMap.set(senderPhone, session);
+                            userFlowByPhone.set(senderPhone, 'EDIT_CONFIRMATION');
+
+                            const fieldLabel = {
+                                'nama': 'Nama',
+                                'no_kjp': 'Nomor Kartu',
+                                'no_ktp': 'Nomor KTP',
+                                'no_kk': 'Nomor KK',
+                                'tanggal_lahir': 'Tanggal Lahir'
+                            }[session.selectedFieldKey!];
+
+                            // Ambil nilai lama untuk display
+                            const record = session.recordsToday.find(r => r.id === session.selectedRecordId);
+                            let oldValue = record ? record[session.selectedFieldKey!] : '(Tidak diketahui)';
+
+                            // Format Tanggal Display
+                            if (session.selectedFieldKey === 'tanggal_lahir' && oldValue && oldValue !== '(Tidak diketahui)') {
+                                oldValue = oldValue.split('-').reverse().join('-');
+                            }
+                            let newValueDisplay = session.newValue!;
+                            if (session.selectedFieldKey === 'tanggal_lahir') {
+                                newValueDisplay = newValueDisplay.split('-').reverse().join('-');
+                            }
+
+                            replyText = [
+                                '📝 *KONFIRMASI PERUBAHAN*',
+                                '',
+                                `Field: *${fieldLabel}*`,
+                                '',
+                                `🔻 *Data Lama:*`,
+                                `${oldValue}`,
+                                '',
+                                `🔺 *Data Baru:*`,
+                                `${newValueDisplay}`,
+                                '',
+                                'Apakah Anda yakin ingin menyimpan perubahan ini?',
+                                '',
+                                'Ketik *1* atau *OK* untuk SIMPAN',
+                                'Ketik *0* atau *BATAL* untuk membatalkan'
+                            ].join('\n');
+                        }
+                    }
+                    if (replyText) {
+                        await sock.sendMessage(remoteJid, { text: replyText });
+                        continue;
+                    }
+                }
+                else if (currentUserFlow === 'EDIT_CONFIRMATION') {
+                    const session = editSessionMap.get(senderPhone);
+                    if (!session) {
+                        replyText = '❌ Sesi edit kedaluwarsa.';
+                        userFlowByPhone.set(senderPhone, 'NONE');
+                    } else if (normalized === '0' || normalized === 'BATAL' || normalized === 'TIDAK') {
+                        replyText = '✅ Perubahan dibatalkan.';
+                        userFlowByPhone.set(senderPhone, 'NONE');
+                        editSessionMap.delete(senderPhone);
+                    } else if (normalized === '1' || normalized === 'OK' || normalized === 'YA' || normalized === 'SIAP') {
+                        // EKSEKUSI SIMPAN KE DB
+                        const { success, error } = await updateDailyDataField(
+                            session.selectedRecordId!,
+                            session.selectedFieldKey!,
+                            session.newValue!
+                        );
+
+                        // Ambil fieldLabel untuk reply
+                        const fieldLabel = {
+                            'nama': 'Nama',
+                            'no_kjp': 'Nomor Kartu',
+                            'no_ktp': 'Nomor KTP',
+                            'no_kk': 'Nomor KK',
+                            'tanggal_lahir': 'Tanggal Lahir'
+                        }[session.selectedFieldKey!] || session.selectedFieldKey!;
+
+                        // Ambil oldValue dari session records untuk reply
+                        const record = session.recordsToday.find(r => r.id === session.selectedRecordId);
+                        let oldValue = record ? record[session.selectedFieldKey!] : '(Tidak diketahui)';
+                        if (session.selectedFieldKey === 'tanggal_lahir' && oldValue && oldValue !== '(Tidak diketahui)') {
+                            oldValue = oldValue.split('-').reverse().join('-');
+                        }
+
+                        // Ambil newValueDisplay dari session untuk reply
+                        let newValueDisplay = session.newValue!;
+                        if (session.selectedFieldKey === 'tanggal_lahir') {
+                            newValueDisplay = newValueDisplay.split('-').reverse().join('-');
+                        }
+
+                        if (success) {
+                            replyText = [
+                                '✨ *DATA BERHASIL DISIMPAN!* ✨',
+                                '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+                                `📂 Field: *${(fieldLabel || '').toUpperCase()}*`,
+                                `🔻 Lama: ${oldValue}`,
+                                `✅ Baru: *${newValueDisplay}*`,
+                                '',
+                                '👇 *MENU LAINNYA*',
+                                '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+                                '🔹 Ketik *CEK*   → 🧐 Lihat Data',
+                                '🔹 Ketik *EDIT*  → Ganti Data Salah',
+                                '🔹 Ketik *HAPUS* → 🗑️ Hapus Data',
+                                '🔹 Ketik *MENU*  → 🏠 Menu Utama'
+                            ].join('\n');
+                        } else {
+                            console.error('Gagal update data:', error);
+                            replyText = '❌ Gagal menyimpan perubahan. Silakan coba lagi nanti.';
+                        }
+
+                        // Bersihkan sesi
+                        userFlowByPhone.set(senderPhone, 'NONE');
+                        editSessionMap.delete(senderPhone);
+                    } else {
+                        replyText = '⚠️ Ketik *1* untuk SIMPAN atau *0* untuk BATAL.';
+                    }
+
+                    if (replyText) {
+                        await sock.sendMessage(remoteJid, { text: replyText });
+                        continue;
+                    }
+                }
+                // --- END PATCH 2 ---
+
                 // ===== STRICT LOGIC PENDAFTARAN =====
 
                 // 1. Apakah ini terlihat seperti data pendaftaran (minimal 4 baris)?
@@ -838,16 +1157,71 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                 else if (currentUserFlow === 'SELECT_LOCATION') {
                     // Logic Unified: Pilihan 1 -> Menu Pasarjaya, Pilihan 2 -> Dharmajaya (Auto Process Pending)
                     if (normalized === '1') {
-                        // MENU SUB-LOKASI PASARJAYA
-                        replyText = MENU_PASARJAYA_LOCATIONS;
-                        userFlowByPhone.set(senderPhone, 'SELECT_PASARJAYA_SUB');
+                        // CEK VALIDASI AWAL: PASARJAYA WAJIB 5 BARIS
+                        const pendingData = pendingRegistrationData.get(senderPhone);
+                        let rejectPasarjaya = false;
+                        if (pendingData) {
+                            const lines = parseRawMessageToLines(pendingData);
+                            // Jika bukan kelipatan 5 (dan bukan 0), tolak.
+                            if (lines.length > 0 && lines.length % 5 !== 0) {
+                                rejectPasarjaya = true;
+                                replyText = [
+                                    '⚠️ *DATA TERTOLAK (SALAH FORMAT)*',
+                                    '',
+                                    'Anda memilih: *1. PASARJAYA*',
+                                    'Syarat: *Wajib 5 Baris* (Nama, Kartu, KTP, KK, Tanggal Lahir).',
+                                    '',
+                                    `Data Anda: *${lines.length} baris* (Terdeteksi format Dharmajaya/Salah).`,
+                                    '',
+                                    '💡 *SOLUSI:*',
+                                    '• Jika ingin ke Dharmajaya, ketik *2*.',
+                                    '• Jika tetap Pasarjaya, mohon perbaiki data Anda (tambah Tanggal Lahir) dan kirim ulang.',
+                                    '',
+                                    '_Ketik 0 untuk batal._'
+                                ].join('\n');
+                            }
+                        }
+
+                        if (!rejectPasarjaya) {
+                            // MENU SUB-LOKASI PASARJAYA
+                            replyText = MENU_PASARJAYA_LOCATIONS;
+                            userFlowByPhone.set(senderPhone, 'SELECT_PASARJAYA_SUB');
+                        }
                     } else if (normalized === '2') {
-                        // DHARMAJAYA (AUTO)
-                        userLocationChoice.set(senderPhone, 'DHARMAJAYA');
+                        // CEK VALIDASI AWAL: DHARMAJAYA WAJIB 4 BARIS
+                        const pendingData = pendingRegistrationData.get(senderPhone);
+                        let rejectDharmajaya = false;
+
+                        if (pendingData) {
+                            const lines = parseRawMessageToLines(pendingData);
+                            // Jika kelipatan 5 (Pasarjaya) tapi bukan kelipatan 4 -> Tolak
+                            if (lines.length > 0 && lines.length % 5 === 0 && lines.length % 4 !== 0) {
+                                rejectDharmajaya = true;
+                                replyText = [
+                                    '⚠️ *DATA TERTOLAK (SALAH FORMAT)*',
+                                    '',
+                                    'Anda memilih: *2. DHARMAJAYA*',
+                                    'Syarat: *Wajib 4 Baris* (Nama, Kartu, KTP, KK).',
+                                    '',
+                                    `Data Anda: *${lines.length} baris* (Terdeteksi format Pasarjaya / ada Tanggal Lahir).`,
+                                    '',
+                                    '💡 *SOLUSI:*',
+                                    '• Jika ingin ke Pasarjaya, ketik *1*.',
+                                    '• Jika tetap Dharmajaya, mohon hapus Tanggal Lahir dan kirim ulang.',
+                                    '',
+                                    '_Ketik 0 untuk batal._'
+                                ].join('\n');
+                            }
+                        }
+
+                        if (!rejectDharmajaya) {
+                            // DHARMAJAYA (AUTO)
+                            userLocationChoice.set(senderPhone, 'DHARMAJAYA');
+                        }
 
                         // Cek apakah ada data pending yang menunggu diproses?
-                        const pendingData = pendingRegistrationData.get(senderPhone);
-                        if (pendingData) {
+                        // (Hanya lanjut jika tidak direject)
+                        if (!rejectDharmajaya && pendingData) {
                             // PROSES DATA PENDING (DHARMAJAYA: Langsung pakai, tanpa ubah nama)
                             // Kita "pura-pura" user mengirim pesan data itu sekarang
                             // Set flow to NONE agar tidak loop
@@ -1132,10 +1506,8 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                         listRows.push('');
 
                         validItems.forEach((item, idx) => {
-                            // Format: 1. AGUS (Kartu: ...2222)
-                            // Ambil 4 digit terakhir kartu
-                            const last4 = item.no_kjp.length > 4 ? item.no_kjp.slice(-4) : item.no_kjp;
-                            listRows.push(`${idx + 1}. ${item.nama.toUpperCase()} (Kartu: ...${last4})`);
+                            // Format: 1. AGUS
+                            listRows.push(`${idx + 1}. ${item.nama.toUpperCase()}`);
                         });
 
                         listRows.push('');
@@ -1290,7 +1662,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                         else if (normalized === '6') {
                             // Edit Kontak
                             adminFlowByPhone.set(senderPhone, 'EDIT_CONTACT');
-                            replyText = ['✏️ *EDIT KONTAK*', 'Ketik: NamaBaru NomorHP', 'Contoh: BudiRevisi 0812345'].join('\n');
+                            replyText = ['📝 *EDIT KONTAK*', 'Ketik: NamaBaru NomorHP', 'Contoh: BudiRevisi 0812345'].join('\n');
                         }
                         else if (normalized === '7') {
                             // Hapus Kontak
@@ -2329,8 +2701,52 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                         // Gunakan buildReplyForTodayRecap yang sudah ada lokasi & tanggal lahir
                         replyText = buildReplyForTodayRecap(validCount, totalInvalid, validItems, processingDayKey);
                         // Tambahkan tips hapus di akhir
+                        replyText += '\n💡 _Ketik *EDIT* untuk mengubah data._';
                         replyText += '\n💡 _Ketik *HAPUS 1* atau *HAPUS 1,2,3* untuk menghapus data._';
                     }
+                } else if (normalized.startsWith('EDIT')) {
+                    // --- HANDLER COMMAND EDIT (STRICT NO ARGS) ---
+                    pendingDelete.delete(senderPhone);
+                    const args = normalized.replace('EDIT', '').trim();
+
+                    // BLOCK: Jika ada argumen (misal EDIT 1), tolak halus.
+                    if (args.length > 0) {
+                        replyText = '⚠️ *PERINTAH EDIT BERUBAH*\n\nMohon hanya ketik *EDIT* saja untuk memulai.\nNanti saya akan tampilkan daftar data yang bisa dipilih.';
+                        await sock.sendMessage(remoteJid, { text: replyText });
+                        continue;
+                    }
+
+                    // 1. Ambil data hari ini (Editable items with ID)
+                    const items = await getEditableItemsForSender(senderPhone, processingDayKey);
+
+                    if (items.length === 0) {
+                        replyText = '⚠️ *DATA KOSONG*\nAnda belum mengirim data hari ini, tidak ada yang bisa diedit.';
+                    } else {
+                        // 2. Init Session
+                        const session: EditSession = {
+                            recordsToday: items,
+                        };
+
+                        // SHOW LIST TO PICK RECORD
+                        editSessionMap.set(senderPhone, session);
+                        userFlowByPhone.set(senderPhone, 'EDIT_PICK_RECORD');
+
+                        const listRows = items.map((item, i) => {
+                            return `${i + 1}. ${item.nama}`;
+                        });
+
+                        replyText = [
+                            '📝 *EDIT DATA HARI INI*',
+                            '',
+                            'Pilih nomor data yang mau diedit:',
+                            '',
+                            ...listRows,
+                            '',
+                            '_Ketik nomor urutnya (Contoh: 1)._',
+                            '_Ketik 0 untuk batal._'
+                        ].join('\n');
+                    }
+
                 } else if (normalized.startsWith('HAPUS')) {
                     // FITUR HAPUS DENGAN FORMAT: HAPUS 1 atau HAPUS 1,2,3
                     pendingDelete.delete(senderPhone);
@@ -2446,8 +2862,43 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             '_Fitur BATAL hanya berlaku untuk data yang dikirim dalam 30 menit terakhir._'
                         ].join('\n');
                     }
-                } else if (normalized === '4' || normalized === 'BANTUAN') {
-                    // FAQ hanya muncul jika ketik '4' atau 'BANTUAN' (exact match, tanpa embel-embel)
+                } else if (normalized === '4' || normalized === 'EDIT') {
+                    // Handler EDIT dipindahkan dari blok 'EDIT' manual ke menu 4 agar konsisten
+                    // (Logic handler 'EDIT' yang ada di bawah blok 'HAPUS' tetap bisa menangkap 'EDIT <args>' karena normalized.startsWith('EDIT'))
+                    // Tapi jika user ketik '4', kita trigger EDIT flow
+                    pendingDelete.delete(senderPhone);
+                    const items = await getEditableItemsForSender(senderPhone, processingDayKey);
+
+                    if (items.length === 0) {
+                        replyText = '⚠️ *DATA KOSONG*\nAnda belum mengirim data hari ini, tidak ada yang bisa diedit.';
+                    } else {
+                        // Init Session
+                        const session: EditSession = {
+                            recordsToday: items,
+                        };
+
+                        // SHOW LIST TO PICK RECORD
+                        editSessionMap.set(senderPhone, session);
+                        userFlowByPhone.set(senderPhone, 'EDIT_PICK_RECORD');
+
+                        const listRows = items.map((item, i) => {
+                            const typeLabel = (item.lokasi && item.lokasi.startsWith('PASARJAYA')) ? '[PSJ]' : '[DHJ]';
+                            return `${i + 1}. ${item.nama} ${typeLabel}`;
+                        });
+
+                        replyText = [
+                            '📝 *EDIT DATA HARI INI*',
+                            '',
+                            'Pilih nomor data yang mau diedit:',
+                            '',
+                            ...listRows,
+                            '',
+                            '_Ketik nomor urutnya (Contoh: 1)._',
+                            '_Ketik 0 untuk batal._'
+                        ].join('\n');
+                    }
+                } else if (normalized === '5' || normalized === 'BANTUAN') {
+                    // FAQ hanya muncul jika ketik '5' atau 'BANTUAN' (exact match, tanpa embel-embel)
                     replyText = FAQ_MESSAGE;
                 } else {
 

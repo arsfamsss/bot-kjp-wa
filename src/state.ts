@@ -4,7 +4,27 @@
 // --- TYPE DEFINITIONS ---
 
 // State alur menu user
-export type UserFlowState = 'NONE' | 'CHECK_DATA_MENU' | 'CHECK_DATA_SPECIFIC_DATE' | 'DELETE_DATA' | 'SELECT_LOCATION' | 'SELECT_PASARJAYA_SUB' | 'INPUT_MANUAL_LOCATION';
+export type UserFlowState =
+    | 'NONE'
+    | 'CHECK_DATA_MENU'
+    | 'CHECK_DATA_SPECIFIC_DATE'
+    | 'DELETE_DATA'
+    | 'SELECT_LOCATION'
+    | 'SELECT_PASARJAYA_SUB'
+    | 'INPUT_MANUAL_LOCATION'
+    | 'EDIT_PICK_RECORD'
+    | 'EDIT_PICK_FIELD'
+    | 'EDIT_INPUT_VALUE' // PATCH 2
+    | 'EDIT_CONFIRMATION'; // PATCH 2
+
+export interface EditSession {
+    recordsToday: any[]; // Store the fetched records to avoid re-fetching and ensure ID consistency
+    selectedIndex?: number; // UI index (1-based)
+    selectedRecordId?: number; // DB ID
+    selectedType?: 'DHARMAJAYA' | 'PASARJAYA';
+    selectedFieldKey?: string;
+    newValue?: string; // PATCH 2
+}
 
 // State alur menu admin
 export type AdminFlowState =
@@ -70,3 +90,6 @@ export const adminUserListCache = new Map<string, { phone: string; name: string;
 
 // Simpan data pendaftaran sementara sebelum pilih lokasi
 export const pendingRegistrationData = new Map<string, string>();
+
+// Sesi Edit Data
+export const editSessionByPhone = new Map<string, EditSession>();

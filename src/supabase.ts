@@ -942,3 +942,26 @@ export function renderCloseMessage(settings: BotSettings): string {
 export function clearBotSettingsCache(): void {
     botSettingsCache = null;
 }
+
+// --- PATCH 2: UPDATE FIELD DATA ---
+export async function updateDailyDataField(
+    id: number,
+    field: string,
+    value: string
+): Promise<{ success: boolean; error: any }> {
+    try {
+        const { error } = await supabase
+            .from('data_harian')
+            .update({ [field]: value })
+            .eq('id', id);
+
+        if (error) {
+            console.error('Error updateDailyDataField:', error);
+            return { success: false, error };
+        }
+        return { success: true, error: null };
+    } catch (err) {
+        console.error('Exception updateDailyDataField:', err);
+        return { success: false, error: err };
+    }
+}
