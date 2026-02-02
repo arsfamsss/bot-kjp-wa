@@ -31,32 +31,35 @@ export function extractDigits(input: string): string {
 function cleanName(raw: string): string {
     let cleaned = raw;
 
-    // 1. Ganti tanda kurung dengan spasi (ISINYA DIPERTAHANKAN)
-    // Contoh: "Cayla (bude)" -> "Cayla  bude "
+    // 1. Hapus "Nama:" atau "Nama=" di awal SEBELUM cleaning lain
+    // Agar lebih robust terhadap variasi separator (:, =, spasi)
+    cleaned = cleaned.replace(/^\s*(?:nama|name)[\s:=]+/i, '');
+
+    // 2. Ganti tanda kurung dengan spasi
     cleaned = cleaned.replace(/[()]/g, ' ');
 
-    // 2. Hapus kata-kata filter (blacklist location/keywords)
-    // Urutan penting: frase panjang dulu baru pendek
+    // 3. Hapus kata-kata filter (blacklist location/keywords)
+    // NOTE: Hapus \b (word boundary) agar kata yang menempel tetap terhapus
+    // Contoh: "jRusun" -> "j" (Rusun terhapus)
     const blacklist = [
         'mini dc cengkareng',
         'kecamatan cengkareng',
         'rusun pesakih',
         'rusunpesakih',
         'duri kosambi',
+        'persakih', // Handle typo: persakih
         'cengkareng',
         'kosambi',
-        'kedoya'
+        'kedoya',
+        'rusun',
+        'kecamatan'
     ];
-    const blacklistRegex = new RegExp(`\\b(${blacklist.join('|')})\\b`, 'gi');
+    // Gunakan regex tanpa \b agar lebih agresif menghapus kata kunci lokasi
+    const blacklistRegex = new RegExp(`(${blacklist.join('|')})`, 'gi');
     cleaned = cleaned.replace(blacklistRegex, ' ');
 
-    // 3. Hapus angka dan tanda baca (HANYA sisakan huruf dan spasi)
-    // Ini otomatis menghapus "1.", ":", "-", "'", dll.
+    // 4. Hapus angka dan tanda baca (HANYA sisakan huruf dan spasi)
     cleaned = cleaned.replace(/[^a-zA-Z\s]/g, ' ');
-
-    // 4. Hapus kata "nama" di awal (case insensitive)
-    // Karena tanda baca sudah hilang, "Nama :" akan menjadi "Nama "
-    cleaned = cleaned.replace(/^\s*nama\s+/i, '');
 
     // 5. Rapikan spasi berlebih
     cleaned = cleaned.replace(/\s+/g, ' ').trim();
