@@ -64,7 +64,7 @@ export function buildReplyForNewData(
         lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         lines.push('🔹 Ketik *CEK*   → 🧐 Cek Rekap');
         lines.push('🔹 Ketik *BATAL* → 🔙 Batal Input');
-        lines.push('🔹 Ketik *EDIT*  → Ganti Data Salah');
+        lines.push('🔹 Ketik *EDIT*  → ✏️ Ubah Data');
         lines.push('🔹 Ketik *HAPUS* → 🗑️ Hapus Data');
         lines.push('🔹 Ketik *MENU*  → 🏠 Menu Utama');
         lines.push('');
