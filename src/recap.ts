@@ -452,7 +452,6 @@ export async function generateExportData(
         txtRows.push('*Gerai Dharmajaya Duri Kosambi*');
         txtRows.push('');
 
-        let senderIdx = 1;
         // SORTING BY NAME
         const sortedPhones = Object.keys(dharmajayaBySender).sort((a, b) => {
             const nameA = getSenderName(a).toUpperCase();
@@ -464,11 +463,7 @@ export async function generateExportData(
             const items = dharmajayaBySender[phone];
             const senderName = getSenderName(phone);
 
-            txtRows.push(`👤 *PENGIRIM ${senderIdx}: ${senderName}*`);
-            txtRows.push(`📱 WA: ${phone}`);
-            txtRows.push(`📥 Jumlah Data: ${items.length}`);
-            txtRows.push('');
-
+            // TIDAK ADA HEADER PENGIRIM, LANGSUNG ITEM
             items.forEach((item: any) => {
                 txtRows.push(`${senderName} (${item.nama})`);
                 txtRows.push(`   📇 KJP ${item.no_kjp}`);
@@ -476,73 +471,50 @@ export async function generateExportData(
                 txtRows.push(`   🏠 KK  ${item.no_kk}`);
                 txtRows.push('');
             });
-
-            senderIdx++;
         }
     }
 
-    // === GERAI PASARJAYA - Dikelompokkan per Lokasi Spesifik ===
+    // === GERAI PASARJAYA (DIGABUNG SATU HEADER) ===
     if (Object.keys(pasarjayaBySender).length > 0) {
-        // Pertama, kita kelompokkan semua data Pasarjaya berdasarkan lokasi spesifik
-        const pasarjayaByLocation: Record<string, Record<string, any[]>> = {};
+        txtRows.push('*Gerai PASARJAYA*');
+        txtRows.push('');
 
-        for (const [phone, items] of Object.entries(pasarjayaBySender)) {
-            for (const item of items) {
-                const locKey = item.lokasi || 'PASARJAYA';
-                if (!pasarjayaByLocation[locKey]) pasarjayaByLocation[locKey] = {};
-                if (!pasarjayaByLocation[locKey][phone]) pasarjayaByLocation[locKey][phone] = [];
-                pasarjayaByLocation[locKey][phone].push(item);
-            }
-        }
+        // SORTING BY NAME
+        const sortedPhones = Object.keys(pasarjayaBySender).sort((a, b) => {
+            const nameA = getSenderName(a).toUpperCase();
+            const nameB = getSenderName(b).toUpperCase();
+            return nameA.localeCompare(nameB);
+        });
 
-        // Tampilkan per lokasi spesifik
-        for (const [locName, senderMap] of Object.entries(pasarjayaByLocation)) {
-            // Hitung total items di lokasi ini
-            const totalLocItems = Object.values(senderMap).reduce((sum, arr) => sum + arr.length, 0);
-            txtRows.push(`*Gerai ${locName}*`);
-            txtRows.push('');
+        for (const phone of sortedPhones) {
+            const items = pasarjayaBySender[phone];
+            const senderName = getSenderName(phone);
 
-            let senderIdx = 1;
-            // SORTING BY NAME
-            const sortedPhones = Object.keys(senderMap).sort((a, b) => {
-                const nameA = getSenderName(a).toUpperCase();
-                const nameB = getSenderName(b).toUpperCase();
-                return nameA.localeCompare(nameB);
-            });
-
-            for (const phone of sortedPhones) {
-                const items = senderMap[phone];
-                const senderName = getSenderName(phone);
-
-                txtRows.push(`👤 *PENGIRIM ${senderIdx}: ${senderName}*`);
-                txtRows.push(`📱 WA: ${phone}`);
-                txtRows.push(`📥 Jumlah Data: ${items.length}`);
+            items.forEach((item: any) => {
+                const tglLahir = item.tanggal_lahir ? formatDateDMY(item.tanggal_lahir) : '';
+                txtRows.push(`${senderName} (${item.nama})`);
+                txtRows.push(`KJP ${item.no_kjp}`);
+                txtRows.push(`KTP ${item.no_ktp}`);
+                txtRows.push(`KK ${item.no_kk}`);
+                if (tglLahir) txtRows.push(`${tglLahir}`);
+                // LINE 6: Lokasi spesifik (Wajib ada)
+                txtRows.push(`${item.lokasi || 'PASARJAYA'}`);
                 txtRows.push('');
-
-                items.forEach((item: any) => {
-                    const tglLahir = item.tanggal_lahir ? formatDateDMY(item.tanggal_lahir) : '';
-                    txtRows.push(`${senderName} (${item.nama})`);
-                    txtRows.push(`KJP ${item.no_kjp}`);
-                    txtRows.push(`KTP ${item.no_ktp}`);
-                    txtRows.push(`KK ${item.no_kk}`);
-                    if (tglLahir) txtRows.push(`${tglLahir}`);
-                    // LINE 6: Lokasi spesifik
-                    txtRows.push(`${item.lokasi || 'PASARJAYA'}`);
-                    txtRows.push('');
-                });
-
-                senderIdx++;
-            }
+            });
         }
     }
 
-    // === GENERATE SUMMARY PER PENGIRIM ===
+    // === GENERATE SUMMARY PER PENGIRIM (RINCIAN LOKASI) ===
     txtRows.push('────────────────────────────────────');
     txtRows.push('📊 *RINGKASAN DATA MASUK:*');
     txtRows.push('');
 
     // Gabungkan semua data untuk perhitungan ringkasan
-    const summaryMap = new Map<string, { name: string, total: number, pasarjaya: number, dharmajaya: number }>();
+    const summaryMap = new Map<string, { 
+        name: string, 
+        total: number, 
+        locations: Map<string, number> 
+    }>();
 
     for (const row of (data as any[])) {
         const phone = row.sender_phone;
@@ -550,23 +522,36 @@ export async function generateExportData(
             summaryMap.set(phone, {
                 name: getSenderName(phone),
                 total: 0,
-                pasarjaya: 0,
-                dharmajaya: 0
+                locations: new Map<string, number>()
             });
         }
         const stats = summaryMap.get(phone)!;
         stats.total++;
+
+        let locationName = '';
         if (row.lokasi && row.lokasi.startsWith('PASARJAYA')) {
-            stats.pasarjaya++;
+            // Hilangkan prefix "PASARJAYA - "
+            locationName = row.lokasi.replace(/^PASARJAYA\s*-\s*/i, '').trim();
+            if (!locationName) locationName = 'PASARJAYA';
         } else {
-            stats.dharmajaya++;
+            locationName = 'Dharmajaya Duri Kosambi';
         }
+
+        const currentCount = stats.locations.get(locationName) || 0;
+        stats.locations.set(locationName, currentCount + 1);
     }
 
     summaryMap.forEach((stats) => {
         txtRows.push(`👤 *${stats.name}* (${stats.total} data)`);
-        if (stats.dharmajaya > 0) txtRows.push(`   • Dharmajaya Duri Kosambi: ${stats.dharmajaya}`);
-        if (stats.pasarjaya > 0) txtRows.push(`   • PASARJAYA: ${stats.pasarjaya}`);
+        
+        // Urutkan lokasi agar Dharmajaya di atas jika ada? Atau alphabetical?
+        // User example doesn't specify order, but let's keep it tidy.
+        // Convert map to array and sort?
+        const sortedLocs = Array.from(stats.locations.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+        
+        for (const [locName, count] of sortedLocs) {
+            txtRows.push(`   • ${locName}: ${count}`);
+        }
         txtRows.push('');
     });
     txtRows.push('✅ *Laporan selesai.*');
