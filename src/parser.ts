@@ -29,19 +29,32 @@ export function extractDigits(input: string): string {
 
 /// --- HELPER: CLEAN NAME ---
 function cleanName(raw: string): string {
-    // 1. Hapus penomoran di awal (1. , 2. , 1), 2) dll)
-    // Regex: ^\s*\d+[\.\)\s]+\s*
-    let cleaned = raw.replace(/^\s*\d+[\.\)\s]+\s*/, '');
+    let cleaned = raw;
 
-    // 2. Hapus kata "nama" (case insensitive) di awal
-    // Regex: ^\s*nama\s+
+    // 1. Hapus konten dalam kurung (...) beserta isinya
+    // Contoh: "Rijal (kecamatan Cengkareng)" -> "Rijal"
+    cleaned = cleaned.replace(/\s*\(.*?\)/g, '');
+
+    // 2. Hapus kata-kata filter (blacklist location/keywords)
+    const blacklist = [
+        'kecamatan cengkareng',
+        'mini dc cengkareng',
+        'rusun pesakih',
+        'rusunpesakih',
+        'kedoya'
+    ];
+    const blacklistRegex = new RegExp(`\\b(${blacklist.join('|')})\\b`, 'gi');
+    cleaned = cleaned.replace(blacklistRegex, '');
+
+    // 3. Hapus angka dan tanda baca (HANYA sisakan huruf dan spasi)
+    // Ini otomatis menghapus "1.", ":", "-", dll.
+    cleaned = cleaned.replace(/[^a-zA-Z\s]/g, ' ');
+
+    // 4. Hapus kata "nama" di awal (case insensitive)
+    // Karena tanda baca sudah hilang, "Nama :" akan menjadi "Nama "
     cleaned = cleaned.replace(/^\s*nama\s+/i, '');
 
-    // 3. Ganti titik di tengah menjadi spasi, TAPI jangan ganti titik di akhir kalimat
-    // Strategi: Split by '.' lalu join ' '
-    cleaned = cleaned.split('.').join(' ');
-
-    // 4. Rapikan spasi berlebih
+    // 5. Rapikan spasi berlebih
     return cleaned.replace(/\s+/g, ' ').trim();
 }
 
