@@ -31,41 +31,31 @@ export function extractDigits(input: string): string {
 function cleanName(raw: string): string {
     let cleaned = raw;
 
-    // 1. Hapus "Nama:" atau "Nama=" di awal SEBELUM cleaning lain
-    // Agar lebih robust terhadap variasi separator (:, =, spasi)
-    cleaned = cleaned.replace(/^\s*(?:nama|name)[\s:=]+/i, '');
+    // 1. Hapus konten dalam kurung (...) beserta isinya
+    // Contoh: "Rijal (kecamatan Cengkareng)" -> "Rijal"
+    cleaned = cleaned.replace(/\s*\(.*?\)/g, '');
 
-    // 2. Ganti tanda kurung dengan spasi
-    cleaned = cleaned.replace(/[()]/g, ' ');
-
-    // 3. Hapus kata-kata filter (blacklist location/keywords)
-    // NOTE: Hapus \b (word boundary) agar kata yang menempel tetap terhapus
-    // Contoh: "jRusun" -> "j" (Rusun terhapus)
+    // 2. Hapus kata-kata filter (blacklist location/keywords)
     const blacklist = [
-        'mini dc cengkareng',
         'kecamatan cengkareng',
+        'mini dc cengkareng',
         'rusun pesakih',
         'rusunpesakih',
-        'duri kosambi',
-        'persakih', // Handle typo: persakih
-        'cengkareng',
-        'kosambi',
-        'kedoya',
-        'rusun',
-        'kecamatan'
+        'kedoya'
     ];
-    // Gunakan regex tanpa \b agar lebih agresif menghapus kata kunci lokasi
-    const blacklistRegex = new RegExp(`(${blacklist.join('|')})`, 'gi');
-    cleaned = cleaned.replace(blacklistRegex, ' ');
+    const blacklistRegex = new RegExp(`\\b(${blacklist.join('|')})\\b`, 'gi');
+    cleaned = cleaned.replace(blacklistRegex, '');
 
-    // 4. Hapus angka dan tanda baca (HANYA sisakan huruf dan spasi)
+    // 3. Hapus angka dan tanda baca (HANYA sisakan huruf dan spasi)
+    // Ini otomatis menghapus "1.", ":", "-", dll.
     cleaned = cleaned.replace(/[^a-zA-Z\s]/g, ' ');
 
-    // 5. Rapikan spasi berlebih
-    cleaned = cleaned.replace(/\s+/g, ' ').trim();
+    // 4. Hapus kata "nama" di awal (case insensitive)
+    // Karena tanda baca sudah hilang, "Nama :" akan menjadi "Nama "
+    cleaned = cleaned.replace(/^\s*nama\s+/i, '');
 
-    // 6. Ubah ke Title Case (Huruf Besar di Awal Kata)
-    return cleaned.toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+    // 5. Rapikan spasi berlebih
+    return cleaned.replace(/\s+/g, ' ').trim();
 }
 
 /**
