@@ -498,7 +498,8 @@ export async function generateExportData(
                 txtRows.push(`KK ${item.no_kk}`);
                 if (tglLahir) txtRows.push(`${tglLahir}`);
                 // LINE 6: Lokasi spesifik (Wajib ada)
-                txtRows.push(`${item.lokasi || 'PASARJAYA'}`);
+                const cleanLokasi = (item.lokasi || 'PASARJAYA').replace(/^PASARJAYA\s*-\s*/i, '');
+                txtRows.push(cleanLokasi);
                 txtRows.push('');
             });
         }
@@ -510,10 +511,10 @@ export async function generateExportData(
     txtRows.push('');
 
     // Gabungkan semua data untuk perhitungan ringkasan
-    const summaryMap = new Map<string, { 
-        name: string, 
-        total: number, 
-        locations: Map<string, number> 
+    const summaryMap = new Map<string, {
+        name: string,
+        total: number,
+        locations: Map<string, number>
     }>();
 
     for (const row of (data as any[])) {
@@ -543,12 +544,12 @@ export async function generateExportData(
 
     summaryMap.forEach((stats) => {
         txtRows.push(`👤 *${stats.name}* (${stats.total} data)`);
-        
+
         // Urutkan lokasi agar Dharmajaya di atas jika ada? Atau alphabetical?
         // User example doesn't specify order, but let's keep it tidy.
         // Convert map to array and sort?
         const sortedLocs = Array.from(stats.locations.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-        
+
         for (const [locName, count] of sortedLocs) {
             txtRows.push(`   • ${locName}: ${count}`);
         }
