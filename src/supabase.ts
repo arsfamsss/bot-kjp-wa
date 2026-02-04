@@ -155,13 +155,14 @@ export async function checkDuplicateForItem(
 
     // PARALLEL CHECK: Jalankan semua cek duplikat secara bersamaan
     const [nameDup, kjpDup, ktpDup, kkDup] = await Promise.all([
-        // (1) Cek Duplikat NAMA
+        // (1) Cek Duplikat NAMA (Scoped to Sender)
         (async () => {
             if (!item.parsed.nama) return null;
             const { data, error } = await supabase
                 .from('data_harian')
                 .select('nama, no_kjp, no_ktp, no_kk, sender_phone') // +sender_phone
                 .eq('tanggal', tanggal) // FIX: use tanggal to match DB constraint
+                .eq('sender_phone', senderPhone) // Hanya cek duplikat nama JIKA pengirim sama
                 .ilike('nama', item.parsed.nama)
                 .limit(1);
             if (!error && data && data.length > 0) return data[0];
