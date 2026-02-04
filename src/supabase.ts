@@ -236,8 +236,11 @@ export async function checkDuplicateForItem(
     return item;
 }
 
-export async function saveLogAndOkItems(log: LogJson, rawText: string): Promise<void> {
+export async function saveLogAndOkItems(log: LogJson, rawText: string): Promise<{ success: boolean; dataError?: any; logError?: any }> {
     // PARALLEL INSERT: Log dan Data Harian berbarengan
+    let logErrorResult: any = null;
+    let dataErrorResult: any = null;
+
     const insertLogPromise = (async () => {
         const { error: logError } = await supabase.from('log_pesan_wa').insert([
             {
@@ -255,12 +258,15 @@ export async function saveLogAndOkItems(log: LogJson, rawText: string): Promise<
                 log_json: log,
             },
         ]);
-        if (logError) console.error('Error insert log_pesan_wa:', logError);
+        if (logError) {
+            console.error('Error insert log_pesan_wa:', logError);
+            logErrorResult = logError;
+        }
     })();
 
     const insertDataPromise = (async () => {
         const okItems = log.items.filter((it) => it.status === 'OK');
-        if (okItems.length === 0) return;
+        if (okItems.length === 0) return; // No data to insert, not an error
 
         const rows = okItems.map((it) => ({
             tanggal: log.tanggal,
@@ -285,12 +291,20 @@ export async function saveLogAndOkItems(log: LogJson, rawText: string): Promise<
         const { error: dataError } = await supabase.from('data_harian').insert(rows);
         if (dataError) {
             console.error('Error insert data_harian:', dataError);
+            dataErrorResult = dataError;
         } else {
             console.log(`Berhasil simpan ${rows.length} item OK ke data_harian.`);
         }
     })();
 
     await Promise.all([insertLogPromise, insertDataPromise]);
+
+    // Return status - only consider failure if data insert failed (log error is less critical)
+    return {
+        success: dataErrorResult === null,
+        dataError: dataErrorResult,
+        logError: logErrorResult
+    };
 }
 
 // --- HAPUS DATA (HANYA MILIK PENGIRIM) ---

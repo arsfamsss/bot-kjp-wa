@@ -1041,14 +1041,20 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                         logJson.sender_name = existingName || undefined;
 
                         if (logJson.stats.total_blocks > 0 || (logJson.failed_remainder_lines && logJson.failed_remainder_lines.length > 0)) {
-                            await saveLogAndOkItems(logJson, messageText);
+                            const saveResult = await saveLogAndOkItems(logJson, messageText);
 
-                            // Hitung total data hari ini SETELAH data disimpan
-                            // Hitung total data hari ini SETELAH data disimpan
-                            const todayRecap = await getTodayRecapForSender(senderPhone, processingDayKey);
-                            const replyDataText = buildReplyForNewData(logJson, todayRecap.validCount, existingLocation, todayRecap.validItems);
-                            await sock.sendMessage(remoteJid, { text: replyDataText });
-                            console.log(`📤 Data pendaftaran (${existingLocation}) berhasil diproses untuk ${senderPhone}`);
+                            if (!saveResult.success) {
+                                console.error('❌ Gagal simpan ke database:', saveResult.dataError);
+                                await sock.sendMessage(remoteJid, {
+                                    text: '❌ *GAGAL MENYIMPAN DATA*\n\nTerjadi kesalahan sistem saat menyimpan.\nSilakan kirim ulang data Anda atau hubungi Admin.'
+                                });
+                            } else {
+                                // Hitung total data hari ini SETELAH data disimpan
+                                const todayRecap = await getTodayRecapForSender(senderPhone, processingDayKey);
+                                const replyDataText = buildReplyForNewData(logJson, todayRecap.validCount, existingLocation, todayRecap.validItems);
+                                await sock.sendMessage(remoteJid, { text: replyDataText });
+                                console.log(`📤 Data pendaftaran (${existingLocation}) berhasil diproses untuk ${senderPhone}`);
+                            }
                         } else {
                             await sock.sendMessage(remoteJid, {
                                 text: `⚠️ *Gagal Membaca Data*\nPastikan format penulisan sudah benar sesuai contoh.`
@@ -1271,11 +1277,15 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                 logJson.sender_name = existingName || undefined;
 
                                 if (logJson.stats.total_blocks > 0 && (!logJson.failed_remainder_lines || logJson.failed_remainder_lines.length === 0)) {
-                                    await saveLogAndOkItems(logJson, pendingData);
-                                    const { validCount, validItems } = await getTodayRecapForSender(senderPhone, processingDayKey);
-                                    replyText = buildReplyForNewData(logJson, validCount, 'DHARMAJAYA', validItems);
+                                    const saveResult = await saveLogAndOkItems(logJson, pendingData);
+                                    if (!saveResult.success) {
+                                        console.error('❌ Gagal simpan ke database (DHARMAJAYA):', saveResult.dataError);
+                                        replyText = '❌ *GAGAL MENYIMPAN DATA*\n\nTerjadi kesalahan sistem.\nSilakan kirim ulang data Anda.';
+                                    } else {
+                                        const { validCount, validItems } = await getTodayRecapForSender(senderPhone, processingDayKey);
+                                        replyText = buildReplyForNewData(logJson, validCount, 'DHARMAJAYA', validItems);
+                                    }
                                     userFlowByPhone.set(senderPhone, 'NONE'); // Reset flow
-                                    // replyText will be sent below
                                 } else {
                                     replyText = '❌ *Data Dharmajaya Gagal Proses*\nPastikan format 4 baris per orang.';
                                     userFlowByPhone.set(senderPhone, 'NONE');
@@ -1341,9 +1351,14 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
 
                             // Logic Save & Reply (Copied for safety)
                             if (logJson.stats.total_blocks > 0 && (!logJson.failed_remainder_lines || logJson.failed_remainder_lines.length === 0)) {
-                                await saveLogAndOkItems(logJson, pendingData);
-                                const { validCount, validItems } = await getTodayRecapForSender(senderPhone, processingDayKey);
-                                replyText = buildReplyForNewData(logJson, validCount, 'PASARJAYA', validItems);
+                                const saveResult = await saveLogAndOkItems(logJson, pendingData);
+                                if (!saveResult.success) {
+                                    console.error('❌ Gagal simpan ke database (PASARJAYA SUB):', saveResult.dataError);
+                                    replyText = '❌ *GAGAL MENYIMPAN DATA*\n\nTerjadi kesalahan sistem.\nSilakan kirim ulang data Anda.';
+                                } else {
+                                    const { validCount, validItems } = await getTodayRecapForSender(senderPhone, processingDayKey);
+                                    replyText = buildReplyForNewData(logJson, validCount, 'PASARJAYA', validItems);
+                                }
                                 userFlowByPhone.set(senderPhone, 'NONE');
                                 pendingRegistrationData.delete(senderPhone);
                             } else {
@@ -1422,9 +1437,14 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             logJson.sender_name = existingName || undefined;
 
                             if (logJson.stats.total_blocks > 0 && (!logJson.failed_remainder_lines || logJson.failed_remainder_lines.length === 0)) {
-                                await saveLogAndOkItems(logJson, pendingData);
-                                const { validCount, validItems } = await getTodayRecapForSender(senderPhone, processingDayKey);
-                                replyText = buildReplyForNewData(logJson, validCount, 'PASARJAYA', validItems);
+                                const saveResult = await saveLogAndOkItems(logJson, pendingData);
+                                if (!saveResult.success) {
+                                    console.error('❌ Gagal simpan ke database (MANUAL LOCATION):', saveResult.dataError);
+                                    replyText = '❌ *GAGAL MENYIMPAN DATA*\n\nTerjadi kesalahan sistem.\nSilakan kirim ulang data Anda.';
+                                } else {
+                                    const { validCount, validItems } = await getTodayRecapForSender(senderPhone, processingDayKey);
+                                    replyText = buildReplyForNewData(logJson, validCount, 'PASARJAYA', validItems);
+                                }
                                 userFlowByPhone.set(senderPhone, 'NONE');
                                 pendingRegistrationData.delete(senderPhone);
                             } else {
@@ -3084,14 +3104,16 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                 ].join('\n');
                             } else {
                                 // DATA BERSIH (Valid Blocks Only & No Remainder) -> PROSES SIMPAN
-                                await saveLogAndOkItems(logJson, messageText);
+                                const saveResult = await saveLogAndOkItems(logJson, messageText);
 
-                                // Refresh total after saving - and get ITEMS (Pass true to force refresh if cache mechanism exists, but function doesn't support it yet)
-                                // Important: getTodayRecapForSender queries DB directly, so it will see the engaged inserted records.
-                                const { validCount: finalTotalCount, validItems: finalItems } = await getTodayRecapForSender(senderPhone, processingDayKey);
-
-                                // Pass 'finalItems' to buildReplyForNewData to show the Clean List of names
-                                replyText = buildReplyForNewData(logJson, finalTotalCount, finalContext, finalItems);
+                                if (!saveResult.success) {
+                                    console.error('❌ Gagal simpan ke database (AUTO-DETECT):', saveResult.dataError);
+                                    replyText = '❌ *GAGAL MENYIMPAN DATA*\n\nTerjadi kesalahan sistem saat menyimpan.\nSilakan kirim ulang data Anda atau hubungi Admin.';
+                                } else {
+                                    // Refresh total after saving
+                                    const { validCount: finalTotalCount, validItems: finalItems } = await getTodayRecapForSender(senderPhone, processingDayKey);
+                                    replyText = buildReplyForNewData(logJson, finalTotalCount, finalContext, finalItems);
+                                }
                             }
                         } else {
                             // Kasus langka: >= 4 baris tapi tidak ada blok valid satu pun?
