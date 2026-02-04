@@ -237,11 +237,8 @@ export async function checkDuplicateForItem(
 }
 
 export async function saveLogAndOkItems(log: LogJson, rawText: string): Promise<{ success: boolean; dataError?: any; logError?: any }> {
-    // PARALLEL INSERT: Log dan Data Harian berbarengan
-    let logErrorResult: any = null;
-    let dataErrorResult: any = null;
-
-    const insertLogPromise = (async () => {
+    // Fungsi helper untuk insert log
+    async function insertLog(): Promise<any> {
         const { error: logError } = await supabase.from('log_pesan_wa').insert([
             {
                 tanggal: log.tanggal,
@@ -260,13 +257,14 @@ export async function saveLogAndOkItems(log: LogJson, rawText: string): Promise<
         ]);
         if (logError) {
             console.error('Error insert log_pesan_wa:', logError);
-            logErrorResult = logError;
         }
-    })();
+        return logError;
+    }
 
-    const insertDataPromise = (async () => {
+    // Fungsi helper untuk insert data harian
+    async function insertData(): Promise<any> {
         const okItems = log.items.filter((it) => it.status === 'OK');
-        if (okItems.length === 0) return; // No data to insert, not an error
+        if (okItems.length === 0) return null; // No data to insert, not an error
 
         const rows = okItems.map((it) => ({
             tanggal: log.tanggal,
@@ -290,18 +288,29 @@ export async function saveLogAndOkItems(log: LogJson, rawText: string): Promise<
 
         const { error: dataError } = await supabase.from('data_harian').insert(rows);
         if (dataError) {
-            console.error('Error insert data_harian:', dataError);
-            dataErrorResult = dataError;
+            console.error('❌ Error insert data_harian:', dataError);
         } else {
-            console.log(`Berhasil simpan ${rows.length} item OK ke data_harian.`);
+            console.log(`✅ Berhasil simpan ${rows.length} item OK ke data_harian.`);
         }
-    })();
+        return dataError;
+    }
 
-    await Promise.all([insertLogPromise, insertDataPromise]);
+    // PARALLEL INSERT: Log dan Data Harian berbarengan dengan proper error capture
+    const [logErrorResult, dataErrorResult] = await Promise.all([
+        insertLog(),
+        insertData()
+    ]);
 
     // Return status - only consider failure if data insert failed (log error is less critical)
+    const success = dataErrorResult === null;
+
+    // DEBUG LOG: Pastikan status success benar
+    if (!success) {
+        console.error('⚠️ saveLogAndOkItems: Returning success=false due to dataError');
+    }
+
     return {
-        success: dataErrorResult === null,
+        success,
         dataError: dataErrorResult,
         logError: logErrorResult
     };

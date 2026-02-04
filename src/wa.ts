@@ -126,6 +126,41 @@ function getPhoneFromLid(lidJid: string): string | null {
 
 const ADMIN_PHONES = new Set(ADMIN_PHONES_RAW.map(normalizePhone));
 
+// --- HELPER: BUILD DATABASE ERROR MESSAGE ---
+// Menghasilkan pesan error yang mudah dipahami user berdasarkan error database
+function buildDatabaseErrorMessage(dataError: any, logJson?: any): string {
+    // Handle constraint violation (duplicate key)
+    if (dataError?.code === '23505') {
+        // Extract info from error details
+        const details = dataError?.details || '';
+        const noKartuMatch = details.match(/no_kjp\)=\([^,]+,\s*(\d+)\)/);
+        const noKartu = noKartuMatch ? noKartuMatch[1] : null;
+
+        // Build informative message
+        const lines = [
+            '⚠️ *DATA SUDAH TERDAFTAR!*',
+            '',
+            '❌ Data yang Anda kirim sudah pernah terdaftar hari ini.',
+        ];
+
+        if (noKartu) {
+            lines.push(`📇 No Kartu: ${noKartu}`);
+        }
+
+        lines.push('');
+        lines.push('💡 *Kemungkinan Penyebab:*');
+        lines.push('• Anda sudah mengirim data ini sebelumnya');
+        lines.push('• Data ini sudah dikirim oleh orang lain');
+        lines.push('');
+        lines.push('Ketik *CEK* untuk lihat data Anda yang terdaftar.');
+
+        return lines.join('\n');
+    }
+
+    // Default error message
+    return '❌ *GAGAL MENYIMPAN DATA*\n\nTerjadi kesalahan sistem saat menyimpan.\nSilakan kirim ulang data Anda atau hubungi Admin.';
+}
+
 // --- KIRIM MENU TEKS ---
 async function sendMainMenu(sock: WASocket, remoteJid: string, isAdmin: boolean) {
     let finalMenu = MENU_MESSAGE;
@@ -142,6 +177,7 @@ function normalizeIncomingCommand(raw: string): string {
     if (up === 'HAPUS') return '3'; // Support keyword "HAPUS" langsung
     return up;
 }
+
 
 function getMessageDate(msg: any): Date {
     const ts: any = msg?.messageTimestamp;
@@ -1045,9 +1081,8 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
 
                             if (!saveResult.success) {
                                 console.error('❌ Gagal simpan ke database:', saveResult.dataError);
-                                await sock.sendMessage(remoteJid, {
-                                    text: '❌ *GAGAL MENYIMPAN DATA*\n\nTerjadi kesalahan sistem saat menyimpan.\nSilakan kirim ulang data Anda atau hubungi Admin.'
-                                });
+                                const errorMsg = buildDatabaseErrorMessage(saveResult.dataError, logJson);
+                                await sock.sendMessage(remoteJid, { text: errorMsg });
                             } else {
                                 // Hitung total data hari ini SETELAH data disimpan
                                 const todayRecap = await getTodayRecapForSender(senderPhone, processingDayKey);
@@ -1280,7 +1315,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                     const saveResult = await saveLogAndOkItems(logJson, pendingData);
                                     if (!saveResult.success) {
                                         console.error('❌ Gagal simpan ke database (DHARMAJAYA):', saveResult.dataError);
-                                        replyText = '❌ *GAGAL MENYIMPAN DATA*\n\nTerjadi kesalahan sistem.\nSilakan kirim ulang data Anda.';
+                                        replyText = buildDatabaseErrorMessage(saveResult.dataError, logJson);
                                     } else {
                                         const { validCount, validItems } = await getTodayRecapForSender(senderPhone, processingDayKey);
                                         replyText = buildReplyForNewData(logJson, validCount, 'DHARMAJAYA', validItems);
@@ -1354,7 +1389,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                 const saveResult = await saveLogAndOkItems(logJson, pendingData);
                                 if (!saveResult.success) {
                                     console.error('❌ Gagal simpan ke database (PASARJAYA SUB):', saveResult.dataError);
-                                    replyText = '❌ *GAGAL MENYIMPAN DATA*\n\nTerjadi kesalahan sistem.\nSilakan kirim ulang data Anda.';
+                                    replyText = buildDatabaseErrorMessage(saveResult.dataError, logJson);
                                 } else {
                                     const { validCount, validItems } = await getTodayRecapForSender(senderPhone, processingDayKey);
                                     replyText = buildReplyForNewData(logJson, validCount, 'PASARJAYA', validItems);
@@ -1440,7 +1475,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                 const saveResult = await saveLogAndOkItems(logJson, pendingData);
                                 if (!saveResult.success) {
                                     console.error('❌ Gagal simpan ke database (MANUAL LOCATION):', saveResult.dataError);
-                                    replyText = '❌ *GAGAL MENYIMPAN DATA*\n\nTerjadi kesalahan sistem.\nSilakan kirim ulang data Anda.';
+                                    replyText = buildDatabaseErrorMessage(saveResult.dataError, logJson);
                                 } else {
                                     const { validCount, validItems } = await getTodayRecapForSender(senderPhone, processingDayKey);
                                     replyText = buildReplyForNewData(logJson, validCount, 'PASARJAYA', validItems);
@@ -3108,7 +3143,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
 
                                 if (!saveResult.success) {
                                     console.error('❌ Gagal simpan ke database (AUTO-DETECT):', saveResult.dataError);
-                                    replyText = '❌ *GAGAL MENYIMPAN DATA*\n\nTerjadi kesalahan sistem saat menyimpan.\nSilakan kirim ulang data Anda atau hubungi Admin.';
+                                    replyText = buildDatabaseErrorMessage(saveResult.dataError, logJson);
                                 } else {
                                     // Refresh total after saving
                                     const { validCount: finalTotalCount, validItems: finalItems } = await getTodayRecapForSender(senderPhone, processingDayKey);
