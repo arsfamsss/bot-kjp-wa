@@ -58,6 +58,48 @@ export function getRegisteredUserNameSync(phoneNumber: string): string | null {
     return registeredUsersCache.get(key) || null;
 }
 
+/**
+ * FALLBACK: Jika user tidak ditemukan di cache, coba query ke database.
+ * Ini mengatasi masalah ketika cache gagal load saat startup.
+ * Jika ditemukan, cache akan diupdate.
+ */
+export async function getRegisteredUserNameWithFallback(phoneNumber: string): Promise<string | null> {
+    // 1. Cek cache dulu (cepat)
+    const cachedName = getRegisteredUserNameSync(phoneNumber);
+    if (cachedName !== null) {
+        return cachedName;
+    }
+
+    // 2. Fallback: Query database
+    try {
+        const { data, error } = await supabase
+            .from('lid_phone_map')
+            .select('phone_number, push_name, lid_jid')
+            .eq('phone_number', phoneNumber)
+            .limit(1)
+            .single();
+
+        if (error || !data) {
+            // User memang belum terdaftar
+            return null;
+        }
+
+        // 3. User ditemukan di DB! Update cache agar tidak query lagi
+        if (data.phone_number) {
+            registeredUsersCache.set(data.phone_number, data.push_name || '');
+            console.log(`🔄 Cache fallback: User ${data.phone_number} dimuat dari database.`);
+        }
+        if (data.lid_jid && data.phone_number) {
+            lidToPhoneCache.set(data.lid_jid, data.phone_number);
+        }
+
+        return data.push_name || '';
+    } catch (e) {
+        console.error('❌ Error getRegisteredUserNameWithFallback:', e);
+        return null;
+    }
+}
+
 export function getPhoneFromLidSync(lid: string): string | null {
     return lidToPhoneCache.get(lid) || null;
 }
@@ -771,10 +813,11 @@ export async function getAllLidPhoneMap(): Promise<{ phone_number: string; push_
 
 // --- LOOKUP BY PHONE NUMBER (untuk fix setelah ganti nomor bot) ---
 // Cek apakah phone_number sudah terdaftar di database (langsung query, bypass cache)
+// FIXED: Sekarang juga update cache jika user ditemukan
 export async function getRegisteredUserByPhone(phoneNumber: string): Promise<{ push_name: string | null; lid_jid: string | null } | null> {
     const { data, error } = await supabase
         .from('lid_phone_map')
-        .select('push_name, lid_jid')
+        .select('push_name, lid_jid, phone_number')
         .eq('phone_number', phoneNumber)
         .maybeSingle();
 
@@ -782,7 +825,20 @@ export async function getRegisteredUserByPhone(phoneNumber: string): Promise<{ p
         console.error('❌ getRegisteredUserByPhone error:', error.message);
         return null;
     }
-    return data ? { push_name: data.push_name, lid_jid: data.lid_jid } : null;
+
+    if (data) {
+        // UPDATE CACHE agar tidak perlu query ulang
+        if (data.phone_number) {
+            registeredUsersCache.set(data.phone_number, data.push_name || '');
+        }
+        if (data.lid_jid && data.phone_number) {
+            lidToPhoneCache.set(data.lid_jid, data.phone_number);
+        }
+        console.log(`🔄 Cache updated via DB lookup: ${phoneNumber} -> ${data.push_name || '(no name)'}`);
+        return { push_name: data.push_name, lid_jid: data.lid_jid };
+    }
+
+    return null;
 }
 
 // Update LID untuk phone number yang sudah terdaftar (ketika bot ganti nomor, LID berubah)
