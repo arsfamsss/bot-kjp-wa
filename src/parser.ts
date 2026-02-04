@@ -378,6 +378,7 @@ export async function processRawMessageToLogJson(params: {
         return checkDuplicateForItem(item, {
             processingDayKey,
             senderPhone,
+            tanggal, // FIX: pass tanggal to match DB constraint
         });
     }));
     items = updatedItems;

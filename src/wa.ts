@@ -2926,13 +2926,13 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                     const lines = parseRawMessageToLines(messageText);
 
                     // AUTO-DETECT: Cek apakah baris ke-5 atau setiap baris ke-5 (dalam multi-data) adalah tanggal
-                    const looksLikeDatePattern = /^\d{1,2}[-\/\.]\d{1,2}[-\/\.]\d{2,4}$/;
+                    // FIX: Use looksLikeDate() function instead of simple regex (handles labels like 'Tggl lahir : 12-11-2014')
 
                     // Deteksi format berdasarkan pattern data
                     let detectedFormat: 'PASARJAYA' | 'DHARMAJAYA' | null = null;
 
                     // Cek untuk single data (5 baris = Pasarjaya, 4 baris = Dharmajaya)
-                    if (lines.length === 5 && looksLikeDatePattern.test(lines[4]?.trim() || '')) {
+                    if (lines.length === 5 && looksLikeDate(lines[4] || '')) {
                         detectedFormat = 'PASARJAYA';
                     } else if (lines.length === 4) {
                         detectedFormat = 'DHARMAJAYA';
@@ -2942,7 +2942,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                         // Cek apakah setiap baris ke-5 adalah tanggal
                         let allDates = true;
                         for (let i = 4; i < lines.length; i += 5) {
-                            if (!looksLikeDatePattern.test(lines[i]?.trim() || '')) {
+                            if (!looksLikeDate(lines[i] || '')) {
                                 allDates = false;
                                 break;
                             }

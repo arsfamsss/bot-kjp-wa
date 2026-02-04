@@ -82,11 +82,11 @@ export async function getTotalDataTodayForSender(
 
 export async function checkDuplicateForItem(
     item: LogItem,
-    ctx: { processingDayKey: string; senderPhone: string }
+    ctx: { processingDayKey: string; senderPhone: string; tanggal: string }
 ): Promise<LogItem> {
     if (item.status !== 'OK') return item;
 
-    const { processingDayKey, senderPhone } = ctx;
+    const { processingDayKey, senderPhone, tanggal } = ctx;
 
     const markDup = (args: {
         kind: DuplicateKind;
@@ -119,7 +119,7 @@ export async function checkDuplicateForItem(
             const { data, error } = await supabase
                 .from('data_harian')
                 .select('nama, no_kjp, no_ktp, no_kk, sender_phone') // +sender_phone
-                .eq('processing_day_key', processingDayKey)
+                .eq('tanggal', tanggal) // FIX: use tanggal to match DB constraint
                 .ilike('nama', item.parsed.nama)
                 .limit(1);
             if (!error && data && data.length > 0) return data[0];
@@ -132,7 +132,7 @@ export async function checkDuplicateForItem(
             const { data, error } = await supabase
                 .from('data_harian')
                 .select('nama, no_kjp, no_ktp, no_kk, sender_phone') // +sender_phone
-                .eq('processing_day_key', processingDayKey)
+                .eq('tanggal', tanggal) // FIX: use tanggal to match DB constraint
                 .eq('no_kjp', item.parsed.no_kjp)
                 .limit(1);
             if (!error && data && data.length > 0) return data[0];
@@ -145,7 +145,7 @@ export async function checkDuplicateForItem(
             const { data, error } = await supabase
                 .from('data_harian')
                 .select('nama, no_kjp, no_ktp, no_kk, sender_phone') // +sender_phone
-                .eq('processing_day_key', processingDayKey)
+                .eq('tanggal', tanggal) // FIX: use tanggal to match DB constraint
                 .eq('no_ktp', item.parsed.no_ktp)
                 .limit(1);
             if (!error && data && data.length > 0) return data[0];
@@ -158,7 +158,7 @@ export async function checkDuplicateForItem(
             const { data, error } = await supabase
                 .from('data_harian')
                 .select('received_at, sender_phone, nama, no_kjp, no_ktp, no_kk')
-                .eq('processing_day_key', processingDayKey)
+                .eq('tanggal', tanggal) // FIX: use tanggal to match DB constraint
                 .eq('no_kk', item.parsed.no_kk)
                 .order('received_at', { ascending: true })
                 .limit(1);
