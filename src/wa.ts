@@ -962,7 +962,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
 
                         // Minta pilih lokasi (Format Lama) tapi nanti 1 akan trigger menu baru
                         await sock.sendMessage(remoteJid, {
-                            text: `⚠️ *Mohon Pilih Lokasi Dulu*\n\nData Anda sepertinya valid, tapi saya perlu tahu Anda mau ambil sembako di mana?\n\nKetik *1* untuk Pasarjaya\nKetik *2* untuk Dharmajaya Duri Kosambi`
+                            text: `⚠️ *Mohon Pilih Lokasi Dulu*\n\nData Anda sepertinya valid, tapi saya perlu tahu Anda mau ambil sembako di mana?\n\nKetik *1* untuk Pasarjaya (Kedoya,Cengkareng,Pesakih dll)\nKetik *2* untuk Dharmajaya (Kosambi,Kapuk Jagal,Pulogadung,Cakung)`
                         });
                         userFlowByPhone.set(senderPhone, 'SELECT_LOCATION');
                         return; // Selesai
@@ -3022,7 +3022,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                     if (blockAskLocation) {
                         // Tolak halus dan minta pilih lokasi
                         await sock.sendMessage(remoteJid, {
-                            text: `⚠️ *Mohon Pilih Lokasi Dulu*\n\nData Anda sepertinya valid, tapi saya perlu tahu Anda mau ambil sembako di mana?\n\nKetik *1* untuk Pasarjaya\nKetik *2* untuk Dharmajaya Duri Kosambi`
+                            text: `⚠️ *Mohon Pilih Lokasi Dulu*\n\nData Anda sepertinya valid, tapi saya perlu tahu Anda mau ambil sembako di mana?\n\nKetik *1* untuk Pasarjaya (Kedoya,Cengkareng,Pesakih dll)\nKetik *2* untuk Dharmajaya (Kosambi,Kapuk Jagal,Pulogadung,Cakung)`
                         });
                         userFlowByPhone.set(senderPhone, 'SELECT_LOCATION');
                         // Jangan continue, biarkan logic bawah skip karena if (lines.length >= minLines) akan kita guard
