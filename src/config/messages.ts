@@ -37,11 +37,11 @@ export const FORMAT_DAFTAR_MESSAGE = [
 export const MENU_PASARJAYA_LOCATIONS = [
     '📍 *LOKASI PENGAMBILAN*',
     '',
-    '1. 🏭 Jakgrosir Kedoya',
-    '2. 🏙️ Gerai Rusun Pesakih',
-    '3. 🏪 Mini DC Kec. Cengkareng',
-    '4. 🛒 Jakmart Bambu Larangan',
-    '5. 📝 *Lokasi Lain...*',
+    '*1.* Jakgrosir Kedoya',
+    '*2.* Gerai Rusun Pesakih',
+    '*3.* Mini DC Kec. Cengkareng',
+    '*4.* Jakmart Bambu Larangan',
+    '*5.* Lokasi Lain...',
     '',
     '_Silakan balas dengan angka pilihanmu!_',
     '_(Ketik 0 untuk batal)_'
@@ -58,10 +58,10 @@ export const PASARJAYA_MAPPING: Record<string, string> = {
 export const MENU_DHARMAJAYA_LOCATIONS = [
     '📍 *LOKASI PENGAMBILAN*',
     '',
-    '1. 🏪 Duri Kosambi',
-    '2. 🏬 Kapuk',
-    '3. 🏢 Pulogadung',
-    '4. 🏭 Cakung',
+    '*1.* Duri Kosambi',
+    '*2.* Kapuk',
+    '*3.* Pulogadung',
+    '*4.* Cakung',
     '',
     '_Silakan balas dengan angka pilihanmu!_',
     '_(Ketik 0 untuk batal)_'
