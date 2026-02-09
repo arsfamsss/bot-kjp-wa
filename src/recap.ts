@@ -169,9 +169,12 @@ export function buildReplyForTodayRecap(
         lines.push('');
         validItems.forEach((item, i) => {
             // Tentukan lokasi pengambilan
-            const lokasiLabel = item.lokasi && item.lokasi.startsWith('PASARJAYA')
-                ? `📍 ${item.lokasi}` // Tampilkan full: "PASARJAYA - Jakgrosir"
-                : '📍 Duri Kosambi';
+            let lokasiLabel = '📍 Duri Kosambi'; // Default lama
+            if (item.lokasi) {
+                if (item.lokasi.startsWith('PASARJAYA') || item.lokasi.startsWith('DHARMAJAYA')) {
+                    lokasiLabel = `📍 ${item.lokasi}`;
+                }
+            }
 
             lines.push(`┌── ${i + 1}. *${item.nama}*`);
             lines.push(`│   📇 Kartu : ${item.no_kjp}`);

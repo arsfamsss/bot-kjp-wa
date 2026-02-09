@@ -11,6 +11,7 @@ export type UserFlowState =
     | 'DELETE_DATA'
     | 'SELECT_LOCATION'
     | 'SELECT_PASARJAYA_SUB'
+    | 'SELECT_DHARMAJAYA_SUB'
     | 'INPUT_MANUAL_LOCATION'
     | 'EDIT_PICK_RECORD'
     | 'EDIT_PICK_FIELD'

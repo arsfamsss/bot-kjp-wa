@@ -25,7 +25,9 @@ export const FORMAT_DAFTAR_MESSAGE = [
     'Mau ambil sembako dimana?',
     '',
     '1️⃣ *PASARJAYA*',
-    '2️⃣ *DHARMAJAYA* *Duri Kosambi*',
+    '(Kedoya,Cengkareng,Pesakih dll)',
+    '2️⃣ *DHARMAJAYA*',
+    '(Kosambi,Kapuk,Pulogadung,Cakung)',
     '',
     'Ketik 1 atau 2 ya',
     'Ketik 0 kalau batal 😊',
@@ -50,6 +52,26 @@ export const PASARJAYA_MAPPING: Record<string, string> = {
     '2': 'Gerai Rusun Pesakih',
     '3': 'Mini DC Kec. Cengkareng',
     '4': 'Jakmart Bambu Larangan'
+};
+
+// --- MENU & MAPPING LOKASI DHARMAJAYA (NEW) ---
+export const MENU_DHARMAJAYA_LOCATIONS = [
+    '📍 *LOKASI PENGAMBILAN*',
+    '',
+    '1. 🏪 Duri Kosambi',
+    '2. 🏬 Kapuk',
+    '3. 🏢 Pulogadung',
+    '4. 🏭 Cakung',
+    '',
+    '_Silakan balas dengan angka pilihanmu!_',
+    '_(Ketik 0 untuk batal)_'
+].join('\n');
+
+export const DHARMAJAYA_MAPPING: Record<string, string> = {
+    '1': 'Duri Kosambi',
+    '2': 'Kapuk',
+    '3': 'Pulogadung',
+    '4': 'Cakung'
 };
 
 // --- FORMAT DAFTAR PASARJAYA (5 baris) ---
@@ -83,7 +105,7 @@ export const FORMAT_DAFTAR_PASARJAYA = [
 
 // --- FORMAT DAFTAR DHARMAJAYA (4 baris) ---
 export const FORMAT_DAFTAR_DHARMAJAYA = [
-    '✅ *LOKASI: DHARMAJAYA*',
+    '✅ *LOKASI TERPILIH: DHARMAJAYA*',
     '',
     '📝 Kirim data dalam *4 BARIS*:',
     '',

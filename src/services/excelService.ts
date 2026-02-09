@@ -19,8 +19,13 @@ export const generateKJPExcel = (data: any[]): Buffer => {
         if (item.lokasi && item.lokasi.startsWith('PASARJAYA')) {
             // Gunakan lokasi spesifik dari database (mis: "PASARJAYA - Jakgrosir Kedoya")
             lokasiFinal = item.lokasi;
-        } else if (item.lokasi === 'DHARMAJAYA') {
-            lokasiFinal = "DHARMAJAYA DURI KOSAMBI";
+        } else if (item.lokasi && item.lokasi.startsWith('DHARMAJAYA')) {
+            // Handle format baru: "DHARMAJAYA - Kapuk" atau fallback "DHARMAJAYA" saja
+            if (item.lokasi === 'DHARMAJAYA') {
+                lokasiFinal = "DHARMAJAYA DURI KOSAMBI";
+            } else {
+                lokasiFinal = item.lokasi; // "DHARMAJAYA - Kapuk", dll
+            }
         } else if (!item.lokasi) {
             // Fallback logic jika kolom lokasi kosong (data lama)
             if (item.tanggal_lahir && item.tanggal_lahir.length > 5) {
