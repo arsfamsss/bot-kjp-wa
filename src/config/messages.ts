@@ -27,7 +27,7 @@ export const FORMAT_DAFTAR_MESSAGE = [
     '1️⃣ *PASARJAYA*',
     '(Kedoya,Cengkareng,Pesakih dll)',
     '2️⃣ *DHARMAJAYA*',
-    '(Kosambi,Kapuk,Pulogadung,Cakung)',
+    '(Kosambi,Kapuk Jagal,Pulogadung,Cakung)',
     '',
     'Ketik 1 atau 2 ya',
     'Ketik 0 kalau batal 😊',
@@ -59,7 +59,7 @@ export const MENU_DHARMAJAYA_LOCATIONS = [
     '📍 *LOKASI PENGAMBILAN*',
     '',
     '*1.* Duri Kosambi',
-    '*2.* Kapuk',
+    '*2.* Kapuk Jagal',
     '*3.* Pulogadung',
     '*4.* Cakung',
     '',
@@ -69,7 +69,7 @@ export const MENU_DHARMAJAYA_LOCATIONS = [
 
 export const DHARMAJAYA_MAPPING: Record<string, string> = {
     '1': 'Duri Kosambi',
-    '2': 'Kapuk',
+    '2': 'Kapuk Jagal',
     '3': 'Pulogadung',
     '4': 'Cakung'
 };

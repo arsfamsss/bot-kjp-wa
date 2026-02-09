@@ -7,7 +7,7 @@ echo (Masukkan password: openwifi jika diminta)
 scp -r src package.json tsconfig.json root@192.168.100.104:/root/bot-kjp/
 
 echo.
-echo [2/3] Install & Build di STB...
+echo [2/3] Install ^& Build di STB...
 echo (Masukkan password lagi jika diminta)
 ssh -t root@192.168.100.104 "cd /root/bot-kjp && echo [STB] Installing dependencies... && npm install && echo [STB] Building project... && npm run build && echo [STB] Restarting Bot... && pm2 restart bot-kjp && pm2 save"
 

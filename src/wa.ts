@@ -1485,7 +1485,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                 'Silakan pilih lokasi pengambilannya:',
                                 '',
                                 '*1.* Duri Kosambi',
-                                '*2.* Kapuk',
+                                '*2.* Kapuk Jagal',
                                 '*3.* Pulogadung',
                                 '*4.* Cakung',
                                 '',

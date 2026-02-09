@@ -315,23 +315,36 @@ export async function getGlobalRecap(
         lines.push(`📥 Jumlah Data: ${items.length}`);
 
         // --- GROUPING PER LOKASI ---
-        const dharmajayaItems = items.filter((i: any) => !i.lokasi || (!i.lokasi.startsWith('PASARJAYA')));
+        // Dharmajaya: item yang lokasi-nya diawali "DHARMAJAYA" atau tidak ada lokasi (legacy)
+        const dharmajayaItems = items.filter((i: any) => !i.lokasi || i.lokasi.startsWith('DHARMAJAYA'));
         const pasarjayaItems = items.filter((i: any) => i.lokasi && i.lokasi.startsWith('PASARJAYA'));
 
         let globalIndex = 1;
 
-        // Tampilkan Dharmajaya terlebih dahulu
+        // Tampilkan Dharmajaya - Dikelompokkan berdasarkan lokasi spesifik (seperti Pasarjaya)
         if (dharmajayaItems.length > 0) {
-            lines.push(`*Dharmajaya Duri Kosambi* : ${dharmajayaItems.length}`);
-            dharmajayaItems.forEach((item: any) => {
-                const itemKey = endKey ? ` (${String(item.processing_day_key).split('-').reverse().join('-')})` : '';
-                lines.push(`   ${globalIndex}. ${item.nama}${itemKey}`);
-                lines.push(`   KJP ${item.no_kjp}`);
-                lines.push(`   KTP ${item.no_ktp}`);
-                lines.push(`   KK  ${item.no_kk}`);
-                lines.push('');
-                globalIndex++;
-            });
+            // Group by specific location
+            const dharmajayaByLocation: Record<string, any[]> = {};
+            for (const item of dharmajayaItems) {
+                // Legacy data tanpa lokasi -> default ke "DHARMAJAYA - Duri Kosambi"
+                const locKey = item.lokasi || 'DHARMAJAYA - Duri Kosambi';
+                if (!dharmajayaByLocation[locKey]) dharmajayaByLocation[locKey] = [];
+                dharmajayaByLocation[locKey].push(item);
+            }
+
+            // Tampilkan per lokasi spesifik
+            for (const [locName, locItems] of Object.entries(dharmajayaByLocation)) {
+                lines.push(`*${locName}* : ${locItems.length}`);
+                locItems.forEach((item: any) => {
+                    const itemKey = endKey ? ` (${String(item.processing_day_key).split('-').reverse().join('-')})` : '';
+                    lines.push(`   ${globalIndex}. ${item.nama}${itemKey}`);
+                    lines.push(`   KJP ${item.no_kjp}`);
+                    lines.push(`   KTP ${item.no_ktp}`);
+                    lines.push(`   KK  ${item.no_kk}`);
+                    lines.push('');
+                    globalIndex++;
+                });
+            }
         }
 
         // Tampilkan Pasarjaya - Dikelompokkan berdasarkan lokasi spesifik
@@ -422,7 +435,8 @@ export async function generateExportData(
     const displayDate = processingDayKey.split('-').reverse().join('-');
 
     // --- Group by Lokasi terlebih dahulu, lalu by Sender ---
-    const dharmajayaData = (data as any[]).filter((i: any) => !i.lokasi || (!i.lokasi.startsWith('PASARJAYA')));
+    // Dharmajaya: item yang lokasi-nya diawali "DHARMAJAYA" atau tidak ada lokasi (legacy)
+    const dharmajayaData = (data as any[]).filter((i: any) => !i.lokasi || i.lokasi.startsWith('DHARMAJAYA'));
     const pasarjayaData = (data as any[]).filter((i: any) => i.lokasi && i.lokasi.startsWith('PASARJAYA'));
 
     // Group Dharmajaya by sender
@@ -450,30 +464,50 @@ export async function generateExportData(
     txtRows.push('👇 *RINCIAN DATA MASUK:*');
     txtRows.push('────────────────────────────────────');
 
-    // === GERAI DHARMAJAYA ===
-    if (Object.keys(dharmajayaBySender).length > 0) {
-        txtRows.push('*Gerai Dharmajaya Duri Kosambi*');
-        txtRows.push('');
+    // === GERAI DHARMAJAYA (DIKELOMPOKKAN PER SUB-LOKASI) ===
+    if (dharmajayaData.length > 0) {
+        // Group by specific location first, then by sender
+        const dharmajayaByLocation: Record<string, any[]> = {};
+        for (const row of dharmajayaData) {
+            // Legacy data tanpa lokasi -> default ke "DHARMAJAYA - Duri Kosambi"
+            const locKey = row.lokasi || 'DHARMAJAYA - Duri Kosambi';
+            if (!dharmajayaByLocation[locKey]) dharmajayaByLocation[locKey] = [];
+            dharmajayaByLocation[locKey].push(row);
+        }
 
-        // SORTING BY NAME
-        const sortedPhones = Object.keys(dharmajayaBySender).sort((a, b) => {
-            const nameA = getSenderName(a).toUpperCase();
-            const nameB = getSenderName(b).toUpperCase();
-            return nameA.localeCompare(nameB);
-        });
+        // Tampilkan per lokasi spesifik
+        for (const [locName, locItems] of Object.entries(dharmajayaByLocation)) {
+            txtRows.push(`*Gerai ${locName}*`);
+            txtRows.push('');
 
-        for (const phone of sortedPhones) {
-            const items = dharmajayaBySender[phone];
-            const senderName = getSenderName(phone);
+            // Group by sender within this location
+            const bySender: Record<string, any[]> = {};
+            for (const item of locItems) {
+                const phone = item.sender_phone;
+                if (!bySender[phone]) bySender[phone] = [];
+                bySender[phone].push(item);
+            }
 
-            // TIDAK ADA HEADER PENGIRIM, LANGSUNG ITEM
-            items.forEach((item: any) => {
-                txtRows.push(`${senderName} (${item.nama})`);
-                txtRows.push(`   📇 KJP ${item.no_kjp}`);
-                txtRows.push(`   🪪 KTP ${item.no_ktp}`);
-                txtRows.push(`   🏠 KK  ${item.no_kk}`);
-                txtRows.push('');
+            // SORTING BY NAME
+            const sortedPhones = Object.keys(bySender).sort((a, b) => {
+                const nameA = getSenderName(a).toUpperCase();
+                const nameB = getSenderName(b).toUpperCase();
+                return nameA.localeCompare(nameB);
             });
+
+            for (const phone of sortedPhones) {
+                const items = bySender[phone];
+                const senderName = getSenderName(phone);
+
+                // TIDAK ADA HEADER PENGIRIM, LANGSUNG ITEM
+                items.forEach((item: any) => {
+                    txtRows.push(`${senderName} (${item.nama})`);
+                    txtRows.push(`   📇 KJP ${item.no_kjp}`);
+                    txtRows.push(`   🪪 KTP ${item.no_ktp}`);
+                    txtRows.push(`   🏠 KK  ${item.no_kk}`);
+                    txtRows.push('');
+                });
+            }
         }
     }
 
@@ -537,8 +571,13 @@ export async function generateExportData(
             // Hilangkan prefix "PASARJAYA - "
             locationName = row.lokasi.replace(/^PASARJAYA\s*-\s*/i, '').trim();
             if (!locationName) locationName = 'PASARJAYA';
+        } else if (row.lokasi && row.lokasi.startsWith('DHARMAJAYA')) {
+            // Dharmajaya dengan sub-lokasi spesifik
+            locationName = row.lokasi.replace(/^DHARMAJAYA\s*-\s*/i, '').trim();
+            if (!locationName) locationName = 'Duri Kosambi';
         } else {
-            locationName = 'Dharmajaya Duri Kosambi';
+            // Legacy data tanpa lokasi
+            locationName = 'Duri Kosambi';
         }
 
         const currentCount = stats.locations.get(locationName) || 0;

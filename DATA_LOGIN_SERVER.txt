@@ -1,0 +1,44 @@
+____________________________________________________
+   DATA LOGIN SERVER STB (SIMPAN & RAHASIAKAN)
+____________________________________________________
+
+Host / IP Address : 192.168.100.104
+Username          : root
+Password          : openwifi
+Port SSH          : 22
+
+Lokasi Folder Bot : /root/bot-kjp
+
+____________________________________________________
+   PERINTAH PENTING (DI TERMINAL STB)
+____________________________________________________
+
+1. Masuk ke Server:
+   ssh root@192.168.100.104
+
+2. Cek apakah Bot Jalan:
+   pm2 status
+   (Pastikan statusnya "online" warna hijau)
+
+3. Lihat Log (Apa yang sedang dikerjakan bot):
+   pm2 logs bot-kjp
+   (Tekan Ctrl+C untuk keluar)
+
+4. Matikan Bot:
+   pm2 stop bot-kjp
+
+5. Nyalakan Bot:
+   pm2 start bot-kjp
+
+6. Restart Bot (Misal abis update):
+   pm2 restart bot-kjp
+
+____________________________________________________
+   CARA UPDATE BOT
+____________________________________________________
+Cukup jalankan file "deploy_vps.bat" dari laptop Anda.
+Script itu sudah saya ubah agar otomatis:
+1. Copy file codingan terbaru ke STB.
+2. Install library jika ada yang baru.
+3. Build ulang bot.
+4. Restart bot otomatis.
