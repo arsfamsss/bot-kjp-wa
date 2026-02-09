@@ -659,16 +659,24 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             editSessionMap.set(senderPhone, session); // update session
                             userFlowByPhone.set(senderPhone, 'EDIT_PICK_FIELD');
 
-                            // Build Menu Fields
+                            // Build Menu Fields (PATCH 3: Tambah opsi Lokasi)
                             const isP = session.selectedType === 'PASARJAYA';
-                            const fields = [
+                            const fields = isP ? [
                                 '1️⃣ Nama',
                                 '2️⃣ Nomor Kartu',
                                 '3️⃣ Nomor KTP (NIK)',
                                 '4️⃣ Nomor KK',
-                                isP ? '5️⃣ Tanggal Lahir' : '5️⃣ BATAL', // If Dharmajaya, 5 is Batal (or just limit to 4?) -> Plan says 5 is Batal for Dharma
-                                isP ? '6️⃣ BATAL' : ''
-                            ].filter(Boolean);
+                                '5️⃣ Tanggal Lahir',
+                                '6️⃣ Lokasi',
+                                '7️⃣ BATAL'
+                            ] : [
+                                '1️⃣ Nama',
+                                '2️⃣ Nomor Kartu',
+                                '3️⃣ Nomor KTP (NIK)',
+                                '4️⃣ Nomor KK',
+                                '5️⃣ Lokasi',
+                                '6️⃣ BATAL'
+                            ];
 
                             replyText = [
                                 `📝 *EDIT DATA KE-${idx}*`,
@@ -696,7 +704,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                         const isPasarjaya = session.selectedType === 'PASARJAYA';
                         const choice = parseInt(normalized);
 
-                        // Mapping Choice -> Field Key
+                        // Mapping Choice -> Field Key (PATCH 3: Tambah Lokasi)
                         let fieldKey = '';
                         let isCancel = false;
 
@@ -706,9 +714,13 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                         else if (choice === 4) fieldKey = 'no_kk';
                         else if (choice === 5) {
                             if (isPasarjaya) fieldKey = 'tanggal_lahir';
-                            else isCancel = true;
+                            else fieldKey = 'lokasi'; // Dharmajaya: 5 = Lokasi
                         }
-                        else if (choice === 6 && isPasarjaya) isCancel = true;
+                        else if (choice === 6) {
+                            if (isPasarjaya) fieldKey = 'lokasi'; // Pasarjaya: 6 = Lokasi
+                            else isCancel = true; // Dharmajaya: 6 = BATAL
+                        }
+                        else if (choice === 7 && isPasarjaya) isCancel = true; // Pasarjaya: 7 = BATAL
                         else if (choice === 0) isCancel = true;
                         else {
                             // Invalid choice
@@ -719,8 +731,41 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             replyText = '✅ Edit dibatalkan.';
                             userFlowByPhone.set(senderPhone, 'NONE');
                             editSessionMap.delete(senderPhone);
+                        } else if (fieldKey === 'lokasi') {
+                            // PATCH 3: SPECIAL HANDLER FOR LOKASI - Redirect ke EDIT_PICK_LOCATION
+                            session.selectedFieldKey = fieldKey;
+                            editSessionMap.set(senderPhone, session);
+                            userFlowByPhone.set(senderPhone, 'EDIT_PICK_LOCATION');
+
+                            // Show location menu based on type
+                            if (isPasarjaya) {
+                                replyText = [
+                                    '📍 *EDIT LOKASI PENGAMBILAN*',
+                                    '',
+                                    '*1.* Jakgrosir Kedoya',
+                                    '*2.* Gerai Rusun Pesakih',
+                                    '*3.* Mini DC Kec. Cengkareng',
+                                    '*4.* Jakmart Bambu Larangan',
+                                    '*5.* Lokasi Lain...',
+                                    '',
+                                    '_Ketik angka pilihanmu!_',
+                                    '_(Ketik 0 untuk batal)_'
+                                ].join('\n');
+                            } else {
+                                replyText = [
+                                    '📍 *EDIT LOKASI PENGAMBILAN*',
+                                    '',
+                                    '*1.* Duri Kosambi',
+                                    '*2.* Kapuk Jagal',
+                                    '*3.* Pulogadung',
+                                    '*4.* Cakung',
+                                    '',
+                                    '_Ketik angka pilihanmu!_',
+                                    '_(Ketik 0 untuk batal)_'
+                                ].join('\n');
+                            }
                         } else if (fieldKey) {
-                            // VALID FIELD SELECTED
+                            // VALID FIELD SELECTED (non-lokasi)
                             session.selectedFieldKey = fieldKey;
 
                             const fieldLabel = {
@@ -877,13 +922,14 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             session.newValue!
                         );
 
-                        // Ambil fieldLabel untuk reply
+                        // Ambil fieldLabel untuk reply (PATCH 3: Tambah lokasi)
                         const fieldLabel = {
                             'nama': 'Nama',
                             'no_kjp': 'Nomor Kartu',
                             'no_ktp': 'Nomor KTP',
                             'no_kk': 'Nomor KK',
-                            'tanggal_lahir': 'Tanggal Lahir'
+                            'tanggal_lahir': 'Tanggal Lahir',
+                            'lokasi': 'Lokasi'
                         }[session.selectedFieldKey!] || session.selectedFieldKey!;
 
                         // Ambil oldValue dari session records untuk reply
@@ -933,6 +979,120 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                 }
                 // --- END PATCH 2 ---
 
+                // --- PATCH 3: EDIT LOKASI HANDLERS ---
+                else if (currentUserFlow === 'EDIT_PICK_LOCATION') {
+                    const session = editSessionMap.get(senderPhone);
+                    if (!session) {
+                        replyText = '❌ Sesi edit kedaluwarsa. Ulangi ketik EDIT.';
+                        userFlowByPhone.set(senderPhone, 'NONE');
+                    } else if (normalized === '0' || normalized === 'BATAL') {
+                        replyText = '✅ Edit lokasi dibatalkan.';
+                        userFlowByPhone.set(senderPhone, 'NONE');
+                        editSessionMap.delete(senderPhone);
+                    } else {
+                        const isPasarjaya = session.selectedType === 'PASARJAYA';
+
+                        // Check for manual input option (Pasarjaya only)
+                        if (normalized === '5' && isPasarjaya) {
+                            userFlowByPhone.set(senderPhone, 'EDIT_INPUT_MANUAL_LOCATION');
+                            replyText = [
+                                '📝 *INPUT LOKASI MANUAL*',
+                                '',
+                                'Silakan ketik nama lokasinya saja.',
+                                '(Contoh: *Pasar Rumput*)',
+                                '',
+                                '_Ketik 0 untuk batal._'
+                            ].join('\n');
+                        } else {
+                            // Check mapping
+                            const mapping = isPasarjaya ? PASARJAYA_MAPPING : DHARMAJAYA_MAPPING;
+                            if (mapping[normalized]) {
+                                const lokasiName = mapping[normalized];
+                                const prefix = isPasarjaya ? 'PASARJAYA' : 'DHARMAJAYA';
+                                session.newValue = `${prefix} - ${lokasiName}`;
+                                session.selectedFieldKey = 'lokasi';
+                                editSessionMap.set(senderPhone, session);
+
+                                // Get old location for confirmation display
+                                const record = session.recordsToday.find(r => r.id === session.selectedRecordId);
+                                const oldValue = record?.lokasi || '(Tidak diketahui)';
+
+                                // Go to confirmation
+                                userFlowByPhone.set(senderPhone, 'EDIT_CONFIRMATION');
+                                replyText = [
+                                    '📝 *KONFIRMASI PERUBAHAN*',
+                                    '',
+                                    'Field: *Lokasi*',
+                                    '',
+                                    '🔻 *Data Lama:*',
+                                    `${oldValue}`,
+                                    '',
+                                    '🔺 *Data Baru:*',
+                                    `${session.newValue}`,
+                                    '',
+                                    'Apakah Anda yakin ingin menyimpan perubahan ini?',
+                                    '',
+                                    'Ketik *1* atau *OK* untuk SIMPAN',
+                                    'Ketik *0* atau *BATAL* untuk membatalkan'
+                                ].join('\n');
+                            } else {
+                                // Invalid choice
+                                const maxChoice = isPasarjaya ? '5' : '4';
+                                replyText = `⚠️ Pilihan salah. Ketik 1-${maxChoice}, atau 0 batal.`;
+                            }
+                        }
+                    }
+                    if (replyText) {
+                        await sock.sendMessage(remoteJid, { text: replyText });
+                        continue;
+                    }
+                }
+                else if (currentUserFlow === 'EDIT_INPUT_MANUAL_LOCATION') {
+                    const session = editSessionMap.get(senderPhone);
+                    if (!session) {
+                        replyText = '❌ Sesi edit kedaluwarsa. Ulangi ketik EDIT.';
+                        userFlowByPhone.set(senderPhone, 'NONE');
+                    } else if (normalized === '0' || normalized === 'BATAL') {
+                        replyText = '✅ Edit lokasi dibatalkan.';
+                        userFlowByPhone.set(senderPhone, 'NONE');
+                        editSessionMap.delete(senderPhone);
+                    } else if (rawTrim.length < 3) {
+                        replyText = '⚠️ Nama lokasi terlalu pendek. Minimal 3 karakter.\n\n_Ketik ulang atau 0 untuk batal._';
+                    } else {
+                        // Valid manual input
+                        session.newValue = `PASARJAYA - ${rawTrim}`;
+                        session.selectedFieldKey = 'lokasi';
+                        editSessionMap.set(senderPhone, session);
+
+                        // Get old location for confirmation display
+                        const record = session.recordsToday.find(r => r.id === session.selectedRecordId);
+                        const oldValue = record?.lokasi || '(Tidak diketahui)';
+
+                        // Go to confirmation
+                        userFlowByPhone.set(senderPhone, 'EDIT_CONFIRMATION');
+                        replyText = [
+                            '📝 *KONFIRMASI PERUBAHAN*',
+                            '',
+                            'Field: *Lokasi*',
+                            '',
+                            '🔻 *Data Lama:*',
+                            `${oldValue}`,
+                            '',
+                            '🔺 *Data Baru:*',
+                            `${session.newValue}`,
+                            '',
+                            'Apakah Anda yakin ingin menyimpan perubahan ini?',
+                            '',
+                            'Ketik *1* atau *OK* untuk SIMPAN',
+                            'Ketik *0* atau *BATAL* untuk membatalkan'
+                        ].join('\n');
+                    }
+                    if (replyText) {
+                        await sock.sendMessage(remoteJid, { text: replyText });
+                        continue;
+                    }
+                }
+                // --- END PATCH 3 ---
                 // ===== STRICT LOGIC PENDAFTARAN =====
 
                 // 1. Apakah ini terlihat seperti data pendaftaran (minimal 4 baris)?

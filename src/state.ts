@@ -16,7 +16,9 @@ export type UserFlowState =
     | 'EDIT_PICK_RECORD'
     | 'EDIT_PICK_FIELD'
     | 'EDIT_INPUT_VALUE' // PATCH 2
-    | 'EDIT_CONFIRMATION'; // PATCH 2
+    | 'EDIT_CONFIRMATION' // PATCH 2
+    | 'EDIT_PICK_LOCATION' // PATCH 3: Edit Lokasi - Menu Pilih
+    | 'EDIT_INPUT_MANUAL_LOCATION'; // PATCH 3: Edit Lokasi - Input Manual (Pasarjaya)
 
 export interface EditSession {
     recordsToday: any[]; // Store the fetched records to avoid re-fetching and ensure ID consistency
