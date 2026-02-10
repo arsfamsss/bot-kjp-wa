@@ -56,7 +56,16 @@ export type AdminFlowState =
     | 'SETTING_CLOSE_TIME_END'
     | 'SETTING_CLOSE_MSG'
     | 'SETTING_CLOSE_MSG_MENU'
-    | 'SETTING_CLOSE_LONG_TERM';
+    | 'SETTING_CLOSE_LONG_TERM'
+    // NEW CONTACT MANAGEMENT FLOW
+    | 'CONTACT_MENU'        // Menu Utama Kelola Kontak
+    | 'CONTACT_SEARCH'      // Input keyword pencarian
+    | 'CONTACT_SELECT'      // Memilih dari hasil pencarian (List)
+    | 'CONTACT_DETAIL'      // Menampilkan detail kontak terpilih
+    | 'CONTACT_EDIT_NAME'   // Input nama baru
+    | 'CONTACT_EDIT_PHONE'  // Input nomor baru
+    | 'CONTACT_ADD_NAME'    // Input nama untuk kontak baru
+    | 'CONTACT_ADD_PHONE';  // Input nomor untuk kontak baru
 
 // Draft broadcast untuk penjadwalan/preview
 export type BroadcastDraft = {
@@ -96,3 +105,11 @@ export const pendingRegistrationData = new Map<string, string>();
 
 // Sesi Edit Data
 export const editSessionByPhone = new Map<string, EditSession>();
+
+// --- NEW: Sesi Kelola Kontak Admin ---
+export type ContactSession = {
+    searchResults?: { phone_number: string; push_name: string | null }[];
+    selectedContact?: { phone_number: string; push_name: string | null };
+    newContactName?: string; // Sementara simpan nama saat tambah kontak baru
+};
+export const contactSessionByPhone = new Map<string, ContactSession>();

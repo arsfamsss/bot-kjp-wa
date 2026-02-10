@@ -94,6 +94,7 @@ import {
     editSessionByPhone, // NEW
     EditSession,
     editSessionByPhone as editSessionMap,
+    contactSessionByPhone, // NEW: Kelola Kontak
 } from './state';
 
 const AUTH_FOLDER = 'auth_info_baileys';
@@ -1761,7 +1762,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                 }
 
                 if (isAdmin && currentAdminFlow !== 'NONE') {
-                    if (normalized === '0' || isGreetingOrMenu(normalized)) {
+                    if ((normalized === '0' && !currentAdminFlow.startsWith('CONTACT_')) || isGreetingOrMenu(normalized)) {
                         adminFlowByPhone.set(senderPhone, 'NONE');
                         await sendMainMenu(sock, remoteJid, isAdmin);
                         continue;
@@ -1877,9 +1878,17 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             }
                         }
                         else if (normalized === '6') {
-                            // Edit Kontak
-                            adminFlowByPhone.set(senderPhone, 'EDIT_CONTACT');
-                            replyText = ['📝 *EDIT KONTAK*', 'Ketik: NamaBaru NomorHP', 'Contoh: BudiRevisi 0812345'].join('\n');
+                            // Kelola Kontak (NEW)
+                            adminFlowByPhone.set(senderPhone, 'CONTACT_MENU');
+                            replyText = [
+                                '👥 *KELOLA KONTAK*',
+                                '',
+                                '1️⃣ 🔍 Cari Kontak',
+                                '2️⃣ ➕ Tambah Kontak Baru',
+                                '3️⃣ 📂 Lihat Semua Kontak',
+                                '',
+                                '0️⃣ 🔙 Kembali ke Menu Utama',
+                            ].join('\n');
                         }
                         else if (normalized === '7') {
                             // Hapus Kontak
@@ -2222,6 +2231,196 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                 } else {
                                     replyText = '⚠️ Input tidak valid. Masukkan angka nomor urut (contoh: 1, 3). Ketik 0 untuk batal.';
                                 }
+                            }
+                        }
+                        // ===== NEW: KELOLA KONTAK FLOW =====
+                    } else if (currentAdminFlow === 'CONTACT_MENU') {
+                        if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'MENU');
+                            contactSessionByPhone.delete(senderPhone);
+                            replyText = ADMIN_MENU_MESSAGE;
+                        } else if (normalized === '1') {
+                            adminFlowByPhone.set(senderPhone, 'CONTACT_SEARCH');
+                            replyText = ['🔍 *CARI KONTAK*', '', '👇 Ketik nama atau nomor HP yang dicari:', '(Contoh: Budi atau 0812)', '', '_Ketik 0 untuk kembali._'].join('\n');
+                        } else if (normalized === '2') {
+                            adminFlowByPhone.set(senderPhone, 'CONTACT_ADD_NAME');
+                            replyText = ['➕ *TAMBAH KONTAK BARU*', '', '👇 Ketik nama kontak baru:', '(Contoh: Budi Pasarjaya)', '', '_Ketik 0 untuk batal._'].join('\n');
+                        } else if (normalized === '3') {
+                            const allContacts = await getAllLidPhoneMap();
+                            if (allContacts.length === 0) {
+                                replyText = '📂 Belum ada kontak terdaftar.';
+                            } else {
+                                contactSessionByPhone.set(senderPhone, { searchResults: allContacts });
+                                adminFlowByPhone.set(senderPhone, 'CONTACT_SELECT');
+                                let msg = `📂 *SEMUA KONTAK (${allContacts.length})*\n\n`;
+                                for (let i = 0; i < allContacts.length; i++) {
+                                    const c = allContacts[i];
+                                    msg += `${i + 1}. ${c.push_name || '(Tanpa Nama)'} (${c.phone_number})\n`;
+                                    if (msg.length > 3500) { msg += '\n...(List dipotong)...\n'; break; }
+                                }
+                                msg += '\n👇 Ketik nomor urut untuk pilih kontak.\n_Ketik 0 untuk kembali._';
+                                replyText = msg;
+                            }
+                        } else {
+                            replyText = '⚠️ Pilihan tidak dikenali. Ketik 1, 2, atau 3.';
+                        }
+                    } else if (currentAdminFlow === 'CONTACT_SEARCH') {
+                        if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'CONTACT_MENU');
+                            replyText = ['👥 *KELOLA KONTAK*', '', '1️⃣ 🔍 Cari Kontak', '2️⃣ ➕ Tambah Kontak Baru', '3️⃣ 📂 Lihat Semua Kontak', '', '0️⃣ 🔙 Kembali ke Menu Utama'].join('\n');
+                        } else {
+                            const keyword = rawTrim.toUpperCase();
+                            const digitsOnly = rawTrim.replace(/\D/g, '');
+                            const allContacts = await getAllLidPhoneMap();
+                            const results = allContacts.filter(c => {
+                                const nameMatch = c.push_name && c.push_name.toUpperCase().includes(keyword);
+                                const phoneMatch = digitsOnly.length >= 4 && c.phone_number.includes(digitsOnly);
+                                return nameMatch || phoneMatch;
+                            });
+                            if (results.length === 0) {
+                                replyText = `❌ Tidak ditemukan kontak "${rawTrim}".\n\n👇 Coba keyword lain atau ketik 0 untuk kembali.`;
+                            } else {
+                                contactSessionByPhone.set(senderPhone, { searchResults: results });
+                                adminFlowByPhone.set(senderPhone, 'CONTACT_SELECT');
+                                let msg = `🔍 *HASIL PENCARIAN: "${rawTrim}"*\n📊 Ditemukan: ${results.length} kontak\n\n`;
+                                for (let i = 0; i < results.length; i++) {
+                                    const c = results[i];
+                                    msg += `${i + 1}. ${c.push_name || '(Tanpa Nama)'} (${c.phone_number})\n`;
+                                    if (msg.length > 3500) { msg += '\n...(List dipotong)...\n'; break; }
+                                }
+                                msg += '\n👇 Ketik nomor urut untuk pilih kontak.\n_Ketik 0 untuk kembali._';
+                                replyText = msg;
+                            }
+                        }
+                    } else if (currentAdminFlow === 'CONTACT_SELECT') {
+                        if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'CONTACT_MENU');
+                            contactSessionByPhone.delete(senderPhone);
+                            replyText = ['👥 *KELOLA KONTAK*', '', '1️⃣ 🔍 Cari Kontak', '2️⃣ ➕ Tambah Kontak Baru', '3️⃣ 📂 Lihat Semua Kontak', '', '0️⃣ 🔙 Kembali ke Menu Utama'].join('\n');
+                        } else {
+                            const session = contactSessionByPhone.get(senderPhone);
+                            const choice = parseInt(normalized);
+                            if (!session || !session.searchResults) {
+                                replyText = '❌ Sesi hilang. Silakan ulangi dari Menu Kelola Kontak.';
+                                adminFlowByPhone.set(senderPhone, 'MENU');
+                            } else if (isNaN(choice) || choice < 1 || choice > session.searchResults.length) {
+                                replyText = `⚠️ Nomor urut tidak valid (1 - ${session.searchResults.length}).\n_Ketik 0 untuk kembali._`;
+                            } else {
+                                const selected = session.searchResults[choice - 1];
+                                session.selectedContact = selected;
+                                contactSessionByPhone.set(senderPhone, session);
+                                adminFlowByPhone.set(senderPhone, 'CONTACT_DETAIL');
+                                const ph = selected.phone_number.startsWith('62') ? '0' + selected.phone_number.slice(2) : selected.phone_number;
+                                replyText = ['👤 *DETAIL KONTAK*', '━━━━━━━━━━━━━━━━━━━━━', `📛 Nama : *${selected.push_name || '(Tanpa Nama)'}*`, `📱 Nomor: ${ph}`, '━━━━━━━━━━━━━━━━━━━━━', '', '👇 *Pilih Aksi:*', '1️⃣ ✏️ Edit Nama', '2️⃣ 📱 Edit Nomor HP', '3️⃣ 🗑️ Hapus Kontak', '', '0️⃣ 🔙 Kembali'].join('\n');
+                            }
+                        }
+                    } else if (currentAdminFlow === 'CONTACT_DETAIL') {
+                        const session = contactSessionByPhone.get(senderPhone);
+                        if (!session || !session.selectedContact) {
+                            replyText = '❌ Sesi hilang. Ulangi dari Menu Admin.';
+                            adminFlowByPhone.set(senderPhone, 'MENU');
+                        } else if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'CONTACT_SELECT');
+                            const results = session.searchResults || [];
+                            let msg = `📂 *DAFTAR KONTAK (${results.length})*\n\n`;
+                            for (let i = 0; i < results.length; i++) {
+                                const c = results[i];
+                                msg += `${i + 1}. ${c.push_name || '(Tanpa Nama)'} (${c.phone_number})\n`;
+                                if (msg.length > 3500) { msg += '\n...(List dipotong)...\n'; break; }
+                            }
+                            msg += '\n👇 Ketik nomor urut.\n_Ketik 0 untuk kembali._';
+                            replyText = msg;
+                        } else if (normalized === '1') {
+                            adminFlowByPhone.set(senderPhone, 'CONTACT_EDIT_NAME');
+                            replyText = ['✏️ *EDIT NAMA*', `Nama Saat Ini: *${session.selectedContact.push_name || '(Tanpa Nama)'}*`, '', '👇 Ketik nama baru:', '', '_Ketik 0 untuk batal._'].join('\n');
+                        } else if (normalized === '2') {
+                            adminFlowByPhone.set(senderPhone, 'CONTACT_EDIT_PHONE');
+                            const ph = session.selectedContact.phone_number.startsWith('62') ? '0' + session.selectedContact.phone_number.slice(2) : session.selectedContact.phone_number;
+                            replyText = ['📱 *EDIT NOMOR HP*', `Nomor Saat Ini: *${ph}*`, '', '👇 Ketik nomor HP baru:', '(Contoh: 08123456789)', '', '_Ketik 0 untuk batal._'].join('\n');
+                        } else if (normalized === '3') {
+                            const target = session.selectedContact;
+                            const ok = await deleteLidPhoneMap(target.phone_number);
+                            replyText = ok ? `✅ Kontak *${target.push_name || target.phone_number}* berhasil dihapus.` : '❌ Gagal menghapus kontak.';
+                            contactSessionByPhone.delete(senderPhone);
+                            adminFlowByPhone.set(senderPhone, 'MENU');
+                        } else {
+                            replyText = '⚠️ Pilihan tidak dikenali. Ketik 1, 2, atau 3.';
+                        }
+                    } else if (currentAdminFlow === 'CONTACT_EDIT_NAME') {
+                        const session = contactSessionByPhone.get(senderPhone);
+                        if (!session || !session.selectedContact) {
+                            replyText = '❌ Sesi hilang.'; adminFlowByPhone.set(senderPhone, 'MENU');
+                        } else if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'CONTACT_DETAIL');
+                            const s = session.selectedContact;
+                            const ph = s.phone_number.startsWith('62') ? '0' + s.phone_number.slice(2) : s.phone_number;
+                            replyText = ['👤 *DETAIL KONTAK*', '━━━━━━━━━━━━━━━━━━━━━', `📛 Nama : *${s.push_name || '(Tanpa Nama)'}*`, `📱 Nomor: ${ph}`, '━━━━━━━━━━━━━━━━━━━━━', '', '1️⃣ ✏️ Edit Nama', '2️⃣ 📱 Edit Nomor HP', '3️⃣ 🗑️ Hapus Kontak', '0️⃣ 🔙 Kembali'].join('\n');
+                        } else {
+                            const newName = rawTrim;
+                            if (newName.length < 2) {
+                                replyText = '⚠️ Nama terlalu pendek (min 2 karakter). Coba lagi.';
+                            } else {
+                                const target = session.selectedContact;
+                                await upsertLidPhoneMap({ lid_jid: target.phone_number + '@s.whatsapp.net', phone_number: target.phone_number, push_name: newName });
+                                replyText = `✅ Nama berhasil diubah!\n\n📛 *${target.push_name}* ➜ *${newName}*\n📱 Nomor: ${target.phone_number}`;
+                                contactSessionByPhone.delete(senderPhone);
+                                adminFlowByPhone.set(senderPhone, 'MENU');
+                            }
+                        }
+                    } else if (currentAdminFlow === 'CONTACT_EDIT_PHONE') {
+                        const session = contactSessionByPhone.get(senderPhone);
+                        if (!session || !session.selectedContact) {
+                            replyText = '❌ Sesi hilang.'; adminFlowByPhone.set(senderPhone, 'MENU');
+                        } else if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'CONTACT_DETAIL');
+                            const s = session.selectedContact;
+                            const ph = s.phone_number.startsWith('62') ? '0' + s.phone_number.slice(2) : s.phone_number;
+                            replyText = ['👤 *DETAIL KONTAK*', '━━━━━━━━━━━━━━━━━━━━━', `📛 Nama : *${s.push_name || '(Tanpa Nama)'}*`, `📱 Nomor: ${ph}`, '━━━━━━━━━━━━━━━━━━━━━', '', '1️⃣ ✏️ Edit Nama', '2️⃣ 📱 Edit Nomor HP', '3️⃣ 🗑️ Hapus Kontak', '0️⃣ 🔙 Kembali'].join('\n');
+                        } else {
+                            const newPhone = extractManualPhone(rawTrim);
+                            if (!newPhone) {
+                                replyText = '⚠️ Format nomor HP tidak valid. Contoh: 08123456789';
+                            } else {
+                                const target = session.selectedContact;
+                                await deleteLidPhoneMap(target.phone_number);
+                                await upsertLidPhoneMap({ lid_jid: newPhone + '@s.whatsapp.net', phone_number: newPhone, push_name: target.push_name });
+                                const oldD = target.phone_number.startsWith('62') ? '0' + target.phone_number.slice(2) : target.phone_number;
+                                const newD = newPhone.startsWith('62') ? '0' + newPhone.slice(2) : newPhone;
+                                replyText = `✅ Nomor berhasil diubah!\n\n📛 Nama: *${target.push_name}*\n📱 *${oldD}* ➜ *${newD}*`;
+                                contactSessionByPhone.delete(senderPhone);
+                                adminFlowByPhone.set(senderPhone, 'MENU');
+                            }
+                        }
+                    } else if (currentAdminFlow === 'CONTACT_ADD_NAME') {
+                        if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'CONTACT_MENU');
+                            contactSessionByPhone.delete(senderPhone);
+                            replyText = ['👥 *KELOLA KONTAK*', '', '1️⃣ 🔍 Cari Kontak', '2️⃣ ➕ Tambah Kontak Baru', '3️⃣ 📂 Lihat Semua Kontak', '', '0️⃣ 🔙 Kembali ke Menu Utama'].join('\n');
+                        } else {
+                            if (rawTrim.length < 2) {
+                                replyText = '⚠️ Nama terlalu pendek (min 2 karakter). Coba lagi.';
+                            } else {
+                                contactSessionByPhone.set(senderPhone, { newContactName: rawTrim });
+                                adminFlowByPhone.set(senderPhone, 'CONTACT_ADD_PHONE');
+                                replyText = ['➕ *TAMBAH KONTAK BARU*', `📛 Nama: *${rawTrim}*`, '', '👇 Sekarang ketik nomor HP:', '(Contoh: 08123456789)', '', '_Ketik 0 untuk batal._'].join('\n');
+                            }
+                        }
+                    } else if (currentAdminFlow === 'CONTACT_ADD_PHONE') {
+                        if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'CONTACT_MENU');
+                            contactSessionByPhone.delete(senderPhone);
+                            replyText = ['👥 *KELOLA KONTAK*', '', '1️⃣ 🔍 Cari Kontak', '2️⃣ ➕ Tambah Kontak Baru', '3️⃣ 📂 Lihat Semua Kontak', '', '0️⃣ 🔙 Kembali ke Menu Utama'].join('\n');
+                        } else {
+                            const session = contactSessionByPhone.get(senderPhone);
+                            const newPhone = extractManualPhone(rawTrim);
+                            if (!newPhone) {
+                                replyText = '⚠️ Format nomor HP tidak valid. Contoh: 08123456789';
+                            } else {
+                                const contactName = session?.newContactName || 'Kontak Baru';
+                                await upsertLidPhoneMap({ lid_jid: newPhone + '@s.whatsapp.net', phone_number: newPhone, push_name: contactName });
+                                replyText = `✅ Kontak baru ditambahkan!\n\n📛 Nama: *${contactName}*\n📱 Nomor: ${newPhone}`;
+                                contactSessionByPhone.delete(senderPhone);
+                                adminFlowByPhone.set(senderPhone, 'MENU');
                             }
                         }
                     } else if (currentAdminFlow === 'BROADCAST_SELECT') {

@@ -186,7 +186,7 @@ export const ADMIN_MENU_MESSAGE = [
     '',
     '👥 *DAFTAR KONTAK:*',
     '5️⃣ List Semua Kontak',
-    '6️⃣ Edit Kontak',
+    '6️⃣ 👥 Kelola Kontak',
     '7️⃣ Hapus Kontak',
     '',
     '📢 *FITUR LAINNYA:*',
