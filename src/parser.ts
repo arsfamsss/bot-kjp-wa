@@ -1,7 +1,7 @@
 // src/parser.ts
 
 import type { LogItem, ParsedFields, ItemError, LogJson, LogStats } from './types';
-import { checkDuplicateForItem } from './supabase';
+import { checkDuplicateForItem, checkDuplicatesBatch } from './supabase';
 import { parseFlexibleDate } from './utils/dateParser';
 
 // --- BAGIAN 1: PEMBERSIH INPUT ---
@@ -373,14 +373,12 @@ export async function processRawMessageToLogJson(params: {
         });
     }
 
-    // 4) cek duplikat database hanya untuk item OK (PARALLEL)
-    const updatedItems = await Promise.all(items.map(async (item) => {
-        return checkDuplicateForItem(item, {
-            processingDayKey,
-            senderPhone,
-            tanggal, // FIX: pass tanggal to match DB constraint
-        });
-    }));
+    // 4) cek duplikat database hanya untuk item OK (BATCH OPTIMIZATION)
+    const updatedItems = await checkDuplicatesBatch(items, {
+        processingDayKey,
+        senderPhone,
+        tanggal,
+    });
     items = updatedItems;
 
     // 5) hitung stats

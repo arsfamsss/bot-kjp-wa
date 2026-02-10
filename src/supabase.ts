@@ -126,157 +126,162 @@ export async function checkDuplicateForItem(
     item: LogItem,
     ctx: { processingDayKey: string; senderPhone: string; tanggal: string }
 ): Promise<LogItem> {
-    if (item.status !== 'OK') return item;
+    // Legacy function wrapper for backward compatibility if needed, 
+    // but we will use batch version primarily.
+    const [result] = await checkDuplicatesBatch([item], ctx);
+    return result;
+}
 
+export async function checkDuplicatesBatch(
+    items: LogItem[],
+    ctx: { processingDayKey: string; senderPhone: string; tanggal: string }
+): Promise<LogItem[]> {
     const { processingDayKey, senderPhone, tanggal } = ctx;
 
-    const markDup = (args: {
-        kind: DuplicateKind;
-        safe_message: string;
-        first_seen_at?: string | null;
-        first_seen_wib_time?: string | null;
-        original_data?: { nama: string; no_kjp: string; no_ktp: string; no_kk: string } | null;
-    }): LogItem => {
-        const info: DuplicateInfo = {
-            kind: args.kind,
-            processing_day_key: processingDayKey,
-            safe_message: args.safe_message,
-            first_seen_at: args.first_seen_at ?? null,
-            first_seen_wib_time: args.first_seen_wib_time ?? null,
-            original_data: args.original_data ?? null,
-        };
+    // Filter items yang statusnya OK (hanya ini yang perlu dicek ke DB)
+    const activeItems = items.filter(it => it.status === 'OK');
+    if (activeItems.length === 0) return items;
 
-        return {
-            ...item,
-            status: 'SKIP_DUPLICATE',
-            duplicate_info: info,
-        };
-    };
+    // Collect IDs for Batch Query
+    // Kita kumpulkan semua ID unik dari items
+    const allKjp = new Set<string>();
+    const allKtp = new Set<string>();
+    const allKk = new Set<string>();
 
-    // PARALLEL CHECK: Jalankan semua cek duplikat secara bersamaan
-    const [nameDup, kjpDup, ktpDup, kkDup] = await Promise.all([
-        // (1) Cek Duplikat NAMA (Scoped to Sender)
-        (async () => {
-            if (!item.parsed.nama) return null;
-            const { data, error } = await supabase
-                .from('data_harian')
-                .select('nama, no_kjp, no_ktp, no_kk, sender_phone') // +sender_phone
-                .eq('tanggal', tanggal) // FIX: use tanggal to match DB constraint
-                .eq('sender_phone', senderPhone) // Hanya cek duplikat nama JIKA pengirim sama
-                .ilike('nama', item.parsed.nama)
-                .limit(1);
-            if (!error && data && data.length > 0) return data[0];
-            return null;
-        })(),
+    activeItems.forEach(it => {
+        if (it.parsed.no_kjp) allKjp.add(it.parsed.no_kjp);
+        if (it.parsed.no_ktp) allKtp.add(it.parsed.no_ktp);
+        if (it.parsed.no_kk) allKk.add(it.parsed.no_kk);
+    });
 
-        // (2) Cek Duplikat No Kartu
-        (async () => {
-            if (!item.parsed.no_kjp) return null;
-            const { data, error } = await supabase
-                .from('data_harian')
-                .select('nama, no_kjp, no_ktp, no_kk, sender_phone') // +sender_phone
-                .eq('tanggal', tanggal) // FIX: use tanggal to match DB constraint
-                .eq('no_kjp', item.parsed.no_kjp)
-                .limit(1);
-            if (!error && data && data.length > 0) return data[0];
-            return null;
-        })(),
+    // QUERY 1: GLOBAL DUPLICATES (ID Check) - Single Query
+    // Mencari apakah ada data hari ini yang memiliki KJP/KTP/KK yang sama
+    // Filter: (no_kjp IN list OR no_ktp IN list OR no_kk IN list) AND tanggal = today
+    // Note: Supabase .or() syntax: "col1.in.(val1,val2),col2.in.(val3,val4)"
+    const conditions: string[] = [];
+    if (allKjp.size > 0) conditions.push(`no_kjp.in.(${Array.from(allKjp).join(',')})`);
+    if (allKtp.size > 0) conditions.push(`no_ktp.in.(${Array.from(allKtp).join(',')})`);
+    if (allKk.size > 0) conditions.push(`no_kk.in.(${Array.from(allKk).join(',')})`);
 
-        // (3) Cek Duplikat KTP
-        (async () => {
-            if (!item.parsed.no_ktp) return null;
-            const { data, error } = await supabase
-                .from('data_harian')
-                .select('nama, no_kjp, no_ktp, no_kk, sender_phone') // +sender_phone
-                .eq('tanggal', tanggal) // FIX: use tanggal to match DB constraint
-                .eq('no_ktp', item.parsed.no_ktp)
-                .limit(1);
-            if (!error && data && data.length > 0) return data[0];
-            return null;
-        })(),
+    let globalDupes: any[] = [];
+    if (conditions.length > 0) {
+        const orClause = conditions.join(',');
+        const { data, error } = await supabase
+            .from('data_harian')
+            .select('nama, no_kjp, no_ktp, no_kk, sender_phone')
+            .eq('tanggal', tanggal) // Scope to Today
+            .or(orClause);
 
-        // (4) Cek Duplikat KK
-        (async () => {
-            if (!item.parsed.no_kk) return null;
-            const { data, error } = await supabase
-                .from('data_harian')
-                .select('received_at, sender_phone, nama, no_kjp, no_ktp, no_kk')
-                .eq('tanggal', tanggal) // FIX: use tanggal to match DB constraint
-                .eq('no_kk', item.parsed.no_kk)
-                .order('received_at', { ascending: true })
-                .limit(1);
-            if (!error && data && data.length > 0) return data[0];
-            return null;
-        })(),
-    ]);
-
-    // EVALUASI HASIL (Aggregate All Errors)
-    const errorMessages: string[] = [];
-    let conflictFound = false;
-    let firstDupData: any = null; // Untuk mengisi original_data (sekadar representasi salah satu)
-
-    // Helper untuk ambil nama owner
-    // Jika sender_phone sama dengan current user, berarti dia double input sendiri
-    const getOwnerName = (dupData: any) => {
-        // PERMINTAAN USER: Selalu tampilkan nama pemilik data, jangan "Anda sendiri"
-        // Agar user tahu data ini tabrakan dengan siapa (walaupun inputan dia sebelumnya)
-        return (dupData as any).nama ? (dupData as any).nama.toUpperCase() : 'ORANG LAIN';
-    };
-
-    // 1. Name
-    if (nameDup) {
-        conflictFound = true;
-        firstDupData = firstDupData || nameDup;
-        const owner = getOwnerName(nameDup);
-        errorMessages.push(`• 👤 Nama sudah terdaftar atas nama *${owner}*`);
-    }
-
-    // 2. KJP
-    if (kjpDup) {
-        conflictFound = true;
-        firstDupData = firstDupData || kjpDup;
-        const owner = getOwnerName(kjpDup);
-        errorMessages.push(`• 💳 No KJP sudah terdaftar atas nama *${owner}*`);
-    }
-
-    // 3. KTP
-    if (ktpDup) {
-        conflictFound = true;
-        firstDupData = firstDupData || ktpDup;
-        const owner = getOwnerName(ktpDup);
-        errorMessages.push(`• 🪪 No KTP sudah terdaftar atas nama *${owner}*`);
-    }
-
-    // 4. KK
-    if (kkDup) {
-        // Khusus KK, kita hanya anggap duplikat jika PUNYA ORANG LAIN
-        // (Satu keluarga boleh pakai KK sama, tapi kalau beda sender_phone berarti aneh/double input keluarga)
-        const existingSender = (kkDup as any).sender_phone;
-        if (existingSender !== senderPhone) {
-            conflictFound = true;
-            firstDupData = firstDupData || kkDup;
-            const owner = getOwnerName(kkDup);
-            errorMessages.push(`• 🏠 No KK sudah digunakan oleh *${owner}*`);
+        if (!error && data) {
+            globalDupes = data;
+        } else if (error) {
+            console.error('Error batch global dupes:', error);
         }
     }
 
-    if (conflictFound) {
-        // Gabungkan semua pesan error
-        const finalMsg = errorMessages.join('\n');
+    // QUERY 2: SENDER DUPLICATES (Name Check) - Single Query
+    // Mencari apakah SENDER ini sudah pernah kirim nama yang sama hari ini
+    // Kita ambil SEMUA data sender hari ini (biasanya tidak banyak, max ratusan)
+    // Lalu cek in-memory using fuzzy/exact logic match
+    let senderData: any[] = [];
+    {
+        const { data, error } = await supabase
+            .from('data_harian')
+            .select('nama, sender_phone')
+            .eq('tanggal', tanggal)
+            .eq('sender_phone', senderPhone);
 
-        return markDup({
-            kind: 'NAME', // Default kind, tidak terlalu ngefek karena kita pakai safe_message
-            safe_message: finalMsg,
-            original_data: firstDupData ? {
-                nama: firstDupData.nama || '',
-                no_kjp: firstDupData.no_kjp || '',
-                no_ktp: firstDupData.no_ktp || '',
-                no_kk: firstDupData.no_kk || '',
-            } : null,
-        });
+        if (!error && data) {
+            senderData = data;
+        } else if (error) {
+            console.error('Error batch sender data:', error);
+        }
     }
 
-    return item;
+    // PROCESS CHECKING IN-MEMORY
+    return items.map(item => {
+        if (item.status !== 'OK') return item;
+
+        const errorMessages: string[] = [];
+        let conflictFound = false;
+        let firstDupData: any = null;
+
+        const getOwnerName = (dupData: any) => {
+            return (dupData as any).nama ? (dupData as any).nama.toUpperCase() : 'ORANG LAIN';
+        };
+
+        // 1. Check Name (Scoped to Sender)
+        if (item.parsed.nama) {
+            const targetName = item.parsed.nama.toUpperCase();
+            // Simple includes check as imperfect replacement for ILIKE, but sufficient for exact duplicates
+            // Or 'fuzzy' match if needed. For now assume exact/trimmed match which 'cleanName' provides.
+            // Using logic: if senderData has row with same Name
+            const match = senderData.find(d => d.nama && d.nama.toUpperCase() === targetName);
+            if (match) {
+                conflictFound = true;
+                firstDupData = firstDupData || match;
+                const owner = getOwnerName(match);
+                errorMessages.push(`• 👤 Nama sudah terdaftar atas nama *${owner}*`);
+            }
+        }
+
+        // 2. Check IDs (Global)
+        // Find match in globalDupes
+        const kjpMatch = globalDupes.find(d => d.no_kjp === item.parsed.no_kjp);
+        if (kjpMatch) {
+            conflictFound = true;
+            firstDupData = firstDupData || kjpMatch;
+            const owner = getOwnerName(kjpMatch);
+            errorMessages.push(`• 💳 No KJP sudah terdaftar atas nama *${owner}*`);
+        }
+
+        const ktpMatch = globalDupes.find(d => d.no_ktp === item.parsed.no_ktp);
+        if (ktpMatch) {
+            conflictFound = true;
+            firstDupData = firstDupData || ktpMatch;
+            const owner = getOwnerName(ktpMatch);
+            errorMessages.push(`• 🪪 No KTP sudah terdaftar atas nama *${owner}*`);
+        }
+
+        const kkMatch = globalDupes.find(d => d.no_kk === item.parsed.no_kk);
+        if (kkMatch) {
+            const existingSender = kkMatch.sender_phone;
+            // KK conflict only if DIFFERENT sender
+            // Note: If same sender, it will be caught by senderData/Legacy logic? 
+            // Wait, previous logic said: "Khusus KK, kita hanya anggap duplikat jika PUNYA ORANG LAIN"
+            if (existingSender !== senderPhone) {
+                conflictFound = true;
+                firstDupData = firstDupData || kkMatch;
+                const owner = getOwnerName(kkMatch);
+                errorMessages.push(`• 🏠 No KK sudah digunakan oleh *${owner}*`);
+            }
+        }
+
+        if (conflictFound) {
+            const finalMsg = errorMessages.join('\n');
+            const info: DuplicateInfo = {
+                kind: 'NAME',
+                processing_day_key: processingDayKey,
+                safe_message: finalMsg,
+                first_seen_at: null,
+                first_seen_wib_time: null,
+                original_data: firstDupData ? {
+                    nama: firstDupData.nama || '',
+                    no_kjp: firstDupData.no_kjp || '',
+                    no_ktp: firstDupData.no_ktp || '',
+                    no_kk: firstDupData.no_kk || '',
+                } : null,
+            };
+
+            return {
+                ...item,
+                status: 'SKIP_DUPLICATE',
+                duplicate_info: info,
+            };
+        }
+
+        return item;
+    });
 }
 
 export async function saveLogAndOkItems(log: LogJson, rawText: string): Promise<{ success: boolean; dataError?: any; logError?: any }> {
