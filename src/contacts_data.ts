@@ -57,6 +57,17 @@ export const KNOWN_CONTACTS: Record<string, string> = {
     '6285641411818': 'Fendi',
     '628568511113': 'Tari',
     '6285800269380': 'WA Nadia 2',
+    '6289509898474': 'Denti',
+    '6281295889727': 'Kak Erna',
+    '6287726466827': 'Lia',
+    '6285771623646': 'Maryam',
+    '6285693344098': 'Nurul Fb Pulogadung',
+    '6282385963155': 'pelangi',
+    '6285882236237': 'Rafa 12 Kka',
+    '628131860698': 'Rizal Kjp',
+    '6281953438815': 'Selly',
+    '6285778711614': 'Yani Kjp Cipinang',
+    '62895332456927': 'Zahra Yatun Fb',
 };
 
 export function getContactName(phone: string): string | null {
