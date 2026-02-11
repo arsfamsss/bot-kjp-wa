@@ -88,27 +88,15 @@ export function isSystemClosed(date: Date, settings?: {
 /**
  * LOGIKA PROCESSING KEY (PERIODE KERJA)
  * 
- * Aturan Baru:
- * 1. Hari berjalan: 06:01 - 04:00 (keesokan hari)
- * 2. Maintenance: 04:01 - 06:00 (Tutup, tapi key ikut hari kemarin)
- * 3. Hari Baru mulai: 06:01
+ * Aturan Baru (Revisi):
+ * 1. Mengikuti Tanggal Kalender Murni.
+ * 2. Jam 00:00 - 23:59 -> Key = Tanggal Hari Ini.
  * 
  * Implementasi:
- * - Jika Jam 06:01 - 23:59 -> Key = Today
- * - Jika Jam 00:00 - 06:00 -> Key = Yesterday
+ * - Return getWibIsoDate(now) langsung.
  */
 export function getProcessingDayKey(now: Date): string {
-    const p = getWibParts(now);
-    const minutes = p.hour * 60 + p.minute;
-
-    // Mulai jam 06:01 (361 menit)
-    if (minutes >= 361) {
-        return formatIsoDateFromParts(p);
-    }
-
-    // Sebelum 06:01 dianggap milik hari kemarin
-    const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    return getWibIsoDate(yesterday);
+    return getWibIsoDate(now);
 }
 
 export function shiftIsoDate(iso: string, deltaDays: number): string {
