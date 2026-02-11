@@ -31,9 +31,7 @@ export function extractDigits(input: string): string {
 function cleanName(raw: string): string {
     let cleaned = raw;
 
-    // 1. Hapus konten dalam kurung (...) beserta isinya
-    // Contoh: "Rijal (kecamatan Cengkareng)" -> "Rijal"
-    cleaned = cleaned.replace(/\s*\(.*?\)/g, '');
+    // 1. TIDAK lagi hapus konten dalam kurung — terima apa adanya dari user
 
     // 2. Hapus kata-kata filter (blacklist location/keywords)
     const blacklist = [
@@ -46,13 +44,12 @@ function cleanName(raw: string): string {
     const blacklistRegex = new RegExp(`\\b(${blacklist.join('|')})\\b`, 'gi');
     cleaned = cleaned.replace(blacklistRegex, '');
 
-    // 3. Hapus angka dan tanda baca (HANYA sisakan huruf dan spasi)
-    // Ini otomatis menghapus "1.", ":", "-", dll.
-    cleaned = cleaned.replace(/[^a-zA-Z\s]/g, ' ');
+    // 3. Hapus angka saja (sisakan huruf, spasi, tanda kurung, dll)
+    // Terima apa adanya nama yang di-input user, kecuali angka
+    cleaned = cleaned.replace(/[0-9]/g, '');
 
-    // 4. Hapus kata "nama" di awal (case insensitive)
-    // Karena tanda baca sudah hilang, "Nama :" akan menjadi "Nama "
-    cleaned = cleaned.replace(/^\s*nama\s+/i, '');
+    // 4. Hapus kata "nama" di awal (case insensitive), termasuk dengan tanda baca
+    cleaned = cleaned.replace(/^\s*nama\s*[:\-]?\s*/i, '');
 
     // 5. Rapikan spasi berlebih
     return cleaned.replace(/\s+/g, ' ').trim();

@@ -817,7 +817,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                         if (session.selectedFieldKey === 'nama') {
                             // Validasi Nama: Minimal 3 huruf
                             cleanVal = rawVal.replace(/^\d+[\.\)\s]+\s*/, '') // Hapus nomor urut di depan
-                                .replace(/[^\w\s\.\,\-\']/gi, '') // Hapus karakter aneh
+                                .replace(/[0-9]/g, '') // Hapus angka saja, sisakan karakter lain termasuk kurung
                                 .trim().toUpperCase();
                             if (cleanVal.length < 3) {
                                 isValid = false;
