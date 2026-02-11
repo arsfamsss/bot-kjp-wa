@@ -18,7 +18,9 @@ export type UserFlowState =
     | 'EDIT_INPUT_VALUE' // PATCH 2
     | 'EDIT_CONFIRMATION' // PATCH 2
     | 'EDIT_PICK_LOCATION' // PATCH 3: Edit Lokasi - Menu Pilih
-    | 'EDIT_INPUT_MANUAL_LOCATION'; // PATCH 3: Edit Lokasi - Input Manual (Pasarjaya)
+    | 'EDIT_INPUT_MANUAL_LOCATION' // PATCH 3: Edit Lokasi - Input Manual (Pasarjaya)
+    | 'REREGISTER_OFFER'           // FITUR DAFTAR ULANG: Menampilkan tawaran daftar ulang
+    | 'REREGISTER_SELECT';         // FITUR DAFTAR ULANG: User memilih data untuk didaftarkan ulang
 
 export interface EditSession {
     recordsToday: any[]; // Store the fetched records to avoid re-fetching and ensure ID consistency
@@ -113,3 +115,9 @@ export type ContactSession = {
     newContactName?: string; // Sementara simpan nama saat tambah kontak baru
 };
 export const contactSessionByPhone = new Map<string, ContactSession>();
+
+// --- NEW: Fitur Daftar Ulang (REREGISTER) ---
+// Cache data gagal per user (senderPhone -> array of failed registration data)
+export const reregisterDataCache = new Map<string, any[]>();
+// Track user yang sudah ditawari hari ini (senderPhone -> processingDayKey)
+export const reregisterOfferedToday = new Map<string, string>();

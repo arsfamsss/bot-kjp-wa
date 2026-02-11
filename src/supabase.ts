@@ -1050,3 +1050,125 @@ export async function updateDailyDataField(
         return { success: false, error: err };
     }
 }
+
+// ============================================
+// FITUR DAFTAR ULANG (REREGISTER) — Registration Results
+// ============================================
+
+/**
+ * Cek apakah fitur daftar ulang aktif di bot_settings
+ * Selalu query fresh (tidak pakai cache) agar bisa toggle realtime
+ */
+export async function isFeatureDaftarUlangEnabled(): Promise<boolean> {
+    try {
+        const { data, error } = await supabase
+            .from('bot_settings')
+            .select('fitur_daftar_ulang')
+            .eq('id', 1)
+            .maybeSingle();
+
+        if (error || !data) return false;
+        return data.fitur_daftar_ulang === true;
+    } catch (err) {
+        console.error('❌ isFeatureDaftarUlangEnabled error:', err);
+        return false;
+    }
+}
+
+/**
+ * Ambil data pendaftaran yang GAGAL untuk user tertentu
+ * Cari berdasarkan sender_phone (utama) atau no_kjp yang cocok dengan data hari ini
+ * @param senderPhone - Nomor HP pengirim (format 628xxx)
+ * @returns Array of failed registration data
+ */
+export async function getFailedRegistrations(senderPhone: string): Promise<any[]> {
+    try {
+        // Query data FAILED yang belum ditawari ulang, berdasarkan sender_phone
+        const { data, error } = await supabase
+            .from('registration_results')
+            .select('*')
+            .eq('status', 'FAILED')
+            .eq('sender_phone', senderPhone)
+            .eq('offered_reregister', false)
+            .order('created_at', { ascending: true });
+
+        if (error) {
+            console.error('❌ getFailedRegistrations error:', error.message);
+            return [];
+        }
+
+        return data || [];
+    } catch (err) {
+        console.error('❌ getFailedRegistrations exception:', err);
+        return [];
+    }
+}
+
+/**
+ * Update status data gagal menjadi RE_REGISTERED (setelah user pilih daftar ulang)
+ * @param ids - Array of registration_results IDs to mark
+ */
+export async function markAsReRegistered(ids: number[]): Promise<boolean> {
+    if (ids.length === 0) return true;
+
+    try {
+        const { error } = await supabase
+            .from('registration_results')
+            .update({ status: 'RE_REGISTERED', offered_reregister: true })
+            .in('id', ids);
+
+        if (error) {
+            console.error('❌ markAsReRegistered error:', error.message);
+            return false;
+        }
+        return true;
+    } catch (err) {
+        console.error('❌ markAsReRegistered exception:', err);
+        return false;
+    }
+}
+
+/**
+ * Auto-match: Ketika user kirim data baru yang no_kjp-nya cocok dengan data FAILED,
+ * otomatis update status jadi RE_REGISTERED
+ * @param noKjpList - Array of no_kjp dari data baru yang baru disimpan
+ * @returns Jumlah data yang berhasil di-match
+ */
+export async function autoMatchReRegistered(noKjpList: string[]): Promise<number> {
+    if (noKjpList.length === 0) return 0;
+
+    try {
+        const { data, error } = await supabase
+            .from('registration_results')
+            .update({ status: 'RE_REGISTERED', offered_reregister: true })
+            .eq('status', 'FAILED')
+            .in('no_kjp', noKjpList)
+            .select('id');
+
+        if (error) {
+            console.error('❌ autoMatchReRegistered error:', error.message);
+            return 0;
+        }
+
+        return data?.length || 0;
+    } catch (err) {
+        console.error('❌ autoMatchReRegistered exception:', err);
+        return 0;
+    }
+}
+
+/**
+ * Tandai data gagal sebagai sudah ditawari (agar tidak ditawari lagi)
+ * @param senderPhone - Nomor HP pengirim
+ */
+export async function markOfferedReregister(senderPhone: string): Promise<void> {
+    try {
+        await supabase
+            .from('registration_results')
+            .update({ offered_reregister: true })
+            .eq('status', 'FAILED')
+            .eq('sender_phone', senderPhone);
+    } catch (err) {
+        console.error('❌ markOfferedReregister error:', err);
+    }
+}
