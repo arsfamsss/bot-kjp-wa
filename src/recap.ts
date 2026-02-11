@@ -161,7 +161,7 @@ export function buildReplyForTodayRecap(
     lines.push(`🔎 *STATUS DATA HARI INI*`);
     lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     lines.push('');
-    lines.push(`📅 Periode: *${displayDate}* (06.01–04.00 WIB)`);
+    lines.push(`📅 Periode: *${displayDate}* (06.01–23.59 WIB)`);
     lines.push('');
     lines.push(`✅ *Data Terdaftar: ${validCount} Orang*`);
 
@@ -283,7 +283,7 @@ export async function getGlobalRecap(
 
     const lines: string[] = [];
     lines.push(`👑 *LAPORAN DETAIL DATA*`);
-    lines.push(`📅 Periode: ${dateLabel} (06.01–04.00 WIB)`);
+    lines.push(`📅 Periode: ${dateLabel} (06.01–23.59 WIB)`);
     lines.push(`📊 Total Keseluruhan: *${data.length}* Data`);
     lines.push('');
     lines.push('👇 *RINCIAN DATA MASUK:*');
@@ -473,7 +473,7 @@ export async function generateExportData(
     // --- Generate TXT (Format Baru: Per Gerai > Per Pengirim) ---
     const txtRows: string[] = [];
     txtRows.push('👑 *LAPORAN DETAIL DATA*');
-    txtRows.push(`📅 Periode: ${displayDate} (06.01–04.00 WIB)`);
+    txtRows.push(`📅 Periode: ${displayDate} (06.01–23.59 WIB)`);
     txtRows.push(`📊 Total Keseluruhan: *${data.length}* Data`);
     txtRows.push('');
     txtRows.push('👇 *RINCIAN DATA MASUK:*');
