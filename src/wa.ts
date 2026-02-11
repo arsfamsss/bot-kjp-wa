@@ -1361,36 +1361,19 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                 else if (currentUserFlow === 'SELECT_LOCATION') {
                     // Logic Unified: Pilihan 1 -> Menu Pasarjaya, Pilihan 2 -> Dharmajaya (Auto Process Pending)
                     if (normalized === '1') {
-                        // CEK VALIDASI AWAL: PASARJAYA WAJIB 5 BARIS
-                        const pendingData = pendingRegistrationData.get(senderPhone);
-                        let rejectPasarjaya = false;
-                        if (pendingData) {
-                            const lines = parseRawMessageToLines(pendingData);
-                            // Jika bukan kelipatan 5 (dan bukan 0), tolak.
-                            if (lines.length > 0 && lines.length % 5 !== 0) {
-                                rejectPasarjaya = true;
-                                replyText = [
-                                    '⚠️ *DATA TERTOLAK (SALAH FORMAT)*',
-                                    '',
-                                    'Anda memilih: *1. PASARJAYA*',
-                                    'Syarat: *Wajib 5 Baris* (Nama, Kartu, KTP, KK, Tanggal Lahir).',
-                                    '',
-                                    `Data Anda: *${lines.length} baris* (Terdeteksi format Dharmajaya/Salah).`,
-                                    '',
-                                    '💡 *SOLUSI:*',
-                                    '• Jika ingin ke Dharmajaya, ketik *2*.',
-                                    '• Jika tetap Pasarjaya, mohon perbaiki data Anda (tambah Tanggal Lahir) dan kirim ulang.',
-                                    '',
-                                    '_Ketik 0 untuk batal._'
-                                ].join('\n');
-                            }
-                        }
+                        // ⛔ BLOCK PASARJAYA (REQUESTED BY USER)
+                        replyText = [
+                            '⛔ *MOHON MAAF*',
+                            '',
+                            'Layanan pengambilan di **Pasarjaya** saat ini sedang **TUTUP SEMENTARA**.',
+                            '',
+                            'Silakan pilih lokasi lain (Dharmajaya) atau tunggu informasi selanjutnya.',
+                            '',
+                            '_Ketik 0 untuk batal._'
+                        ].join('\n');
 
-                        if (!rejectPasarjaya) {
-                            // MENU SUB-LOKASI PASARJAYA
-                            replyText = MENU_PASARJAYA_LOCATIONS;
-                            userFlowByPhone.set(senderPhone, 'SELECT_PASARJAYA_SUB');
-                        }
+                        // JANGAN SET FLOW KE SELECT_PASARJAYA_SUB
+                        // userFlowByPhone.set(senderPhone, 'SELECT_PASARJAYA_SUB');
                     } else if (normalized === '2') {
                         // CEK VALIDASI AWAL: DHARMAJAYA WAJIB 4 BARIS
                         const pendingData = pendingRegistrationData.get(senderPhone);

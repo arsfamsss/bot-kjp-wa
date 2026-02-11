@@ -24,12 +24,12 @@ export const FORMAT_DAFTAR_MESSAGE = [
     '',
     'Mau ambil sembako dimana?',
     '',
-    '1️⃣ *PASARJAYA*',
-    '(Kedoya,Cengkareng,Pesakih dll)',
+    '~1. PASARJAYA~ (⛔ Tutup Sementara)',
+    '',
     '2️⃣ *DHARMAJAYA*',
     '(Kosambi,Kapuk Jagal,Pulogadung,Cakung)',
     '',
-    'Ketik 1 atau 2 ya',
+    'Silakan ketik *2* untuk lanjut ke Dharmajaya.',
     'Ketik 0 kalau batal 😊',
 ].join('\n');
 
