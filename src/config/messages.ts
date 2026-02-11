@@ -209,14 +209,15 @@ export const ADMIN_PHONES_RAW = ['085641411818', '08568511113'];
 
 // --- TEMPLATE PESAN TUTUP (UNIFIED) ---
 export const CLOSE_MESSAGE_TEMPLATE_UNIFIED = [
-    '⛔ *MOHON MAAF LAYANAN SEDANG TUTUP* ⛔',
+    '⛔ *LAYANAN TUTUP SEMENTARA* ⛔',
     '',
-    'Saat ini sistem sedang istirahat untuk *Maintenance* dan *Rekapitulasi Data Harian*.',
+    'Mohon maaf, layanan penerimaan data saat ini sedang tutup.',
+    '⏰ *Jam Operasional:* 06.01 - 23.59 WIB',
     '',
-    'Data yang dikirim sekarang TIDAK AKAN DIPROSES. 🛑',
+    'Data yang dikirim di luar jam operasional *TIDAK AKAN DIPROSES*.',
     '',
-    'Silakan kirim datanya lagi nanti pada pukul:',
+    'Silakan kirim kembali data Anda besok pagi mulai pukul:',
     '👉 *{JAM_BUKA} WIB*',
     '',
-    'Terima kasih atas pengertiannya. 🙏'
+    'Terima kasih atas perhatian dan kerjasamanya. 🙏'
 ].join('\n');
