@@ -311,7 +311,7 @@ export async function getGlobalRecap(
         const nameDisplay = contactName ? ` ${contactName}` : '';
 
         lines.push(`----------------------------------------`);
-        lines.push(`👤 *PENGIRIM ${idx + 1}:${nameDisplay} WA ${phone}*`);
+        lines.push(`👤 *PENGIRIM ${idx + 1}:${nameDisplay}  (${formatWaPhone(phone)})*`);
         lines.push(`📥 Jumlah Data: ${items.length}`);
 
         // --- GROUPING PER LOKASI ---
@@ -385,6 +385,21 @@ function formatDateDMY(isoDate: string | null): string {
     const parts = isoDate.split('-');
     if (parts.length !== 3) return isoDate;
     return `${parts[2]}-${parts[1]}-${parts[0]}`;
+}
+
+// Helper: Format nomor WA 628xxx -> 08xxx xxxx xxxx
+function formatWaPhone(phone: string): string {
+    let p = phone;
+    if (p.startsWith('62')) {
+        p = '0' + p.substring(2);
+    }
+
+    // Format block 4-4-rest
+    if (p.length > 8) {
+        return `${p.substring(0, 4)} ${p.substring(4, 8)} ${p.substring(8)}`;
+    }
+
+    return p;
 }
 
 // --- GENERATE EXPORT DATA (TXT ONLY - Format Laporan Detail Per Gerai + Pengirim) ---
