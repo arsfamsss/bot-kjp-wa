@@ -53,7 +53,10 @@ export function buildReplyForNewData(
                 // Request format: "1. Siti Aminah (5049...)"
                 // Bikin bold namanya biar jelas
                 lines.push(`${idx + 1}. *${item.nama}*`);
-                lines.push(`   └ ${item.no_kjp}`); // Tree style structure
+                const subLoc = item.lokasi
+                    ? item.lokasi.replace(/^(PASARJAYA|DHARMAJAYA)\s*-\s*/i, '').trim()
+                    : '';
+                lines.push(`   └ ${item.no_kjp}${subLoc ? ` 📍 ${subLoc}` : ''}`); // Tree style + lokasi
             });
         } else if (totalDataToday !== undefined && totalDataToday > 0) {
             lines.push(`🔥 Total: *${totalDataToday} Orang*`);
