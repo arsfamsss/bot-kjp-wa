@@ -56,8 +56,6 @@ export type AdminFlowState =
     | 'SETTING_CLOSE_TIME_MENU'
     | 'SETTING_CLOSE_TIME_START'
     | 'SETTING_CLOSE_TIME_END'
-    | 'SETTING_CLOSE_MSG'
-    | 'SETTING_CLOSE_MSG_MENU'
     | 'SETTING_CLOSE_LONG_TERM'
     // NEW CONTACT MANAGEMENT FLOW
     | 'CONTACT_MENU'        // Menu Utama Kelola Kontak

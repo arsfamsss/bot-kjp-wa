@@ -900,6 +900,8 @@ const DEFAULT_BOT_SETTINGS: BotSettings = {
 Silakan kirim ulang setelah jam buka untuk pendaftaran besok.
 
 _Terima kasih atas pengertiannya._ 🙏`,
+    // NOTE: Template di atas adalah DEFAULT jika database kosong.
+    // Pesan aktual diambil dari database (bot_settings.close_message_template).
     manual_close_start: null,
     manual_close_end: null
 };

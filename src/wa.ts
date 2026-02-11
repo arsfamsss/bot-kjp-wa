@@ -415,6 +415,28 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                     continue; // STOP PROCESSING
                 }
 
+                // 🔧 ADMIN SHORTCUT: #TEMPLATE (Anti State-Loss)
+                // Kebal restart karena tidak butuh state/flow
+                if (isAdmin && rawInput && rawInput.toString().trim().toUpperCase().startsWith('#TEMPLATE')) {
+                    const templateBody = rawInput.toString().trim().replace(/^#TEMPLATE\s*/i, '').trim();
+
+                    if (!templateBody || templateBody.toUpperCase() === 'RESET') {
+                        // Reset ke template standar
+                        await updateBotSettings({ close_message_template: CLOSE_MESSAGE_TEMPLATE_UNIFIED });
+                        clearBotSettingsCache();
+                        await sock.sendMessage(remoteJid, { text: '✅ Template pesan tutup direset ke *Template Standar*.' });
+                    } else if (templateBody.length < 10) {
+                        await sock.sendMessage(remoteJid, { text: '⚠️ Template terlalu pendek (min 10 karakter).\nFormat: #TEMPLATE (isi pesan)' });
+                    } else {
+                        await updateBotSettings({ close_message_template: templateBody });
+                        clearBotSettingsCache();
+                        await sock.sendMessage(remoteJid, {
+                            text: `✅ *TEMPLATE CUSTOM DISIMPAN*\n\n📝 Preview:\n─────────────────\n${templateBody}\n─────────────────`
+                        });
+                    }
+                    continue;
+                }
+
                 // ✅ KHUSUS AKUN @lid: kalau belum ada mapping nomor, minta user ketik nomor manual
                 // PENTING: Hanya proses jika input SATU BARIS (bukan data sembako multi-baris)
                 const inputLines = String(rawInput).trim().split('\n').filter(l => l.trim());
@@ -2199,19 +2221,6 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                 '',
                                 '_Ketik 0 untuk batal._'
                             ].join('\n');
-                        } else if (normalized === '14') {
-                            // FEATURE: EDIT TEMPLATE PESAN TUTUP (NEW FLOW)
-                            const currentSettings = await getBotSettings();
-                            adminFlowByPhone.set(senderPhone, 'SETTING_CLOSE_MSG_MENU');
-                            replyText = [
-                                '📝 *EDIT TEMPLATE PESAN TUTUP*',
-                                '',
-                                'Pilih template:',
-                                '1️⃣ Gunakan Template Standar (Maintenance & Rekapitulasi)',
-                                '2️⃣ Custom (Edit Sendiri)',
-                                '',
-                                '_Ketik 0 untuk batal._'
-                            ].join('\n');
                         } else replyText = '⚠️ Pilihan tidak dikenali.';
                     } else if (currentAdminFlow === 'SEARCH_DATA') {
                         // SEARCH ALL DATA
@@ -3169,66 +3178,6 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             }
                         }
 
-                    } else if (currentAdminFlow === 'SETTING_CLOSE_MSG_MENU') {
-                        // SUB-MENU EDIT PESAN TUTUP
-                        if (normalized === '1') {
-                            // 1. Template Standar
-                            const success = await updateBotSettings({
-                                close_message_template: CLOSE_MESSAGE_TEMPLATE_UNIFIED
-                            });
-                            if (success) {
-                                clearBotSettingsCache();
-                                replyText = [
-                                    '✅ *TEMPLATE BERHASIL DIGANTI*',
-                                    '',
-                                    'Sekarang menggunakan *Template Standar* (Maintenance & Rekapitulasi).',
-                                    'Bot akan otomatis mengisi jam buka kembali.'
-                                ].join('\n');
-                            } else {
-                                replyText = '❌ Gagal menyimpan template.';
-                            }
-                            adminFlowByPhone.set(senderPhone, 'MENU');
-                        } else if (normalized === '2') {
-                            // 2. Custom -> Lanjut ke flow manual lama
-                            const currentSettings = await getBotSettings();
-                            adminFlowByPhone.set(senderPhone, 'SETTING_CLOSE_MSG');
-                            replyText = [
-                                '📝 *EDIT TEMPLATE CUSTOM*',
-                                '',
-                                'Silakan copy teks di bawah ini, edit sesuai keinginan, lalu kirim balik.',
-                                '',
-                                '```' + currentSettings.close_message_template + '```',
-                                '',
-                                '_(Ketik 0 untuk batal)_'
-                            ].join('\n');
-                        } else {
-                            replyText = '⚠️ Pilih 1 atau 2.';
-                        }
-
-                    } else if (currentAdminFlow === 'SETTING_CLOSE_MSG') {
-                        // Handler SIMPAN Custom Message
-                        if (rawTrim.length < 10) {
-                            replyText = '⚠️ Template terlalu pendek. Minimal 10 karakter.\n\nKetik 0 untuk batal.';
-                        } else {
-                            const success = await updateBotSettings({
-                                close_message_template: rawTrim
-                            });
-
-                            if (success) {
-                                clearBotSettingsCache();
-                                replyText = [
-                                    '✅ *TEMPLATE CUSTOM DISIMPAN*',
-                                    '',
-                                    '📝 Preview:',
-                                    '─────────────────',
-                                    rawTrim,
-                                    '─────────────────'
-                                ].join('\n');
-                            } else {
-                                replyText = '❌ Gagal menyimpan template. Coba lagi.';
-                            }
-                            adminFlowByPhone.set(senderPhone, 'MENU');
-                        }
                     }
                     if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
                     continue;
