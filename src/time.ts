@@ -64,10 +64,10 @@ export function isSystemClosed(date: Date, settings?: {
     // Gunakan settings jika ada, kalau tidak pakai default
     const startClose = settings
         ? settings.close_hour_start * 60 + settings.close_minute_start
-        : 4 * 60 + 1;  // 04:01
+        : 0 * 60 + 0;  // Default: Tutup Jam 00:00
     const endClose = settings
         ? settings.close_hour_end * 60 + settings.close_minute_end
-        : 6 * 60 + 0;    // 06:00
+        : 6 * 60 + 0;    // Default: Buka Jam 06:00
 
     // LOGIKA HARIAN:
     // Jika Start == End (misal 00:00 - 00:00), anggap fitur matikan (Tidak pernah tutup)
