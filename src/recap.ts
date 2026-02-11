@@ -48,7 +48,7 @@ export async function getEditableItemsForSender(
         .select('id, nama, no_kjp, no_ktp, no_kk, lokasi, tanggal_lahir')
         .eq('sender_phone', senderPhone)
         .eq('processing_day_key', processingDayKey)
-        .order('received_at', { ascending: true });
+        .order('nama', { ascending: true });
 
     if (error) {
         console.error('Error fetching editable items:', error);
@@ -69,7 +69,7 @@ export async function getTodayRecapForSender(
         .select('nama, no_kjp, no_ktp, no_kk, lokasi, tanggal_lahir', { count: 'exact' })
         .eq('sender_phone', senderPhone)
         .eq('processing_day_key', processingDayKey)
-        .order('received_at', { ascending: true });
+        .order('nama', { ascending: true });
 
     if (countError) throw countError;
 
@@ -111,7 +111,8 @@ export async function getTodayRecapForSender(
     }
 
     const detailItems = dedupInvalidItems(rawInvalidItems)
-        .sort((a, b) => a.index - b.index)
+        // Sort by NAMA ascending (A-Z)
+        .sort((a, b) => a.nama.localeCompare(b.nama))
         .slice(0, MAX_DETAIL_ITEMS);
 
     return {

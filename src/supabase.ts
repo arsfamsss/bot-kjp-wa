@@ -814,7 +814,15 @@ export async function getAllLidPhoneMap(): Promise<{ phone_number: string; push_
         console.error('❌ getAllLidPhoneMap error:', error.message);
         return [];
     }
-    return data || [];
+
+    // Sort manual case-insensitive di level aplikasi untuk hasil yang lebih rapi
+    const sortedData = (data || []).sort((a, b) => {
+        const nameA = (a.push_name || '').toLowerCase();
+        const nameB = (b.push_name || '').toLowerCase();
+        return nameA.localeCompare(nameB);
+    });
+
+    return sortedData;
 }
 
 // --- LOOKUP BY PHONE NUMBER (untuk fix setelah ganti nomor bot) ---
