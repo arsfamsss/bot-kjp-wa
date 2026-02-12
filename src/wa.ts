@@ -2096,7 +2096,11 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                         name: info.name,
                                         count: info.count
                                     }))
-                                    .sort((a, b) => a.name.localeCompare(b.name)); // SORTED ALPHABETICALLY ✅
+                                    .sort((a, b) => {
+                                        const nameA = (a.name || '').trim().toLowerCase();
+                                        const nameB = (b.name || '').trim().toLowerCase();
+                                        return nameA.localeCompare(nameB);
+                                    }); // SORTED ALPHABETICALLY (ROBUST) ✅
                                 adminUserListCache.set(senderPhone, userList);
 
                                 let msg = '🗑️ *HAPUS DATA USER*\n\n';
@@ -2858,7 +2862,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             // Ambil data detail user tersebut (LENGKAP)
                             const { data: userData } = await supabase
                                 .from('data_harian')
-                                .select('id, nama, no_kjp, no_ktp, no_kk')
+                                .select('id, nama, no_kjp, no_ktp, no_kk, lokasi, specific_location')
                                 .eq('processing_day_key', processingDayKey)
                                 .eq('sender_phone', selectedUser.phone)
                                 .order('received_at', { ascending: true });
@@ -2879,7 +2883,8 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                     msg += `┌── ${i + 1}. *${d.nama}*\n`;
                                     msg += `│   💳 Kartu: ${d.no_kjp}\n`;
                                     msg += `│   🪪 KTP  : ${d.no_ktp}\n`;
-                                    msg += `└── 🏠 KK   : ${d.no_kk}\n\n`;
+                                    msg += `│   🏠 KK   : ${d.no_kk}\n`;
+                                    msg += `└── 📍 Loc  : ${d.specific_location || d.lokasi || '-'}\n\n`;
                                 });
                                 msg += '👇 Ketik nomor data yang mau dihapus.\n';
                                 msg += 'Contoh: *1* atau *1,3,5*\n';
