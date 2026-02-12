@@ -1129,6 +1129,18 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                 if (currentUserFlow === 'REREGISTER_OFFER' || currentUserFlow === 'REREGISTER_SELECT') {
                     const cachedFailed = reregisterDataCache.get(senderPhone) || [];
 
+                    // Mapping lokasi Bot CEK STATUS → format Bot WA
+                    const lokasiMapping: Record<string, string> = {
+                        'Kapuk': 'DHARMAJAYA - Kapuk Jagal',
+                        'Duri Kosambi': 'DHARMAJAYA - Duri Kosambi',
+                        'Pulogadung': 'DHARMAJAYA - Pulogadung',
+                        'Cakung': 'DHARMAJAYA - Cakung',
+                    };
+                    const mapLokasi = (lok: string | null) => {
+                        if (!lok) return null;
+                        return lokasiMapping[lok] || lok; // Fallback ke value asli jika tidak ada di mapping
+                    };
+
                     if (normalized === 'SKIP' || normalized === '0' || normalized === 'BATAL') {
                         // User skip tawaran daftar ulang
                         userFlowByPhone.set(senderPhone, 'NONE');
@@ -1157,7 +1169,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                 no_kjp: item.no_kjp,
                                 no_ktp: item.no_ktp || '',
                                 no_kk: item.no_kk || '',
-                                lokasi: item.lokasi || null,
+                                lokasi: mapLokasi(item.lokasi),
                             },
                             status: 'OK',
                             index: 0,
@@ -1215,7 +1227,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                 no_kjp: item.no_kjp,
                                 no_ktp: item.no_ktp || '',
                                 no_kk: item.no_kk || '',
-                                lokasi: item.lokasi || null,
+                                lokasi: mapLokasi(item.lokasi),
                             },
                             status: 'OK',
                             index: 0,
