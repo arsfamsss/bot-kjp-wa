@@ -1209,9 +1209,10 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                     }
 
                     // Cek apakah user ketik ULANG 1 3 5 (pilih nomor tertentu)
-                    const ulangMatch = normalized.match(/^ULANG\s+([\d\s,]+)$/);
+                    // UPDATE: WAJIB pakai kata ULANG, tapi pemisah angkanya bebas (spasi, koma, titik)
+                    const ulangMatch = normalized.match(/^ULANG\s+([\d\s,.]+)+$/);
                     if (ulangMatch) {
-                        const indicesRaw = ulangMatch[1].split(/[\s,]+/).map(Number).filter(n => n > 0);
+                        const indicesRaw = ulangMatch[1].split(/[\s,.]+/).map(Number).filter(n => n > 0);
                         const selectedItems = indicesRaw
                             .filter(idx => idx <= cachedFailed.length)
                             .map(idx => cachedFailed[idx - 1]);
@@ -1302,7 +1303,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
 
                         // Minta pilih lokasi (Format Lama) tapi nanti 1 akan trigger menu baru
                         await sock.sendMessage(remoteJid, {
-                            text: `⚠️ *Mohon Pilih Lokasi Dulu*\n\nData Anda sepertinya valid, tapi saya perlu tahu Anda mau ambil sembako di mana?\n\nKetik *1* untuk Pasarjaya (Kedoya,Cengkareng,Pesakih dll)\nKetik *2* untuk Dharmajaya (Kosambi,Kapuk Jagal,Pulogadung,Cakung)`
+                            text: `⚠️ *Mohon Pilih Lokasi Dulu*\n\nData Anda sepertinya valid, tapi saya perlu tahu Anda mau ambil sembako di mana?\n\nKetik Angka *1* untuk Pasarjaya (Kedoya,Cengkareng,Pesakih dll)\nKetik Angka *2* untuk Dharmajaya (Kosambi,Kapuk Jagal,Pulogadung,Cakung)\n\n_Ketik 0 untuk batal._`
                         });
                         userFlowByPhone.set(senderPhone, 'SELECT_LOCATION');
                         return; // Selesai
@@ -1671,7 +1672,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                         pendingRegistrationData.delete(senderPhone);
                         replyText = '✅ Pendaftaran dibatalkan.';
                     } else {
-                        replyText = '⚠️ Pilih 1 (Pasarjaya) atau 2 (Dharmajaya). Ketik 0 untuk batal.';
+                        replyText = '⚠️ Ketik Angka *1* (Pasarjaya) atau Ketik Angka *2* (Dharmajaya).\nKetik *0* untuk batal.';
                     }
                     if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
                     continue;

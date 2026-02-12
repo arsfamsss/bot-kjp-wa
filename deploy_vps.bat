@@ -7,6 +7,23 @@ echo        DEPLOY BOT KJP KE VPS
 echo ========================================
 echo.
 
+echo [GIT] Mempersiapkan Commit...
+set /p commit_msg="Masukkan Pesan Commit: "
+
+if "%commit_msg%"=="" (
+    echo [WARNING] Pesan commit kosong! Menggunakan default: "update bot"
+    set commit_msg="update bot"
+)
+
+echo [GIT] Menambahkan semua perubahan...
+git add .
+echo [GIT] Melakukan commit...
+git commit -m "%commit_msg%"
+echo [GIT] Mengirim ke GitHub...
+git push origin main
+echo [GIT] Selesai push! Lanjut deploy...
+echo.
+
 echo [INFO] Commit Terakhir:
 echo ----------------------------------------
 git log -1 --format="  Commit : %%h  Tanggal: %%ci  Pesan  : %%s"
