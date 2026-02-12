@@ -26,13 +26,13 @@ echo.
 
 echo [INFO] Commit Terakhir:
 echo ----------------------------------------
-git log -1 --format="  Commit : %%h  Tanggal: %%ci  Pesan  : %%s"
+git --no-pager log -1 --format="  Commit : %%h  Tanggal: %%ci  Pesan  : %%s"
 echo ----------------------------------------
 echo.
 
 echo [INFO] File yang Berubah (vs commit sebelumnya):
 echo ----------------------------------------
-git diff --name-only HEAD~1 2>nul || echo   (tidak bisa membandingkan)
+git --no-pager diff --name-only HEAD~1 2>nul || echo   (tidak bisa membandingkan)
 echo ----------------------------------------
 echo.
 
