@@ -1510,7 +1510,12 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             ];
 
                             failedData.forEach((item: any, idx: number) => {
-                                const childName = item.nama?.match(/\(([^)]+)\)/)?.[1] || item.nama;
+                                // Logic: Ambil teks dalam kurung (nama anak). Jika tidak ada kurung, ambil full nama.
+                                let childName = item.nama;
+                                const match = item.nama?.match(/\(([^)]+)\)/);
+                                if (match && match[1]) {
+                                    childName = match[1]; // Ambil isi dalam kurung saja
+                                }
                                 lines.push(`*${idx + 1}.* ${childName}`);
                                 lines.push(`   KJP: ${item.no_kjp}`);
                                 lines.push(`   Lokasi: ${item.lokasi || '-'}`);
@@ -3717,7 +3722,11 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
 
                                     failedData.forEach((item: any, idx: number) => {
                                         // Ambil nama anak dari dalam kurung, misal "Fathir Min 7 (Maya)" → "Maya"
-                                        const childName = item.nama?.match(/\(([^)]+)\)/)?.[1] || item.nama;
+                                        let childName = item.nama;
+                                        const match = item.nama?.match(/\(([^)]+)\)/);
+                                        if (match && match[1]) {
+                                            childName = match[1];
+                                        }
                                         lines.push(`*${idx + 1}.* ${childName}`);
                                         lines.push(`   KJP: ${item.no_kjp}`);
                                         lines.push(`   KTP: ${item.no_ktp || '-'}`);
