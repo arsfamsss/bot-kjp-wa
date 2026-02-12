@@ -210,15 +210,14 @@ export const ADMIN_PHONES_RAW = ['085641411818', '08568511113'];
 
 // --- TEMPLATE PESAN TUTUP (UNIFIED) ---
 export const CLOSE_MESSAGE_TEMPLATE_UNIFIED = [
-    '⛔ *LAYANAN TUTUP SEMENTARA* ⛔',
+    '⛔ *PENGUMUMAN: LIBUR PENDAFTARAN SEMENTARA* ⛔',
     '',
-    'Mohon maaf, layanan penerimaan data saat ini sedang tutup.',
-    '⏰ *Jam Operasional:* 06.01 - 23.59 WIB',
+    'Sehubungan dengan Web Dharmajaya yang baru akan dibuka kembali pada hari Minggu, 15 Februari pukul 06.00 WIB, maka layanan kami disesuaikan sebagai berikut:',
     '',
-    'Data yang dikirim di luar jam operasional *TIDAK AKAN DIPROSES*.',
+    '🔴 *SEKARANG - JUMAT:* TUTUP / LIBUR',
+    '🟢 *SABTU, 14 FEBRUARI:* BUKA (Pukul 00.01 - 23.59 WIB)',
     '',
-    'Silakan kirim kembali data Anda besok pagi mulai pukul:',
-    '👉 *{JAM_BUKA} WIB*',
+    '📌 *PENTING:* Data yang Anda kirim saat ini *TIDAK AKAN DIPROSES*. Mohon kirimkan ulang data Anda hanya pada hari *SABTU* agar bisa kami bantu input saat web buka di hari Minggu pagi.',
     '',
-    'Terima kasih atas perhatian dan kerjasamanya. 🙏'
+    'Terima kasih atas pengertiannya. 🙏'
 ].join('\n');
