@@ -420,24 +420,41 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
 
                 // 🔧 ADMIN SHORTCUT: #TEMPLATE (Anti State-Loss)
                 // Kebal restart karena tidak butuh state/flow
-                if (isAdmin && rawInput && rawInput.toString().trim().toUpperCase().startsWith('#TEMPLATE')) {
-                    const templateBody = rawInput.toString().trim().replace(/^#TEMPLATE\s*/i, '').trim();
+                // MODIFIED: Cek command dulu untuk mencegah fallthrough ke logic data
+                const isTemplateCmd = rawInput && rawInput.toString().trim().toUpperCase().startsWith('#TEMPLATE');
 
-                    if (!templateBody || templateBody.toUpperCase() === 'RESET') {
-                        // Reset ke template standar
-                        await updateBotSettings({ close_message_template: CLOSE_MESSAGE_TEMPLATE_UNIFIED });
-                        clearBotSettingsCache();
-                        await sock.sendMessage(remoteJid, { text: '✅ Template pesan tutup direset ke *Template Standar*.' });
-                    } else if (templateBody.length < 10) {
-                        await sock.sendMessage(remoteJid, { text: '⚠️ Template terlalu pendek (min 10 karakter).\nFormat: #TEMPLATE (isi pesan)' });
+                if (isTemplateCmd) {
+                    if (isAdmin) {
+                        const templateBody = rawInput.toString().trim().replace(/^#TEMPLATE\s*/i, '').trim();
+
+                        if (!templateBody || templateBody.toUpperCase() === 'RESET') {
+                            // Reset ke template standar
+                            await updateBotSettings({ close_message_template: CLOSE_MESSAGE_TEMPLATE_UNIFIED });
+                            clearBotSettingsCache();
+                            await sock.sendMessage(remoteJid, { text: '✅ Template pesan tutup direset ke *Template Standar*.' });
+                        } else if (templateBody.length < 10) {
+                            await sock.sendMessage(remoteJid, { text: '⚠️ Template terlalu pendek (min 10 karakter).\nFormat: #TEMPLATE (isi pesan)' });
+                        } else {
+                            await updateBotSettings({ close_message_template: templateBody });
+                            clearBotSettingsCache();
+                            await sock.sendMessage(remoteJid, {
+                                text: `✅ *TEMPLATE CUSTOM DISIMPAN*\n\n📝 Preview:\n─────────────────\n${templateBody}\n─────────────────`
+                            });
+                        }
                     } else {
-                        await updateBotSettings({ close_message_template: templateBody });
-                        clearBotSettingsCache();
-                        await sock.sendMessage(remoteJid, {
-                            text: `✅ *TEMPLATE CUSTOM DISIMPAN*\n\n📝 Preview:\n─────────────────\n${templateBody}\n─────────────────`
-                        });
+                        // User BUKAN Admin tapi mencoba akses #TEMPLATE
+                        // Cek apakah ini masalah LID?
+                        if (senderIsLid && (!senderPhone || senderPhone === chatJid.replace('@lid', ''))) {
+                            await sock.sendMessage(remoteJid, {
+                                text: `⚠️ *AKSES ADMIN DITOLAK (DEVICE BELUM TERDAFTAR)*\n\nSaya mendeteksi Anda mencoba mengakses menu Admin, tetapi device Anda (Linked Device) belum terdaftar di sistem bot.\n\n👉 *SOLUSI:* Ketik NOMOR HP Anda (Contoh: 0812xxx) satu kali di sini untuk verifikasi. Setelah saya balas "Nomor sudah dicatat", silakan coba lagi.`
+                            });
+                        } else {
+                            await sock.sendMessage(remoteJid, {
+                                text: `⛔ *AKSES DITOLAK*\n\nAnda tidak terdaftar sebagai Admin.`
+                            });
+                        }
                     }
-                    continue;
+                    continue; // STOP PROCESSING (Jangan masuk ke logic data)
                 }
 
                 // ✅ KHUSUS AKUN @lid: kalau belum ada mapping nomor, minta user ketik nomor manual
