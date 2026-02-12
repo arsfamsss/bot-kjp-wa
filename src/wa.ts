@@ -1476,7 +1476,64 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                     userFlowByPhone.set(senderPhone, 'NONE');
                     // Lanjut ke handler menu utama di bawah
                 }
-                else if (currentUserFlow === 'CHECK_DATA_MENU') {
+                // --- GLOBAL RE-REGISTER CHECK (NEW LOGIC) ---
+                // Cek apakah user punya data gagal kemarin? Jika ya, TAWARKAN DULU sebelum proses apapun.
+                // Syarat:
+                // 1. Fitur ON
+                // 2. User belum ditawari hari ini
+                // 3. Flow user sedang kosong (NONE) -> Agar tidak memotong proses input manual / sub-lokasi
+                // 4. Bukan Admin (opsional, tapi admin jarang daftar)
+
+                try {
+                    const featureOn = await isFeatureDaftarUlangEnabled();
+                    const alreadyOffered = reregisterOfferedToday.get(senderPhone) === processingDayKey;
+
+                    // Exclude jika user sedang dalam flow tertentu (selain NONE)
+                    const isIdle = currentUserFlow === 'NONE' || !currentUserFlow;
+
+                    if (featureOn && !alreadyOffered && isIdle && !isAdmin) {
+                        const failedData = await getFailedRegistrations(senderPhone);
+
+                        if (failedData.length > 0) {
+                            // Simpan ke cache dan set flow
+                            reregisterDataCache.set(senderPhone, failedData);
+                            userFlowByPhone.set(senderPhone, 'REREGISTER_OFFER');
+                            reregisterOfferedToday.set(senderPhone, processingDayKey);
+
+                            // Bangun pesan tawaran
+                            const lines: string[] = [
+                                '🔄 *TAWARAN DAFTAR ULANG*',
+                                '',
+                                `Ada *${failedData.length}* data kemarin yang *gagal terdaftar*:`,
+                                '',
+                            ];
+
+                            failedData.forEach((item: any, idx: number) => {
+                                const childName = item.nama?.match(/\(([^)]+)\)/)?.[1] || item.nama;
+                                lines.push(`*${idx + 1}.* ${childName}`);
+                                lines.push(`   KJP: ${item.no_kjp}`);
+                                lines.push(`   Lokasi: ${item.lokasi || '-'}`);
+                                lines.push('');
+                            });
+
+                            lines.push('━━━━━━━━━━━━━━━━━━');
+                            lines.push('📋 *Pilihan:*');
+                            lines.push('• Ketik *ULANG SEMUA* → daftar ulang semua');
+                            lines.push('• Ketik *ULANG 1 3 5* → daftar ulang nomor tertentu');
+                            lines.push('• Ketik *SKIP* atau *LANJUT* → lewati, lanjut kirim data biasa');
+
+                            await sock.sendMessage(remoteJid, { text: lines.join('\n') });
+
+                            // STOP PROCESSING HERE, user must respond to offer (or skip)
+                            continue;
+                        }
+                    }
+                } catch (reregErr) {
+                    console.error('⚠️ Global Reregister check error:', reregErr);
+                }
+                // --- END GLOBAL CHECK ---
+
+                if (currentUserFlow === 'CHECK_DATA_MENU') {
                     if (normalized === '1') {
                         // CEK HARI INI
                         replyText = await renderCheckDataResult(processingDayKey, 'HARI INI');
