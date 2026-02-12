@@ -4,11 +4,10 @@ import { supabase } from './supabase';
 import type { ItemStatus, LogItem, LogJson } from './types';
 import { getContactName } from './contacts_data';
 
-// Utility: Ekstrak nama anak dari format "Owner (NamaAnak)" → "NamaAnak"
-// Jika tidak ada kurung, kembalikan nama asli (sudah nama anak)
+// Utility: Tampilkan nama apa adanya sesuai input user
+// Contoh: "Hamzah (bude)" → "Hamzah (bude)" (tanpa ekstraksi)
 export function extractChildName(fullName: string): string {
-    const match = fullName.match(/\(([^)]+)\)/);
-    return match ? match[1] : fullName;
+    return fullName;
 }
 
 export type TodayInvalidItem = {
@@ -68,7 +67,8 @@ export async function getEditableItemsForSender(
 // --- BAGIAN 1: REKAP PRIBADI (BERDASARKAN processing_day_key) ---
 export async function getTodayRecapForSender(
     senderPhone: string,
-    processingDayKey: string
+    processingDayKey: string,
+    sortBy: 'nama' | 'received_at' = 'nama' // Default: A-Z untuk CEK/EDIT/HAPUS
 ): Promise<TodayRecapResult> {
     // 1. Ambil data VALID (semua detail termasuk lokasi dan tanggal lahir)
     const { data: validData, count: validCount, error: countError } = await supabase
@@ -76,7 +76,7 @@ export async function getTodayRecapForSender(
         .select('nama, no_kjp, no_ktp, no_kk, lokasi, tanggal_lahir', { count: 'exact' })
         .eq('sender_phone', senderPhone)
         .eq('processing_day_key', processingDayKey)
-        .order('nama', { ascending: true });
+        .order(sortBy, { ascending: true });
 
     if (countError) throw countError;
 
@@ -225,6 +225,53 @@ export function buildReplyForInvalidDetails(
             lines.push(''); // Jarak antar item
         }
     }
+    return lines.join('\n');
+}
+
+// --- BAGIAN 1b: BUILD REPLY KHUSUS DAFTAR ULANG (NEW) ---
+export function buildReplyForReregister(
+    acceptedItems: ValidItemDetail[],
+    totalTodayCount: number
+): string {
+    const lines: string[] = [];
+
+    // Header
+    lines.push(`✅ *DAFTAR ULANG BERHASIL*`);
+    lines.push('');
+    lines.push(`Data Terdaftar: ${acceptedItems.length} Orang`);
+    lines.push('');
+
+    if (acceptedItems.length > 0) {
+        acceptedItems.forEach((item, i) => {
+            // Tentukan lokasi pengambilan (Sama logic dengan Recap Today)
+            let lokasiLabel = '📍 Duri Kosambi'; // Default lama
+            if (item.lokasi) {
+                if (item.lokasi.startsWith('PASARJAYA') || item.lokasi.startsWith('DHARMAJAYA')) {
+                    lokasiLabel = `📍 ${item.lokasi}`;
+                }
+            }
+
+            lines.push(`┌── ${i + 1}. ${extractChildName(item.nama)}`);
+            lines.push(`│   📇 Kartu : ${item.no_kjp}`);
+            if (item.no_ktp) lines.push(`│   🪪 KTP   : ${item.no_ktp}`);
+            if (item.no_kk) lines.push(`│   🏠 KK    : ${item.no_kk}`);
+
+            // Tampilkan tanggal lahir jika ada (khusus Pasarjaya)
+            if (item.tanggal_lahir) {
+                const tglLahirDisplay = formatDateDMY(item.tanggal_lahir);
+                lines.push(`│   🎂 Lahir : ${tglLahirDisplay}`);
+            }
+
+            lines.push(`└── ${lokasiLabel}`);
+
+            // Jarak antar item
+            if (i < acceptedItems.length - 1) lines.push('');
+        });
+    }
+
+    lines.push('');
+    lines.push(`📊 Total data hari ini: *${totalTodayCount}*`);
+
     return lines.join('\n');
 }
 

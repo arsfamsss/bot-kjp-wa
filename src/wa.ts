@@ -16,13 +16,15 @@ import { makeInMemoryStore } from './store';
 // --- IMPORT LOGIC DARI FILE LAIN ---
 import { processRawMessageToLogJson, parseRawMessageToLines } from './parser';
 import {
-    getTodayRecapForSender,
-    getEditableItemsForSender,
     buildReplyForTodayRecap,
-    getGlobalRecap,
     buildReplyForInvalidDetails,
-    generateExportData,
+    getTodayRecapForSender,
     extractChildName,
+    buildReplyForReregister,
+    ValidItemDetail,
+    getGlobalRecap,
+    generateExportData,
+    getEditableItemsForSender
 } from './recap';
 import {
     buildReplyForNewData,
@@ -1195,9 +1197,18 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             await markAsReRegistered(ids);
 
                             const { validCount } = await getTodayRecapForSender(senderPhone, processingDayKey);
-                            await sock.sendMessage(remoteJid, {
-                                text: `✅ *DAFTAR ULANG BERHASIL*\n\n${cachedFailed.length} data berhasil didaftarkan ulang.\n📊 Total data hari ini: *${validCount}*`
-                            });
+
+                            // NEW FORMAT: Detailed Success Message
+                            const validItems: ValidItemDetail[] = items.map((it: any) => ({
+                                nama: it.parsed.nama,
+                                no_kjp: it.parsed.no_kjp,
+                                no_ktp: it.parsed.no_ktp,
+                                no_kk: it.parsed.no_kk,
+                                lokasi: it.parsed.lokasi,
+                            }));
+                            const replyText = buildReplyForReregister(validItems, validCount);
+
+                            await sock.sendMessage(remoteJid, { text: replyText });
                         } else {
                             await sock.sendMessage(remoteJid, { text: '❌ Gagal menyimpan data daftar ulang. Silakan coba kirim manual.' });
                         }
@@ -1253,9 +1264,18 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             await markAsReRegistered(ids);
 
                             const { validCount } = await getTodayRecapForSender(senderPhone, processingDayKey);
-                            await sock.sendMessage(remoteJid, {
-                                text: `✅ *DAFTAR ULANG BERHASIL*\n\n${selectedItems.length} dari ${cachedFailed.length} data berhasil didaftarkan ulang.\n📊 Total data hari ini: *${validCount}*`
-                            });
+
+                            // NEW FORMAT: Detailed Success Message
+                            const validItems: ValidItemDetail[] = items.map((it: any) => ({
+                                nama: it.parsed.nama,
+                                no_kjp: it.parsed.no_kjp,
+                                no_ktp: it.parsed.no_ktp,
+                                no_kk: it.parsed.no_kk,
+                                lokasi: it.parsed.lokasi,
+                            }));
+                            const replyText = buildReplyForReregister(validItems, validCount);
+
+                            await sock.sendMessage(remoteJid, { text: replyText });
                         } else {
                             await sock.sendMessage(remoteJid, { text: '❌ Gagal menyimpan data daftar ulang. Silakan coba kirim manual.' });
                         }
@@ -1428,7 +1448,8 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                 await sock.sendMessage(remoteJid, { text: errorMsg });
                             } else {
                                 // Hitung total data hari ini SETELAH data disimpan
-                                const todayRecap = await getTodayRecapForSender(senderPhone, processingDayKey);
+                                // Sort by received_at (urutan masuk) untuk balasan data baru
+                                const todayRecap = await getTodayRecapForSender(senderPhone, processingDayKey, 'received_at');
                                 const replyDataText = buildReplyForNewData(logJson, todayRecap.validCount, existingLocation, todayRecap.validItems);
                                 await sock.sendMessage(remoteJid, { text: replyDataText });
                                 console.log(`📤 Data pendaftaran (${existingLocation}) berhasil diproses untuk ${senderPhone}`);
