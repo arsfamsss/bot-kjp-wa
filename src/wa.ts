@@ -2859,7 +2859,8 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                     msg += `└── 🏠 KK   : ${d.no_kk}\n\n`;
                                 });
                                 msg += '👇 Ketik nomor data yang mau dihapus.\n';
-                                msg += 'Contoh: *1* atau *1,3,5*\n\n';
+                                msg += 'Contoh: *1* atau *1,3,5*\n';
+                                msg += 'Atau ketik *ALL* untuk HAPUS SEMUA data user ini.\n\n';
                                 msg += '_Ketik 0 untuk batal._';
                                 replyText = msg;
                                 adminFlowByPhone.set(senderPhone, 'ADMIN_DELETE_USER_DATA');
@@ -2871,12 +2872,48 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             replyText = '✅ Penghapusan dibatalkan.';
                             adminFlowByPhone.set(senderPhone, 'MENU');
                             adminContactCache.delete(senderPhone + '_data');
+                        } else if (normalized === 'ALL' || normalized === 'SEMUA') {
+                            // HAPUS SEMUA DATA USER TERSEBUT
+                            const dataList = adminContactCache.get(senderPhone + '_data');
+
+                            if (!dataList || dataList.length === 0) {
+                                replyText = '❌ Cache data hilang. Ulangi dari menu admin.';
+                                adminFlowByPhone.set(senderPhone, 'MENU');
+                            } else {
+                                // Eksekusi Delete Loop untuk semua item
+                                let successCount = 0;
+                                const deletedNames: string[] = [];
+
+                                for (const target of dataList) {
+                                    const dataId = target.phone_number;
+                                    const { error } = await supabase
+                                        .from('data_harian')
+                                        .delete()
+                                        .eq('id', dataId);
+
+                                    if (!error) {
+                                        successCount++;
+                                        deletedNames.push(target.push_name || 'Data User');
+                                    }
+                                }
+
+                                if (successCount > 0) {
+                                    replyText = `✅ Berhasil menghapus SEMUA (${successCount}) data milik user ini.`;
+                                } else {
+                                    replyText = '❌ Gagal menghapus data.';
+                                }
+
+                                adminContactCache.delete(senderPhone + '_data');
+                                adminUserListCache.delete(senderPhone);
+                                adminUserListCache.delete(senderPhone + '_selected');
+                                adminFlowByPhone.set(senderPhone, 'MENU');
+                            }
                         } else {
                             const parts = rawTrim.split(/[,\s]+/);
                             const indices = parts.map((p: string) => parseInt(p.trim())).filter((n: number) => !isNaN(n) && n > 0);
 
                             if (indices.length === 0) {
-                                replyText = '⚠️ Ketik nomor urut data. Contoh: 1, 2, 3. Ketik 0 untuk batal.';
+                                replyText = '⚠️ Ketik nomor urut data (contoh: 1, 2) atau ketik ALL untuk hapus semua. Ketik 0 untuk batal.';
                             } else {
                                 const dataList = adminContactCache.get(senderPhone + '_data');
 
