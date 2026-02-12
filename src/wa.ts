@@ -1288,7 +1288,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
 
                     // Input tidak dikenali dalam flow REREGISTER
                     await sock.sendMessage(remoteJid, {
-                        text: '⚠️ Perintah tidak dikenali.\n\nKetik:\n• *ULANG SEMUA* — daftar ulang semua\n• *ULANG 1 3 5* — daftar ulang nomor tertentu\n• *SKIP* — lewati'
+                        text: '⚠️ Maaf, pesan Anda belum sesuai.\n\nSilakan balas dengan salah satu cara berikut:\n\n✅ Ketik *ULANG SEMUA*\n→ Untuk mendaftarkan ulang SEMUA data di atas\n\n✅ Ketik *ULANG* lalu nomor yang dipilih\n→ Contoh: ketik *ULANG 1 3 5*\n→ Artinya: hanya daftar ulang nomor 1, 3, dan 5\n\n❌ Ketik *SKIP*\n→ Untuk melewati (tidak jadi daftar ulang)'
                     });
                     continue;
                 }
@@ -1545,9 +1545,9 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
 
                             lines.push('━━━━━━━━━━━━━━━━━━');
                             lines.push('📋 *Pilihan:*');
-                            lines.push('• Ketik *ULANG SEMUA* → daftar ulang semua');
-                            lines.push('• Ketik *ULANG 1 3 5* → daftar ulang nomor tertentu');
-                            lines.push('• Ketik *SKIP* atau *LANJUT* → lewati, lanjut kirim data biasa');
+                            lines.push('✅ Ketik *ULANG SEMUA* → daftar ulang semua');
+                            lines.push('✅ Ketik *ULANG 1 3 5* → pilih nomor tertentu');
+                            lines.push('❌ Ketik *SKIP* → lewati / tidak usah');
 
                             await sock.sendMessage(remoteJid, { text: lines.join('\n') });
 
@@ -2090,11 +2090,13 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                 });
 
                                 // Cache untuk digunakan di flow berikutnya
-                                const userList = Array.from(userMap.entries()).map(([phone, info]) => ({
-                                    phone,
-                                    name: info.name,
-                                    count: info.count
-                                }));
+                                const userList = Array.from(userMap.entries())
+                                    .map(([phone, info]) => ({
+                                        phone,
+                                        name: info.name,
+                                        count: info.count
+                                    }))
+                                    .sort((a, b) => a.name.localeCompare(b.name)); // SORTED ALPHABETICALLY ✅
                                 adminUserListCache.set(senderPhone, userList);
 
                                 let msg = '🗑️ *HAPUS DATA USER*\n\n';
@@ -3795,9 +3797,9 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
 
                                     lines.push('━━━━━━━━━━━━━━━━━━');
                                     lines.push('📋 *Pilihan:*');
-                                    lines.push('• Ketik *ULANG SEMUA* → daftar ulang semua');
-                                    lines.push('• Ketik *ULANG 1 3 5* → daftar ulang nomor tertentu');
-                                    lines.push('• Ketik *SKIP* → lewati, lanjut kirim data biasa');
+                                    lines.push('✅ Ketik *ULANG SEMUA* → daftar ulang semua');
+                                    lines.push('✅ Ketik *ULANG 1 3 5* → pilih nomor tertentu');
+                                    lines.push('❌ Ketik *SKIP* → lewati / tidak usah');
 
                                     await sock.sendMessage(remoteJid, { text: lines.join('\n') });
                                     continue;
