@@ -22,6 +22,7 @@ import {
     getGlobalRecap,
     buildReplyForInvalidDetails,
     generateExportData,
+    extractChildName,
 } from './recap';
 import {
     buildReplyForNewData,
@@ -711,7 +712,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
 
                             replyText = [
                                 `📝 *EDIT DATA KE-${idx}*`,
-                                `👤 Nama: ${record.nama}`,
+                                `👤 Nama: ${extractChildName(record.nama)}`,
                                 `📍 Lokasi: ${displayLocation}`,
                                 '',
                                 'Pilih data yang ingin diubah:',
@@ -1165,7 +1166,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                         // Konversi data gagal ke format data_harian dan simpan
                         const items = cachedFailed.map((item: any) => ({
                             parsed: {
-                                nama: item.nama,
+                                nama: extractChildName(item.nama),
                                 no_kjp: item.no_kjp,
                                 no_ktp: item.no_ktp || '',
                                 no_kk: item.no_kk || '',
@@ -1223,7 +1224,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                         // Simpan data terpilih
                         const items = selectedItems.map((item: any) => ({
                             parsed: {
-                                nama: item.nama,
+                                nama: extractChildName(item.nama),
                                 no_kjp: item.no_kjp,
                                 no_ktp: item.no_ktp || '',
                                 no_kk: item.no_kk || '',
@@ -1520,7 +1521,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                         const res = await deleteAllDailyDataForSender(senderPhone, processingDayKey);
                         if (res.success) {
                             const namesStr = res.deletedNames && res.deletedNames.length > 0
-                                ? `: *${res.deletedNames.join(', ')}*`
+                                ? `: *${res.deletedNames.map(extractChildName).join(', ')}*`
                                 : '';
                             replyText = `✅ Sukses menghapus *${res.deletedCount}* data (SEMUA)${namesStr}.`;
                             userFlowByPhone.set(senderPhone, 'NONE');
@@ -1539,7 +1540,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             const res = await deleteDailyDataByIndices(senderPhone, processingDayKey, indices);
                             if (res.success && res.deletedCount > 0) {
                                 const namesStr = res.deletedNames && res.deletedNames.length > 0
-                                    ? `: *${res.deletedNames.join(', ')}*`
+                                    ? `: *${res.deletedNames.map(extractChildName).join(', ')}*`
                                     : '';
                                 replyText = `✅ Sukses menghapus *${res.deletedCount}* data${namesStr}.`;
                                 userFlowByPhone.set(senderPhone, 'NONE');
@@ -3260,7 +3261,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                         userFlowByPhone.set(senderPhone, 'EDIT_PICK_RECORD');
 
                         const listRows = items.map((item, i) => {
-                            return `${i + 1}. ${item.nama}`;
+                            return `${i + 1}. ${extractChildName(item.nama)}`;
                         });
 
                         replyText = [
@@ -3287,7 +3288,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                         if (validCount === 0) {
                             replyText = '⚠️ Anda belum mengirim data pendaftaran hari ini.';
                         } else {
-                            const list = validItems.map((item, idx) => `${idx + 1}. ${item.nama} (${item.no_kjp})`).join('\n');
+                            const list = validItems.map((item, idx) => `${idx + 1}. ${extractChildName(item.nama)} (${item.no_kjp})`).join('\n');
                             replyText = [
                                 '🗑️ *HAPUS DATA*',
                                 '',
@@ -3325,7 +3326,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             // Cek apakah sukses
                             if (successCount > 0) {
                                 // PERBAIKAN: Tampilkan nama yang dihapus
-                                const deletedNameStr = deletedNames.length > 0 ? ` *${deletedNames.join(', ')}*` : '';
+                                const deletedNameStr = deletedNames.length > 0 ? ` *${deletedNames.map(extractChildName).join(', ')}*` : '';
                                 replyText = `✅ Sukses menghapus ${successCount} data${deletedNameStr}.`;
 
                                 // Jika data habis, reset flow
@@ -3349,7 +3350,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                         replyText = '⚠️ Anda belum mengirim data pendaftaran hari ini.';
                     } else {
                         userFlowByPhone.set(senderPhone, 'DELETE_DATA');
-                        const list = validItems.map((item, idx) => `${idx + 1}. ${item.nama} (Kartu: ...${item.no_kjp.slice(-4)})`).join('\n');
+                        const list = validItems.map((item, idx) => `${idx + 1}. ${extractChildName(item.nama)} (Kartu: ...${item.no_kjp.slice(-4)})`).join('\n');
                         replyText = [
                             '🗑️ *HAPUS DATA PENDAFTARAN*',
                             '',
@@ -3370,7 +3371,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                     const result = await deleteLastSubmission(senderPhone, processingDayKey, 30);
 
                     if (result.success && result.count > 0) {
-                        const namesStr = result.names.join(', ');
+                        const namesStr = result.names.map(extractChildName).join(', ');
                         replyText = [
                             '✅ *DATA BERHASIL DIBATALKAN*',
                             '',
@@ -3411,7 +3412,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
 
                         const listRows = items.map((item, i) => {
                             const typeLabel = (item.lokasi && item.lokasi.startsWith('PASARJAYA')) ? '[PSJ]' : '[DHJ]';
-                            return `${i + 1}. ${item.nama} ${typeLabel}`;
+                            return `${i + 1}. ${extractChildName(item.nama)} ${typeLabel}`;
                         });
 
                         replyText = [

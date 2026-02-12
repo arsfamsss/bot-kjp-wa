@@ -1,6 +1,6 @@
 // src/reply.ts
 import type { LogJson } from './types';
-import { ValidItemDetail } from './recap'; // Need actual type, not just implicit/dummy interface
+import { ValidItemDetail, extractChildName } from './recap'; // Need actual type, not just implicit/dummy interface
 
 /**
  * Membangun pesan balasan untuk data pendaftaran baru
@@ -34,7 +34,7 @@ export function buildReplyForNewData(
             log.items.forEach((item) => {
                 if (item.status === 'OK') {
                     // Request format: "🟢 Siti Aminah (5049...)" -> Tambah bullet/emoji
-                    lines.push(`✅ *${item.parsed.nama}*`);
+                    lines.push(`✅ *${extractChildName(item.parsed.nama)}*`);
                     lines.push(`     🆔 ${item.parsed.no_kjp}`); // Indent card
                 }
             });
@@ -52,7 +52,7 @@ export function buildReplyForNewData(
             allDataTodayItems.forEach((item, idx) => {
                 // Request format: "1. Siti Aminah (5049...)"
                 // Bikin bold namanya biar jelas
-                lines.push(`${idx + 1}. *${item.nama}*`);
+                lines.push(`${idx + 1}. *${extractChildName(item.nama)}*`);
                 const subLoc = item.lokasi
                     ? item.lokasi.replace(/^(PASARJAYA|DHARMAJAYA)\s*-\s*/i, '').trim()
                     : '';
@@ -95,7 +95,7 @@ export function buildReplyForNewData(
         lines.push('👇 *Yang sudah masuk:*');
         const okItems = log.items.filter((i) => i.status === 'OK');
         okItems.forEach((item, idx) => {
-            lines.push(`   ${idx + 1}. ${item.parsed.nama}`);
+            lines.push(`   ${idx + 1}. ${extractChildName(item.parsed.nama)}`);
         });
     } else {
         lines.push(`❌ *Waduh, data belum bisa masuk~*`);
@@ -110,7 +110,7 @@ export function buildReplyForNewData(
         // 1. Tampilkan item yang gagal validasi (format/duplikat)
         const failedItems = log.items.filter((i) => i.status !== 'OK');
         failedItems.forEach((item) => {
-            const namaLabel = item.parsed.nama ? item.parsed.nama : `Data ke-${item.index}`;
+            const namaLabel = item.parsed.nama ? extractChildName(item.parsed.nama) : `Data ke-${item.index}`;
             lines.push('');
             lines.push(`❌ *${namaLabel}*`);
 

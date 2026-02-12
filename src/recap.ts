@@ -4,6 +4,13 @@ import { supabase } from './supabase';
 import type { ItemStatus, LogItem, LogJson } from './types';
 import { getContactName } from './contacts_data';
 
+// Utility: Ekstrak nama anak dari format "Owner (NamaAnak)" → "NamaAnak"
+// Jika tidak ada kurung, kembalikan nama asli (sudah nama anak)
+export function extractChildName(fullName: string): string {
+    const match = fullName.match(/\(([^)]+)\)/);
+    return match ? match[1] : fullName;
+}
+
 export type TodayInvalidItem = {
     index: number;
     nama: string;
@@ -177,7 +184,7 @@ export function buildReplyForTodayRecap(
                 }
             }
 
-            lines.push(`┌── ${i + 1}. *${item.nama}*`);
+            lines.push(`┌── ${i + 1}. *${extractChildName(item.nama)}*`);
             lines.push(`│   📇 Kartu : ${item.no_kjp}`);
             lines.push(`│   🪪 KTP   : ${item.no_ktp}`);
             lines.push(`│   🏠 KK    : ${item.no_kk}`);
