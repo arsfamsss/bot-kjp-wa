@@ -428,7 +428,7 @@ export async function deleteDailyDataByIndex(
         .select('id, nama')
         .eq('processing_day_key', processingDayKey)
         .eq('sender_phone', senderPhone)
-        .order('received_at', { ascending: true });
+        .order('nama', { ascending: true }); // HARUS SAMA dengan urutan tampilan HAPUS menu (A-Z)
 
     if (error || !data || data.length === 0) return { success: false };
 
@@ -459,7 +459,7 @@ export async function deleteDailyDataByIndices(
         .select('id, nama') // Fetch Nama too
         .eq('processing_day_key', processingDayKey)
         .eq('sender_phone', senderPhone)
-        .order('received_at', { ascending: true });
+        .order('nama', { ascending: true }); // HARUS SAMA dengan urutan tampilan HAPUS menu (A-Z)
 
     if (error || !data || data.length === 0) return { success: false, deletedCount: 0, deletedNames: [] };
 
