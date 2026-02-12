@@ -3645,7 +3645,9 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                     ];
 
                                     failedData.forEach((item: any, idx: number) => {
-                                        lines.push(`*${idx + 1}.* ${item.nama}`);
+                                        // Ambil nama anak dari dalam kurung, misal "Fathir Min 7 (Maya)" → "Maya"
+                                        const childName = item.nama?.match(/\(([^)]+)\)/)?.[1] || item.nama;
+                                        lines.push(`*${idx + 1}.* ${childName}`);
                                         lines.push(`   KJP: ${item.no_kjp}`);
                                         lines.push(`   KTP: ${item.no_ktp || '-'}`);
                                         lines.push(`   KK: ${item.no_kk || '-'}`);
