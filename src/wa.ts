@@ -420,43 +420,24 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
 
                 // 🔧 ADMIN SHORTCUT: #TEMPLATE (Anti State-Loss)
                 // Kebal restart karena tidak butuh state/flow
-                // MODIFIED: Cek command dulu untuk mencegah fallthrough ke logic data
-                // MODIFIED: Cek command dengan Regex agar lebih robust menangani newlines/spasi
-                const templateCmdRegex = /^\s*#TEMPLATE/i;
-                const isTemplateCmd = rawInput && templateCmdRegex.test(rawInput.toString());
+                if (isAdmin && rawInput && rawInput.toString().trim().toUpperCase().startsWith('#TEMPLATE')) {
+                    const templateBody = rawInput.toString().trim().replace(/^#TEMPLATE\s*/i, '').trim();
 
-                if (isTemplateCmd) {
-                    if (isAdmin) {
-                        const templateBody = rawInput.toString().replace(templateCmdRegex, '').trim();
-
-                        if (!templateBody || templateBody.toUpperCase() === 'RESET') {
-                            // Reset ke template standar
-                            await updateBotSettings({ close_message_template: CLOSE_MESSAGE_TEMPLATE_UNIFIED });
-                            clearBotSettingsCache();
-                            await sock.sendMessage(remoteJid, { text: '✅ Template pesan tutup direset ke *Template Standar*.' });
-                        } else if (templateBody.length < 10) {
-                            await sock.sendMessage(remoteJid, { text: '⚠️ Template terlalu pendek (min 10 karakter).\nFormat: #TEMPLATE (isi pesan)' });
-                        } else {
-                            await updateBotSettings({ close_message_template: templateBody });
-                            clearBotSettingsCache();
-                            await sock.sendMessage(remoteJid, {
-                                text: `✅ *TEMPLATE CUSTOM DISIMPAN*\n\n📝 Preview:\n─────────────────\n${templateBody}\n─────────────────`
-                            });
-                        }
+                    if (!templateBody || templateBody.toUpperCase() === 'RESET') {
+                        // Reset ke template standar
+                        await updateBotSettings({ close_message_template: CLOSE_MESSAGE_TEMPLATE_UNIFIED });
+                        clearBotSettingsCache();
+                        await sock.sendMessage(remoteJid, { text: '✅ Template pesan tutup direset ke *Template Standar*.' });
+                    } else if (templateBody.length < 10) {
+                        await sock.sendMessage(remoteJid, { text: '⚠️ Template terlalu pendek (min 10 karakter).\nFormat: #TEMPLATE (isi pesan)' });
                     } else {
-                        // User BUKAN Admin tapi mencoba akses #TEMPLATE
-                        // Cek apakah ini masalah LID?
-                        if (senderIsLid && (!senderPhone || senderPhone === chatJid.replace('@lid', ''))) {
-                            await sock.sendMessage(remoteJid, {
-                                text: `⚠️ *AKSES ADMIN DITOLAK (DEVICE BELUM TERDAFTAR)*\n\nSaya mendeteksi Anda mencoba mengakses menu Admin, tetapi device Anda (Linked Device) belum terdaftar di sistem bot.\n\n👉 *SOLUSI:* Ketik NOMOR HP Anda (Contoh: 0812xxx) satu kali di sini untuk verifikasi. Setelah saya balas "Nomor sudah dicatat", silakan coba lagi.`
-                            });
-                        } else {
-                            await sock.sendMessage(remoteJid, {
-                                text: `⛔ *AKSES DITOLAK*\n\nAnda tidak terdaftar sebagai Admin.`
-                            });
-                        }
+                        await updateBotSettings({ close_message_template: templateBody });
+                        clearBotSettingsCache();
+                        await sock.sendMessage(remoteJid, {
+                            text: `✅ *TEMPLATE CUSTOM DISIMPAN*\n\n📝 Preview:\n─────────────────\n${templateBody}\n─────────────────`
+                        });
                     }
-                    continue; // STOP PROCESSING (Jangan masuk ke logic data)
+                    continue;
                 }
 
                 // ✅ KHUSUS AKUN @lid: kalau belum ada mapping nomor, minta user ketik nomor manual
@@ -1665,34 +1646,6 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                     }
                 }
                 else if (currentUserFlow === 'SELECT_LOCATION') {
-                    // PATCH: Cek apakah user malah input Nomor HP (Verifikasi LID)
-                    const possiblePhoneInLoc = extractManualPhone(rawTrim);
-                    if (possiblePhoneInLoc && isValidIdPhone(possiblePhoneInLoc)) {
-                        // User trying to verify phone but trapped in SELECT_LOCATION
-                        console.log(`REDIRECT: Phone verification inside SELECT_LOCATION -> ${possiblePhoneInLoc}`);
-
-                        // Exec verification logic directly here or reset flow
-                        userFlowByPhone.set(senderPhone, 'NONE');
-
-                        // We must process this verification NOW, otherwise message is lost.
-                        // Re-use logic from lines 557-602 (simplified)
-                        const targetUser = await getRegisteredUserByPhone(possiblePhoneInLoc);
-                        let finalName = targetUser?.push_name || msg.pushName || 'User Baru';
-
-                        await upsertLidPhoneMap({
-                            lid_jid: chatJid,
-                            phone_number: possiblePhoneInLoc,
-                            push_name: finalName
-                        });
-
-                        senderPhone = possiblePhoneInLoc; // Update context
-
-                        await sock.sendMessage(remoteJid, {
-                            text: `✅ *Nomor sudah dicatat: ${possiblePhoneInLoc}*\n\nStatus Admin/User telah dipulihkan.\nSilakan ketik *#TEMPLATE* lagi (jika admin) atau kirim data.`
-                        });
-                        continue;
-                    }
-
                     // Logic Unified: Pilihan 1 -> Menu Pasarjaya, Pilihan 2 -> Dharmajaya (Auto Process Pending)
                     if (normalized === '1') {
                         // ⛔ BLOCK PASARJAYA (REQUESTED BY USER)
