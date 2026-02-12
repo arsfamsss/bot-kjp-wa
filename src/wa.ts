@@ -421,11 +421,13 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                 // 🔧 ADMIN SHORTCUT: #TEMPLATE (Anti State-Loss)
                 // Kebal restart karena tidak butuh state/flow
                 // MODIFIED: Cek command dulu untuk mencegah fallthrough ke logic data
-                const isTemplateCmd = rawInput && rawInput.toString().trim().toUpperCase().startsWith('#TEMPLATE');
+                // MODIFIED: Cek command dengan Regex agar lebih robust menangani newlines/spasi
+                const templateCmdRegex = /^\s*#TEMPLATE/i;
+                const isTemplateCmd = rawInput && templateCmdRegex.test(rawInput.toString());
 
                 if (isTemplateCmd) {
                     if (isAdmin) {
-                        const templateBody = rawInput.toString().trim().replace(/^#TEMPLATE\s*/i, '').trim();
+                        const templateBody = rawInput.toString().replace(templateCmdRegex, '').trim();
 
                         if (!templateBody || templateBody.toUpperCase() === 'RESET') {
                             // Reset ke template standar
@@ -1663,6 +1665,34 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                     }
                 }
                 else if (currentUserFlow === 'SELECT_LOCATION') {
+                    // PATCH: Cek apakah user malah input Nomor HP (Verifikasi LID)
+                    const possiblePhoneInLoc = extractManualPhone(rawTrim);
+                    if (possiblePhoneInLoc && isValidIdPhone(possiblePhoneInLoc)) {
+                        // User trying to verify phone but trapped in SELECT_LOCATION
+                        console.log(`REDIRECT: Phone verification inside SELECT_LOCATION -> ${possiblePhoneInLoc}`);
+
+                        // Exec verification logic directly here or reset flow
+                        userFlowByPhone.set(senderPhone, 'NONE');
+
+                        // We must process this verification NOW, otherwise message is lost.
+                        // Re-use logic from lines 557-602 (simplified)
+                        const targetUser = await getRegisteredUserByPhone(possiblePhoneInLoc);
+                        let finalName = targetUser?.push_name || msg.pushName || 'User Baru';
+
+                        await upsertLidPhoneMap({
+                            lid_jid: chatJid,
+                            phone_number: possiblePhoneInLoc,
+                            push_name: finalName
+                        });
+
+                        senderPhone = possiblePhoneInLoc; // Update context
+
+                        await sock.sendMessage(remoteJid, {
+                            text: `✅ *Nomor sudah dicatat: ${possiblePhoneInLoc}*\n\nStatus Admin/User telah dipulihkan.\nSilakan ketik *#TEMPLATE* lagi (jika admin) atau kirim data.`
+                        });
+                        continue;
+                    }
+
                     // Logic Unified: Pilihan 1 -> Menu Pasarjaya, Pilihan 2 -> Dharmajaya (Auto Process Pending)
                     if (normalized === '1') {
                         // ⛔ BLOCK PASARJAYA (REQUESTED BY USER)
