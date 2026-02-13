@@ -208,16 +208,18 @@ export const ADMIN_MENU_MESSAGE = [
 // --- DAFTAR NOMOR ADMIN ---
 export const ADMIN_PHONES_RAW = ['085641411818', '08568511113'];
 
-// --- TEMPLATE PESAN TUTUP (UNIFIED) ---
 export const CLOSE_MESSAGE_TEMPLATE_UNIFIED = [
     '⛔ *PENGUMUMAN: LIBUR PENDAFTARAN SEMENTARA* ⛔',
     '',
-    'Sehubungan dengan Web Dharmajaya yang baru akan dibuka kembali pada hari Minggu, 15 Februari pukul 06.00 WIB, maka layanan kami disesuaikan sebagai berikut:',
+    'Mohon maaf, layanan Pendaftaran Dharmajaya saat ini sedang *TUTUP / LIBUR*.',
     '',
-    '🔴 *SEKARANG - JUMAT:* TUTUP / LIBUR',
-    '🟢 *SABTU, 14 FEBRUARI:* BUKA (Pukul 00.01 - 23.59 WIB)',
+    'Kami akan *BUKA KEMBALI* pada:',
+    '🗓 *SELASA, 17 FEBRUARI 2026*',
+    '⏰ *Pukul 06.00 WIB*',
     '',
-    '📌 *PENTING:* Data yang Anda kirim saat ini *TIDAK AKAN DIPROSES*. Mohon kirimkan ulang data Anda hanya pada hari *SABTU* agar bisa kami bantu input saat web buka di hari Minggu pagi.',
+    '🔴 *14 - 16 FEBRUARI:* TUTUP (Tidak menerima data)',
+    '',
+    '📌 *PENTING:* Data yang dikirim saat ini *TIDAK AKAN DIPROSES*. Mohon kirimkan data Anda hanya saat layanan sudah dibuka kembali pada hari Selasa.',
     '',
     'Terima kasih atas pengertiannya. 🙏'
 ].join('\n');
