@@ -1749,7 +1749,8 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                     console.error('❌ Gagal simpan ke database (PASARJAYA SUB):', saveResult.dataError);
                                     replyText = buildDatabaseErrorMessage(saveResult.dataError, logJson);
                                 } else {
-                                    const { validCount, validItems } = await getTodayRecapForSender(senderPhone, processingDayKey);
+                                    // FIX: Sort by received_at (Kronologis)
+                                    const { validCount, validItems } = await getTodayRecapForSender(senderPhone, processingDayKey, 'received_at');
                                     replyText = buildReplyForNewData(logJson, validCount, 'PASARJAYA', validItems);
                                 }
                                 userFlowByPhone.set(senderPhone, 'NONE');
@@ -1835,7 +1836,8 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                     console.error('❌ Gagal simpan ke database (MANUAL LOCATION):', saveResult.dataError);
                                     replyText = buildDatabaseErrorMessage(saveResult.dataError, logJson);
                                 } else {
-                                    const { validCount, validItems } = await getTodayRecapForSender(senderPhone, processingDayKey);
+                                    // FIX: Sort by received_at (Kronologis)
+                                    const { validCount, validItems } = await getTodayRecapForSender(senderPhone, processingDayKey, 'received_at');
                                     replyText = buildReplyForNewData(logJson, validCount, 'PASARJAYA', validItems);
                                 }
                                 userFlowByPhone.set(senderPhone, 'NONE');
@@ -1891,7 +1893,8 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                     console.error('❌ Gagal simpan ke database (DHARMAJAYA SUB):', saveResult.dataError);
                                     replyText = buildDatabaseErrorMessage(saveResult.dataError, logJson);
                                 } else {
-                                    const { validCount, validItems } = await getTodayRecapForSender(senderPhone, processingDayKey);
+                                    // FIX: Sort by received_at (Kronologis)
+                                    const { validCount, validItems } = await getTodayRecapForSender(senderPhone, processingDayKey, 'received_at');
                                     replyText = buildReplyForNewData(logJson, validCount, 'DHARMAJAYA', validItems);
                                 }
                                 userFlowByPhone.set(senderPhone, 'NONE');
@@ -3756,7 +3759,8 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                     replyText = buildDatabaseErrorMessage(saveResult.dataError, logJson);
                                 } else {
                                     // Refresh total after saving
-                                    const { validCount: finalTotalCount, validItems: finalItems } = await getTodayRecapForSender(senderPhone, processingDayKey);
+                                    // FIX: Sort by received_at (Kronologis)
+                                    const { validCount: finalTotalCount, validItems: finalItems } = await getTodayRecapForSender(senderPhone, processingDayKey, 'received_at');
                                     replyText = buildReplyForNewData(logJson, finalTotalCount, finalContext, finalItems);
                                 }
                             }
