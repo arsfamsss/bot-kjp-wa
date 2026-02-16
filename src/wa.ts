@@ -2860,15 +2860,22 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             adminUserListCache.set(senderPhone + '_selected', [selectedUser]);
 
                             // Ambil data detail user tersebut (LENGKAP)
-                            const { data: userData } = await supabase
+                            console.log(`[ADMIN DELETE] Querying data for user: phone=${selectedUser.phone}, name=${selectedUser.name}, processingDayKey=${processingDayKey}`);
+                            const { data: userData, error: userDataError } = await supabase
                                 .from('data_harian')
                                 .select('id, nama, no_kjp, no_ktp, no_kk, lokasi, specific_location')
                                 .eq('processing_day_key', processingDayKey)
                                 .eq('sender_phone', selectedUser.phone)
-                                .order('received_at', { ascending: true });
+                                .order('nama', { ascending: true })  // Urutan A-Z konsisten
+                                .order('id', { ascending: true });   // Secondary sort: tiebreaker
+
+                            if (userDataError) {
+                                console.error('[ADMIN DELETE] DB Error:', userDataError);
+                            }
+                            console.log(`[ADMIN DELETE] Result: ${userData?.length ?? 0} rows found`);
 
                             if (!userData || userData.length === 0) {
-                                replyText = '❌ Data user tidak ditemukan.';
+                                replyText = `❌ Data user tidak ditemukan.\n\n_Debug: phone=${selectedUser.phone}, key=${processingDayKey}_`;
                                 adminFlowByPhone.set(senderPhone, 'MENU');
                             } else {
                                 // Cache data untuk delete

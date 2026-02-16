@@ -1,1 +1,0 @@
-npx ts-node verify_failed_counts.ts

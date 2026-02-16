@@ -428,7 +428,8 @@ export async function deleteDailyDataByIndex(
         .select('id, nama')
         .eq('processing_day_key', processingDayKey)
         .eq('sender_phone', senderPhone)
-        .order('nama', { ascending: true }); // HARUS SAMA dengan urutan tampilan HAPUS menu (A-Z)
+        .order('nama', { ascending: true }) // HARUS SAMA dengan urutan tampilan HAPUS menu (A-Z)
+        .order('id', { ascending: true }); // Secondary sort: tiebreaker untuk nama duplikat
 
     if (error || !data || data.length === 0) return { success: false };
 
@@ -459,7 +460,8 @@ export async function deleteDailyDataByIndices(
         .select('id, nama') // Fetch Nama too
         .eq('processing_day_key', processingDayKey)
         .eq('sender_phone', senderPhone)
-        .order('nama', { ascending: true }); // HARUS SAMA dengan urutan tampilan HAPUS menu (A-Z)
+        .order('nama', { ascending: true }) // HARUS SAMA dengan urutan tampilan HAPUS menu (A-Z)
+        .order('id', { ascending: true }); // Secondary sort: tiebreaker untuk nama duplikat
 
     if (error || !data || data.length === 0) return { success: false, deletedCount: 0, deletedNames: [] };
 
@@ -1070,6 +1072,9 @@ export async function updateDailyDataField(
  * Selalu query fresh (tidak pakai cache) agar bisa toggle realtime
  */
 export async function isFeatureDaftarUlangEnabled(): Promise<boolean> {
+    // FITUR DAFTAR ULANG DINONAKTIFKAN SEMENTARA HARI INI
+    return false;
+    /*
     try {
         const { data, error } = await supabase
             .from('bot_settings')
@@ -1083,6 +1088,7 @@ export async function isFeatureDaftarUlangEnabled(): Promise<boolean> {
         console.error('❌ isFeatureDaftarUlangEnabled error:', err);
         return false;
     }
+    */
 }
 
 /**

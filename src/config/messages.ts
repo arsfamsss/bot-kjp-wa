@@ -200,6 +200,7 @@ export const ADMIN_MENU_MESSAGE = [
     '1️⃣3️⃣ Atur Jam Tutup',
     '',
     '💡 _Ketik *#TEMPLATE* untuk edit pesan tutup_',
+    '💡 _Ketik *#TEMPLATE RESET* untuk kembali ke default_',
     '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
     '',
     '0️⃣ _Kembali ke Menu Utama_',
@@ -209,17 +210,12 @@ export const ADMIN_MENU_MESSAGE = [
 export const ADMIN_PHONES_RAW = ['085641411818', '08568511113'];
 
 export const CLOSE_MESSAGE_TEMPLATE_UNIFIED = [
-    '⛔ *PENGUMUMAN: LIBUR PENDAFTARAN SEMENTARA* ⛔',
+    '⛔ *MOHON MAAF, SISTEM SEDANG TUTUP (Maintenance Harian) ⛔*',
     '',
-    'Mohon maaf, layanan Pendaftaran Dharmajaya saat ini sedang *TUTUP / LIBUR*.',
+    '🕒 Jam Tutup: 00.00 - 06.00 WIB',
+    '✅ Buka Kembali: Pukul 06.01 WIB',
     '',
-    'Kami akan *BUKA KEMBALI* pada:',
-    '🗓 *SELASA, 17 FEBRUARI 2026*',
-    '⏰ *Pukul 06.00 WIB*',
-    '',
-    '🔴 *14 - 16 FEBRUARI:* TUTUP (Tidak menerima data)',
-    '',
-    '📌 *PENTING:* Data yang dikirim saat ini *TIDAK AKAN DIPROSES*. Mohon kirimkan data Anda hanya saat layanan sudah dibuka kembali pada hari Selasa.',
+    '📌 Data yang Anda kirim sekarang tidak akan diproses. Silakan kirim ulang setelah jam buka untuk pendaftaran besok.',
     '',
     'Terima kasih atas pengertiannya. 🙏'
 ].join('\n');

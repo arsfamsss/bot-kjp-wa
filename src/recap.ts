@@ -54,7 +54,8 @@ export async function getEditableItemsForSender(
         .select('id, nama, no_kjp, no_ktp, no_kk, lokasi, tanggal_lahir')
         .eq('sender_phone', senderPhone)
         .eq('processing_day_key', processingDayKey)
-        .order('nama', { ascending: true });
+        .order('nama', { ascending: true })
+        .order('id', { ascending: true }); // Secondary sort: tiebreaker untuk nama duplikat
 
     if (error) {
         console.error('Error fetching editable items:', error);
@@ -76,7 +77,8 @@ export async function getTodayRecapForSender(
         .select('nama, no_kjp, no_ktp, no_kk, lokasi, tanggal_lahir', { count: 'exact' })
         .eq('sender_phone', senderPhone)
         .eq('processing_day_key', processingDayKey)
-        .order(sortBy, { ascending: true });
+        .order(sortBy, { ascending: true })
+        .order('id', { ascending: true }); // Secondary sort: tiebreaker untuk nama duplikat
 
     if (countError) throw countError;
 
