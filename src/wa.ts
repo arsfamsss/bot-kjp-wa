@@ -681,13 +681,14 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             session.selectedType = isPasarjaya ? 'PASARJAYA' : 'DHARMAJAYA';
 
                             // Determine Display Location
-                            let displayLocation = 'Duri Kosambi'; // Default for Dharmajaya
-                            if (isPasarjaya) {
-                                if (record.lokasi && record.lokasi.includes('-')) {
-                                    displayLocation = record.lokasi.split('-')[1].trim();
-                                } else {
-                                    displayLocation = 'Pasarjaya';
-                                }
+                            // Determine Display Location
+                            // FIX: Gunakan lokasi asli jika ada, jangan default ke Duri Kosambi
+                            let displayLocation = record.lokasi || '';
+                            if (displayLocation.includes('-')) {
+                                displayLocation = displayLocation.split('-')[1].trim();
+                            }
+                            if (!displayLocation) {
+                                displayLocation = isPasarjaya ? 'Pasarjaya' : 'Duri Kosambi';
                             }
 
                             editSessionMap.set(senderPhone, session); // update session
