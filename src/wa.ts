@@ -2863,7 +2863,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             console.log(`[ADMIN DELETE] Querying data for user: phone=${selectedUser.phone}, name=${selectedUser.name}, processingDayKey=${processingDayKey}`);
                             const { data: userData, error: userDataError } = await supabase
                                 .from('data_harian')
-                                .select('id, nama, no_kjp, no_ktp, no_kk, lokasi, specific_location')
+                                .select('id, nama, no_kjp, no_ktp, no_kk, lokasi') // Fix: Remove specific_location (missing in DB)
                                 .eq('processing_day_key', processingDayKey)
                                 .eq('sender_phone', selectedUser.phone)
                                 .order('nama', { ascending: true })  // Urutan A-Z konsisten
