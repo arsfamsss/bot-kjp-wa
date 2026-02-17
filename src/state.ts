@@ -50,6 +50,7 @@ export type AdminFlowState =
     | 'CHECK_DATA_PERIOD'
     | 'ADMIN_DELETE_SELECT_USER'
     | 'ADMIN_DELETE_USER_DATA'
+    | 'RECAP_SPECIFIC_MENU' // NEW: Sub-menu Rekap Tanggal Tertentu
     | 'EXPORT_SELECT_DATE'
     | 'EXPORT_CUSTOM_DATE'
     | 'SETTING_CLOSE_TIME'

@@ -2123,8 +2123,15 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                         }
                         else if (normalized === '3') {
                             // Rekap Tanggal Tertentu
-                            adminFlowByPhone.set(senderPhone, 'ASK_DATE');
-                            replyText = ['📅 *REKAP TANGGAL*', '', `Contoh: *${dmyExample}*`, '', '_Ketik 0 untuk kembali._'].join('\n');
+                            adminFlowByPhone.set(senderPhone, 'RECAP_SPECIFIC_MENU');
+                            replyText = [
+                                '📅 *REKAP TANGGAL TERTENTU*',
+                                '',
+                                '1️⃣ Rekap Kemarin',
+                                '2️⃣ Input Tanggal Manual',
+                                '',
+                                '_Ketik 0 untuk batal._'
+                            ].join('\n');
                         }
                         else if (normalized === '4') {
                             // Rekap Rentang Tanggal
@@ -2305,7 +2312,8 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                 `📅 Default: Hari Ini (${dmyExample})`,
                                 '',
                                 '1️⃣ Export Hari Ini',
-                                '2️⃣ Export Tanggal Lain',
+                                '2️⃣ Export Kemarin',
+                                '3️⃣ Export Tanggal Lain',
                                 '',
                                 '_Ketik 0 untuk batal._'
                             ].join('\n');
@@ -2329,6 +2337,23 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                 '_Ketik 0 untuk batal._'
                             ].join('\n');
                         } else replyText = '⚠️ Pilihan tidak dikenali.';
+                    } else if (currentAdminFlow === 'RECAP_SPECIFIC_MENU') {
+                        // SUB-MENU REKAP TANGGAL TERTENTU
+                        if (normalized === '1') {
+                            // Rekap Kemarin
+                            const yesterday = shiftIsoDate(processingDayKey, -1);
+                            await sock.sendMessage(remoteJid, { text: '⏳ Mengambil data kemarin...' });
+                            replyText = await getGlobalRecap(yesterday, undefined, lookupName);
+                            adminFlowByPhone.set(senderPhone, 'MENU');
+                        } else if (normalized === '2') {
+                            // Input Tanggal Manual
+                            adminFlowByPhone.set(senderPhone, 'ASK_DATE');
+                            replyText = ['📅 *INPUT TANGGAL MANUAL*', '', `Contoh: *${dmyExample}*`, '', '_Ketik 0 untuk batal._'].join('\n');
+                        } else {
+                            // Batal
+                            adminFlowByPhone.set(senderPhone, 'MENU');
+                            replyText = '✅ Dibatalkan.';
+                        }
                     } else if (currentAdminFlow === 'SEARCH_DATA') {
                         // SEARCH ALL DATA
                         const q = rawTrim;
@@ -3054,6 +3079,59 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             }
                             adminFlowByPhone.set(senderPhone, 'MENU');
                         } else if (normalized === '2') {
+                            // Export Kemarin
+                            const yesterday = shiftIsoDate(processingDayKey, -1);
+                            await sock.sendMessage(remoteJid, { text: '⏳ Sedang menyiapkan file export kemarin...' });
+
+                            const lookupNameFn = (ph: string) => getRegisteredUserNameSync(ph) || undefined;
+                            const exportResult = await generateExportData(yesterday, lookupNameFn);
+
+                            const displayDate = yesterday.split('-').reverse().join('-');
+                            if (!exportResult || exportResult.count === 0) {
+                                replyText = `📂 Tidak ada data pendaftaran kemarin (${displayDate}).`;
+                            } else {
+                                // 1. Kirim TXT
+                                const txtBuffer = Buffer.from(exportResult.txt, 'utf-8');
+                                await sock.sendMessage(remoteJid, {
+                                    document: txtBuffer,
+                                    mimetype: 'text/plain',
+                                    fileName: `${exportResult.filenameBase}.txt`,
+                                    caption: `📄 Laporan Detail Data ${displayDate} (${exportResult.count} data)`
+                                });
+
+                                // 2. Kirim Excel
+                                const { data: excelDataRaw } = await supabase
+                                    .from('data_harian')
+                                    .select('*')
+                                    .eq('processing_day_key', yesterday)
+                                    .order('sender_phone', { ascending: true })
+                                    .order('received_at', { ascending: true });
+
+                                if (excelDataRaw && excelDataRaw.length > 0) {
+                                    const enriched = excelDataRaw.map((row: any) => {
+                                        const currentName = getRegisteredUserNameSync(row.sender_phone);
+                                        const finalSender = currentName || row.sender_name || row.sender_phone;
+                                        return { ...row, sender_name: finalSender };
+                                    });
+
+                                    enriched.sort((a, b) => {
+                                        const nA = (a.sender_name || '').toUpperCase();
+                                        const nB = (b.sender_name || '').toUpperCase();
+                                        return nA.localeCompare(nB);
+                                    });
+
+                                    const excelBuffer = generateKJPExcel(enriched);
+                                    await sock.sendMessage(remoteJid, {
+                                        document: excelBuffer,
+                                        mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                                        fileName: `${exportResult.filenameBase}.xlsx`,
+                                        caption: `📊 Laporan Excel ${displayDate} (${enriched.length} data)`
+                                    });
+                                }
+                                replyText = '✅ Export data kemarin selesai.';
+                            }
+                            adminFlowByPhone.set(senderPhone, 'MENU');
+                        } else if (normalized === '3') {
                             // Pilih tanggal lain
                             adminFlowByPhone.set(senderPhone, 'EXPORT_CUSTOM_DATE');
                             replyText = [
@@ -3068,7 +3146,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                 '_Ketik 0 untuk batal._'
                             ].join('\n');
                         } else {
-                            replyText = '⚠️ Pilih 1 (Hari Ini) atau 2 (Tanggal Lain). Ketik 0 untuk batal.';
+                            replyText = '⚠️ Pilih 1, 2, atau 3. Ketik 0 untuk batal.';
                         }
                     } else if (currentAdminFlow === 'EXPORT_CUSTOM_DATE') {
                         // Admin ketik tanggal custom untuk export - FLEXIBLE FORMAT
