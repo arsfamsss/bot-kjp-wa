@@ -58,6 +58,9 @@ export type AdminFlowState =
     | 'SETTING_CLOSE_TIME_START'
     | 'SETTING_CLOSE_TIME_END'
     | 'SETTING_CLOSE_LONG_TERM'
+    | 'BLOCKED_KK_MENU'
+    | 'BLOCKED_KK_ADD'
+    | 'BLOCKED_KK_DELETE'
     // NEW CONTACT MANAGEMENT FLOW
     | 'CONTACT_MENU'        // Menu Utama Kelola Kontak
     | 'CONTACT_SEARCH'      // Input keyword pencarian

@@ -57,6 +57,9 @@ import {
     renderCloseMessage,
     clearBotSettingsCache,
     updateDailyDataField, // PATCH 2
+    getBlockedKkList,
+    addBlockedKk,
+    removeBlockedKk,
     // --- FITUR DAFTAR ULANG ---
     isFeatureDaftarUlangEnabled,
     getFailedRegistrations,
@@ -181,6 +184,18 @@ async function sendMainMenu(sock: WASocket, remoteJid: string, isAdmin: boolean)
     if (isAdmin) finalMenu += `\n\n${ADMIN_LAUNCHER_LINE}`;
     await sock.sendMessage(remoteJid, { text: finalMenu });
     console.log(`✅ Menu teks terkirim ke ${remoteJid} (isAdmin: ${isAdmin})`);
+}
+
+function buildBlockedKkMenuText(): string {
+    return [
+        '🛡️ *KELOLA BLOKIR NO KK*',
+        '',
+        '1️⃣ Tambah No KK ke blokir',
+        '2️⃣ Lihat daftar No KK terblokir',
+        '3️⃣ Buka blokir No KK',
+        '',
+        '0️⃣ Kembali ke Menu Admin',
+    ].join('\n');
 }
 
 function normalizeIncomingCommand(raw: string): string {
@@ -2036,7 +2051,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                 }
 
                 if (isAdmin && currentAdminFlow !== 'NONE') {
-                    if ((normalized === '0' && !currentAdminFlow.startsWith('CONTACT_')) || isGreetingOrMenu(normalized)) {
+                    if ((normalized === '0' && !currentAdminFlow.startsWith('CONTACT_') && !currentAdminFlow.startsWith('BLOCKED_KK_')) || isGreetingOrMenu(normalized)) {
                         adminFlowByPhone.set(senderPhone, 'NONE');
                         await sendMainMenu(sock, remoteJid, isAdmin);
                         continue;
@@ -2336,6 +2351,9 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                 '',
                                 '_Ketik 0 untuk batal._'
                             ].join('\n');
+                        } else if (normalized === '14') {
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_KK_MENU');
+                            replyText = buildBlockedKkMenuText();
                         } else replyText = '⚠️ Pilihan tidak dikenali.';
                     } else if (currentAdminFlow === 'RECAP_SPECIFIC_MENU') {
                         // SUB-MENU REKAP TANGGAL TERTENTU
@@ -2714,6 +2732,77 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                 contactSessionByPhone.delete(senderPhone);
                                 adminFlowByPhone.set(senderPhone, 'MENU');
                             }
+                        }
+                    } else if (currentAdminFlow === 'BLOCKED_KK_MENU') {
+                        if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'MENU');
+                            replyText = ADMIN_MENU_MESSAGE;
+                        } else if (normalized === '1') {
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_KK_ADD');
+                            replyText = [
+                                '🛡️ *TAMBAH BLOKIR NO KK*',
+                                '',
+                                'Ketik No KK yang ingin diblokir (16 digit).',
+                                'Anda bisa tambah alasan setelah tanda |',
+                                'Contoh: 3173010202020001 | KK bermasalah',
+                                '',
+                                '_Ketik 0 untuk kembali._'
+                            ].join('\n');
+                        } else if (normalized === '2') {
+                            const list = await getBlockedKkList(200);
+                            if (list.length === 0) {
+                                replyText = '📂 Belum ada No KK yang diblokir.';
+                            } else {
+                                const lines = ['📋 *DAFTAR NO KK TERBLOKIR*', ''];
+                                list.forEach((row, idx) => {
+                                    const reasonText = row.reason ? ` - ${row.reason}` : '';
+                                    lines.push(`${idx + 1}. ${row.no_kk}${reasonText}`);
+                                });
+                                lines.push('');
+                                lines.push('_Ketik 3 untuk buka blokir._');
+                                replyText = lines.join('\n');
+                            }
+                        } else if (normalized === '3') {
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_KK_DELETE');
+                            replyText = [
+                                '♻️ *BUKA BLOKIR NO KK*',
+                                '',
+                                'Ketik No KK yang ingin dibuka blokirnya (16 digit).',
+                                '',
+                                '_Ketik 0 untuk kembali._'
+                            ].join('\n');
+                        } else {
+                            replyText = '⚠️ Pilihan tidak dikenali. Ketik 1, 2, 3, atau 0.';
+                        }
+                    } else if (currentAdminFlow === 'BLOCKED_KK_ADD') {
+                        if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_KK_MENU');
+                            replyText = buildBlockedKkMenuText();
+                        } else {
+                            const [rawKk, ...reasonParts] = rawTrim.split('|');
+                            const reason = reasonParts.join('|').trim();
+                            const result = await addBlockedKk(rawKk, reason);
+                            if (result.success) {
+                                replyText = `✅ ${result.message}`;
+                            } else {
+                                replyText = `❌ ${result.message}`;
+                            }
+                            replyText += '\n\n' + buildBlockedKkMenuText();
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_KK_MENU');
+                        }
+                    } else if (currentAdminFlow === 'BLOCKED_KK_DELETE') {
+                        if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_KK_MENU');
+                            replyText = buildBlockedKkMenuText();
+                        } else {
+                            const result = await removeBlockedKk(rawTrim);
+                            if (result.success) {
+                                replyText = `✅ ${result.message}`;
+                            } else {
+                                replyText = `❌ ${result.message}`;
+                            }
+                            replyText += '\n\n' + buildBlockedKkMenuText();
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_KK_MENU');
                         }
                     } else if (currentAdminFlow === 'BROADCAST_SELECT') {
                         if (normalized === '1') {

@@ -19,6 +19,7 @@ export interface ItemError {
     | "invalid_prefix"
     | "duplicate"
     | "duplicate_in_message"
+    | "blocked_kk"
     | "same_as_other"
     | "wrong_order";
     detail: string;

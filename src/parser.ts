@@ -1,7 +1,7 @@
 // src/parser.ts
 
 import type { LogItem, ParsedFields, ItemError, LogJson, LogStats } from './types';
-import { checkDuplicateForItem, checkDuplicatesBatch } from './supabase';
+import { checkBlockedKkBatch, checkDuplicateForItem, checkDuplicatesBatch } from './supabase';
 import { parseFlexibleDate } from './utils/dateParser';
 
 // --- BAGIAN 1: PEMBERSIH INPUT ---
@@ -370,7 +370,8 @@ export async function processRawMessageToLogJson(params: {
         });
     }
 
-    // 4) cek duplikat database hanya untuk item OK (BATCH OPTIMIZATION)
+    items = await checkBlockedKkBatch(items);
+
     const updatedItems = await checkDuplicatesBatch(items, {
         processingDayKey,
         senderPhone,
@@ -378,7 +379,6 @@ export async function processRawMessageToLogJson(params: {
     });
     items = updatedItems;
 
-    // 5) hitung stats
     const stats: LogStats = {
         total_blocks: items.length,
         ok_count: items.filter((it) => it.status === 'OK').length,

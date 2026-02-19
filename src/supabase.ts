@@ -233,6 +233,134 @@ export async function checkDuplicatesBatch(
     });
 }
 
+export type BlockedKkItem = {
+    no_kk: string;
+    reason?: string | null;
+    created_at?: string | null;
+};
+
+function normalizeKk(raw: string): string {
+    return (raw || '').replace(/\D/g, '');
+}
+
+export async function getBlockedKkList(limit: number = 200): Promise<BlockedKkItem[]> {
+    const { data, error } = await supabase
+        .from('blocked_kk')
+        .select('no_kk, reason, created_at')
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+    if (error) {
+        if (error.code !== '42P01') {
+            console.error('Error getBlockedKkList:', error);
+        }
+        return [];
+    }
+
+    return (data || []) as BlockedKkItem[];
+}
+
+export async function addBlockedKk(noKkRaw: string, reason?: string): Promise<{ success: boolean; message: string }> {
+    const noKk = normalizeKk(noKkRaw);
+    if (noKk.length !== 16) {
+        return { success: false, message: 'No KK harus 16 digit.' };
+    }
+
+    const payload: any = {
+        no_kk: noKk,
+        reason: (reason || '').trim() || null,
+    };
+
+    const { error } = await supabase
+        .from('blocked_kk')
+        .upsert(payload, { onConflict: 'no_kk' });
+
+    if (error) {
+        if (error.code === '42P01') {
+            return { success: false, message: 'Tabel blocked_kk belum dibuat di database.' };
+        }
+        console.error('Error addBlockedKk:', error);
+        return { success: false, message: 'Gagal menyimpan KK ke daftar blokir.' };
+    }
+
+    return { success: true, message: `No KK ${noKk} berhasil diblokir.` };
+}
+
+export async function removeBlockedKk(noKkRaw: string): Promise<{ success: boolean; message: string }> {
+    const noKk = normalizeKk(noKkRaw);
+    if (noKk.length !== 16) {
+        return { success: false, message: 'No KK harus 16 digit.' };
+    }
+
+    const { count, error } = await supabase
+        .from('blocked_kk')
+        .delete({ count: 'exact' })
+        .eq('no_kk', noKk);
+
+    if (error) {
+        if (error.code === '42P01') {
+            return { success: false, message: 'Tabel blocked_kk belum dibuat di database.' };
+        }
+        console.error('Error removeBlockedKk:', error);
+        return { success: false, message: 'Gagal menghapus KK dari daftar blokir.' };
+    }
+
+    if ((count || 0) === 0) {
+        return { success: false, message: `No KK ${noKk} tidak ditemukan di daftar blokir.` };
+    }
+
+    return { success: true, message: `No KK ${noKk} berhasil dibuka blokirnya.` };
+}
+
+export async function checkBlockedKkBatch(items: LogItem[]): Promise<LogItem[]> {
+    const activeItems = items.filter(it => it.status === 'OK' && it.parsed.no_kk);
+    if (activeItems.length === 0) return items;
+
+    const kkValues = Array.from(new Set(activeItems.map(it => it.parsed.no_kk)));
+    const { data, error } = await supabase
+        .from('blocked_kk')
+        .select('no_kk, reason')
+        .in('no_kk', kkValues);
+
+    if (error) {
+        if (error.code !== '42P01') {
+            console.error('Error checkBlockedKkBatch:', error);
+        }
+        return items;
+    }
+
+    const blockedMap = new Map<string, string | null>();
+    (data || []).forEach((row: any) => {
+        blockedMap.set(row.no_kk, row.reason || null);
+    });
+
+    if (blockedMap.size === 0) return items;
+
+    return items.map(item => {
+        if (item.status !== 'OK') return item;
+
+        const reason = blockedMap.get(item.parsed.no_kk);
+        if (reason === undefined) return item;
+
+        const detail = reason
+            ? `Nomor KK terblokir (${reason}). Silakan ganti data lain.`
+            : 'Nomor KK terblokir. Silakan ganti data lain.';
+
+        return {
+            ...item,
+            status: 'SKIP_FORMAT',
+            errors: [
+                ...item.errors,
+                {
+                    field: 'no_kk',
+                    type: 'blocked_kk',
+                    detail,
+                },
+            ],
+        };
+    });
+}
+
 export async function saveLogAndOkItems(log: LogJson, rawText: string): Promise<{ success: boolean; dataError?: any; logError?: any }> {
     // Fungsi helper untuk insert log
     async function insertLog(): Promise<any> {

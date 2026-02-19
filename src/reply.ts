@@ -132,6 +132,8 @@ export function buildReplyForNewData(
                         friendlyMsg = 'Urutan salah';
                     } else if (err.type === 'same_as_other') {
                         friendlyMsg = 'Nomor ada yang sama';
+                    } else if (err.type === 'blocked_kk') {
+                        friendlyMsg = 'No KK terblokir. Silakan ganti data KK lain yang valid.';
                     } else {
                         friendlyMsg = err.detail;
                     }
