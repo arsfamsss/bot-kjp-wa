@@ -136,32 +136,26 @@ export async function checkDuplicatesBatch(
     items: LogItem[],
     ctx: { processingDayKey: string; senderPhone: string; tanggal: string }
 ): Promise<LogItem[]> {
-    const { processingDayKey, senderPhone, tanggal } = ctx;
+    const { processingDayKey } = ctx;
 
     // Filter items yang statusnya OK (hanya ini yang perlu dicek ke DB)
     const activeItems = items.filter(it => it.status === 'OK');
     if (activeItems.length === 0) return items;
 
     // Collect IDs for Batch Query
-    // Kita kumpulkan semua ID unik dari items
     const allKjp = new Set<string>();
     const allKtp = new Set<string>();
-    const allKk = new Set<string>();
 
     activeItems.forEach(it => {
         if (it.parsed.no_kjp) allKjp.add(it.parsed.no_kjp);
         if (it.parsed.no_ktp) allKtp.add(it.parsed.no_ktp);
-        if (it.parsed.no_kk) allKk.add(it.parsed.no_kk);
     });
 
     // QUERY 1: GLOBAL DUPLICATES (ID Check) - Single Query
-    // Mencari apakah ada data hari ini yang memiliki KJP/KTP/KK yang sama
-    // Filter: (no_kjp IN list OR no_ktp IN list OR no_kk IN list) AND tanggal = today
     // Note: Supabase .or() syntax: "col1.in.(val1,val2),col2.in.(val3,val4)"
     const conditions: string[] = [];
     if (allKjp.size > 0) conditions.push(`no_kjp.in.(${Array.from(allKjp).join(',')})`);
     if (allKtp.size > 0) conditions.push(`no_ktp.in.(${Array.from(allKtp).join(',')})`);
-    if (allKk.size > 0) conditions.push(`no_kk.in.(${Array.from(allKk).join(',')})`);
 
     let globalDupes: any[] = [];
     if (conditions.length > 0) {
@@ -169,7 +163,7 @@ export async function checkDuplicatesBatch(
         const { data, error } = await supabase
             .from('data_harian')
             .select('nama, no_kjp, no_ktp, no_kk, sender_phone')
-            .eq('tanggal', tanggal) // Scope to Today
+            .eq('processing_day_key', processingDayKey)
             .or(orClause);
 
         if (!error && data) {
@@ -179,57 +173,25 @@ export async function checkDuplicatesBatch(
         }
     }
 
-    // QUERY 2: SENDER DUPLICATES (Name Check) - Single Query
-    // Mencari apakah SENDER ini sudah pernah kirim nama yang sama hari ini
-    // Kita ambil SEMUA data sender hari ini (biasanya tidak banyak, max ratusan)
-    // Lalu cek in-memory using fuzzy/exact logic match
-    let senderData: any[] = [];
-    {
-        const { data, error } = await supabase
-            .from('data_harian')
-            .select('nama, sender_phone')
-            .eq('tanggal', tanggal)
-            .eq('sender_phone', senderPhone);
-
-        if (!error && data) {
-            senderData = data;
-        } else if (error) {
-            console.error('Error batch sender data:', error);
-        }
-    }
-
     // PROCESS CHECKING IN-MEMORY
     return items.map(item => {
         if (item.status !== 'OK') return item;
 
         const errorMessages: string[] = [];
         let conflictFound = false;
+        let firstKind: DuplicateKind | null = null;
         let firstDupData: any = null;
 
         const getOwnerName = (dupData: any) => {
             return (dupData as any).nama ? (dupData as any).nama.toUpperCase() : 'ORANG LAIN';
         };
 
-        // 1. Check Name (Scoped to Sender)
-        if (item.parsed.nama) {
-            const targetName = item.parsed.nama.toUpperCase();
-            // Simple includes check as imperfect replacement for ILIKE, but sufficient for exact duplicates
-            // Or 'fuzzy' match if needed. For now assume exact/trimmed match which 'cleanName' provides.
-            // Using logic: if senderData has row with same Name
-            const match = senderData.find(d => d.nama && d.nama.toUpperCase() === targetName);
-            if (match) {
-                conflictFound = true;
-                firstDupData = firstDupData || match;
-                const owner = getOwnerName(match);
-                errorMessages.push(`• 👤 Nama sudah terdaftar atas nama *${owner}*`);
-            }
-        }
-
-        // 2. Check IDs (Global)
+        // Check IDs (Global)
         // Find match in globalDupes
         const kjpMatch = globalDupes.find(d => d.no_kjp === item.parsed.no_kjp);
         if (kjpMatch) {
             conflictFound = true;
+            firstKind = firstKind || 'NO_KJP';
             firstDupData = firstDupData || kjpMatch;
             const owner = getOwnerName(kjpMatch);
             errorMessages.push(`• 💳 No KJP sudah terdaftar atas nama *${owner}*`);
@@ -238,29 +200,16 @@ export async function checkDuplicatesBatch(
         const ktpMatch = globalDupes.find(d => d.no_ktp === item.parsed.no_ktp);
         if (ktpMatch) {
             conflictFound = true;
+            firstKind = firstKind || 'NO_KTP';
             firstDupData = firstDupData || ktpMatch;
             const owner = getOwnerName(ktpMatch);
             errorMessages.push(`• 🪪 No KTP sudah terdaftar atas nama *${owner}*`);
         }
 
-        const kkMatch = globalDupes.find(d => d.no_kk === item.parsed.no_kk);
-        if (kkMatch) {
-            const existingSender = kkMatch.sender_phone;
-            // KK conflict only if DIFFERENT sender
-            // Note: If same sender, it will be caught by senderData/Legacy logic? 
-            // Wait, previous logic said: "Khusus KK, kita hanya anggap duplikat jika PUNYA ORANG LAIN"
-            if (existingSender !== senderPhone) {
-                conflictFound = true;
-                firstDupData = firstDupData || kkMatch;
-                const owner = getOwnerName(kkMatch);
-                errorMessages.push(`• 🏠 No KK sudah digunakan oleh *${owner}*`);
-            }
-        }
-
         if (conflictFound) {
             const finalMsg = errorMessages.join('\n');
             const info: DuplicateInfo = {
-                kind: 'NAME',
+                kind: firstKind || 'NO_KJP',
                 processing_day_key: processingDayKey,
                 safe_message: finalMsg,
                 first_seen_at: null,
@@ -888,8 +837,8 @@ export interface BotSettings {
 
 // Default settings jika belum ada di database
 const DEFAULT_BOT_SETTINGS: BotSettings = {
-    close_hour_start: 4,
-    close_minute_start: 1,
+    close_hour_start: 0,
+    close_minute_start: 0,
     close_hour_end: 6,
     close_minute_end: 0,
     close_message_template: `⛔ *MOHON MAAF, SISTEM SEDANG TUTUP*

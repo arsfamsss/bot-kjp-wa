@@ -3426,27 +3426,9 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                     replyText = FORMAT_DAFTAR_MESSAGE;
                 } else if (normalized === '2' || normalized.startsWith('CEK')) {
                     pendingDelete.delete(senderPhone);
-                    // LANGSUNG TAMPILKAN DATA HARI INI menggunakan buildReplyForTodayRecap
                     const { validCount, totalInvalid, validItems } = await getTodayRecapForSender(senderPhone, processingDayKey);
-
-                    if (validCount === 0) {
-                        const dateDisplay = processingDayKey.split('-').reverse().join('-');
-                        replyText = [
-                            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-                            '🔎 *STATUS DATA HARI INI*',
-                            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-                            '',
-                            `📅 Periode: *${dateDisplay}* (06.01–04.00 WIB)`,
-                            '',
-                            '❌ *Belum ada data terdaftar*',
-                            '',
-                            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-                            '💡 _Ketik *MENU* untuk kembali._'
-                        ].join('\n');
-                    } else {
-                        // Gunakan buildReplyForTodayRecap yang sudah ada lokasi & tanggal lahir
-                        replyText = buildReplyForTodayRecap(validCount, totalInvalid, validItems, processingDayKey);
-                        // Tambahkan tips hapus di akhir
+                    replyText = buildReplyForTodayRecap(validCount, totalInvalid, validItems, processingDayKey);
+                    if (validCount > 0) {
                         replyText += '\n💡 _Ketik *EDIT* untuk mengubah data._';
                         replyText += '\n💡 _Ketik *HAPUS 1* atau *HAPUS 1,2,3* untuk menghapus data._';
                     }
