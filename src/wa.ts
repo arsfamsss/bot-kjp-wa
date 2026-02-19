@@ -1993,7 +1993,30 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                 }
 
                 // Prioritas Cek Admin Flow agar tidak tertabrak menu user
-                const currentAdminFlow = adminFlowByPhone.get(senderPhone) ?? 'NONE';
+                let currentAdminFlow = adminFlowByPhone.get(senderPhone) ?? 'NONE';
+
+                const rawUpper = rawTrim.toUpperCase();
+                const shouldExitAdminFlowToUserMenu =
+                    isAdmin &&
+                    currentAdminFlow !== 'NONE' &&
+                    (
+                        rawUpper === 'HAPUS' ||
+                        rawUpper.startsWith('HAPUS ') ||
+                        rawUpper === 'CEK' ||
+                        rawUpper.startsWith('CEK ') ||
+                        rawUpper === 'EDIT' ||
+                        rawUpper.startsWith('EDIT ') ||
+                        rawUpper === 'DAFTAR' ||
+                        rawUpper.startsWith('DAFTAR ') ||
+                        rawUpper === 'MENU_HAPUS' ||
+                        rawUpper === 'MENU_CEK' ||
+                        rawUpper === 'MENU_DAFTAR'
+                    );
+
+                if (shouldExitAdminFlowToUserMenu) {
+                    adminFlowByPhone.set(senderPhone, 'NONE');
+                    currentAdminFlow = 'NONE';
+                }
 
                 // MENU HANDLER: 3 (HAPUS)
                 // Kita pindahkan ke sini agar tidak "kalah" sama logic lain
