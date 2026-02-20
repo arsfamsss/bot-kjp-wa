@@ -199,6 +199,7 @@ export const ADMIN_MENU_MESSAGE = [
     '⚙️ *PENGATURAN BOT:*',
     '1️⃣3️⃣ Atur Status Buka/Tutup',
     '1️⃣4️⃣ Kelola Blokir No KK',
+    '1️⃣5️⃣ Kelola Blokir No HP',
     '',
     '💡 _Ketik *#TEMPLATE* untuk edit pesan tutup_',
     '💡 _Ketik *#TEMPLATE RESET* untuk kembali ke default_',

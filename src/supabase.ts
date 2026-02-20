@@ -239,8 +239,20 @@ export type BlockedKkItem = {
     created_at?: string | null;
 };
 
+export type BlockedPhoneItem = {
+    phone_number: string;
+    reason?: string | null;
+    created_at?: string | null;
+};
+
 function normalizeKk(raw: string): string {
     return (raw || '').replace(/\D/g, '');
+}
+
+function normalizePhoneNumber(raw: string): string {
+    let digits = (raw || '').replace(/\D/g, '');
+    if (digits.startsWith('0')) digits = `62${digits.slice(1)}`;
+    return digits;
 }
 
 export async function getBlockedKkList(limit: number = 200): Promise<BlockedKkItem[]> {
@@ -359,6 +371,96 @@ export async function checkBlockedKkBatch(items: LogItem[]): Promise<LogItem[]> 
             ],
         };
     });
+}
+
+export async function getBlockedPhoneList(limit: number = 200): Promise<BlockedPhoneItem[]> {
+    const { data, error } = await supabase
+        .from('blocked_phones')
+        .select('phone_number, reason, created_at')
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+    if (error) {
+        if (error.code !== '42P01') {
+            console.error('Error getBlockedPhoneList:', error);
+        }
+        return [];
+    }
+
+    return (data || []) as BlockedPhoneItem[];
+}
+
+export async function addBlockedPhone(phoneRaw: string, reason?: string): Promise<{ success: boolean; message: string }> {
+    const phoneNumber = normalizePhoneNumber(phoneRaw);
+    if (phoneNumber.length < 10 || phoneNumber.length > 15) {
+        return { success: false, message: 'Nomor HP tidak valid.' };
+    }
+
+    const payload: any = {
+        phone_number: phoneNumber,
+        reason: (reason || '').trim() || null,
+    };
+
+    const { error } = await supabase
+        .from('blocked_phones')
+        .upsert(payload, { onConflict: 'phone_number' });
+
+    if (error) {
+        if (error.code === '42P01') {
+            return { success: false, message: 'Tabel blocked_phones belum dibuat di database.' };
+        }
+        console.error('Error addBlockedPhone:', error);
+        return { success: false, message: 'Gagal menyimpan nomor HP ke daftar blokir.' };
+    }
+
+    return { success: true, message: `Nomor HP ${phoneNumber} berhasil diblokir.` };
+}
+
+export async function removeBlockedPhone(phoneRaw: string): Promise<{ success: boolean; message: string }> {
+    const phoneNumber = normalizePhoneNumber(phoneRaw);
+    if (phoneNumber.length < 10 || phoneNumber.length > 15) {
+        return { success: false, message: 'Nomor HP tidak valid.' };
+    }
+
+    const { count, error } = await supabase
+        .from('blocked_phones')
+        .delete({ count: 'exact' })
+        .eq('phone_number', phoneNumber);
+
+    if (error) {
+        if (error.code === '42P01') {
+            return { success: false, message: 'Tabel blocked_phones belum dibuat di database.' };
+        }
+        console.error('Error removeBlockedPhone:', error);
+        return { success: false, message: 'Gagal menghapus nomor HP dari daftar blokir.' };
+    }
+
+    if ((count || 0) === 0) {
+        return { success: false, message: `Nomor HP ${phoneNumber} tidak ditemukan di daftar blokir.` };
+    }
+
+    return { success: true, message: `Nomor HP ${phoneNumber} berhasil dibuka blokirnya.` };
+}
+
+export async function isPhoneBlocked(phoneRaw: string): Promise<{ blocked: boolean; reason?: string | null }> {
+    const phoneNumber = normalizePhoneNumber(phoneRaw);
+    if (!phoneNumber) return { blocked: false };
+
+    const { data, error } = await supabase
+        .from('blocked_phones')
+        .select('phone_number, reason')
+        .eq('phone_number', phoneNumber)
+        .maybeSingle();
+
+    if (error) {
+        if (error.code !== '42P01') {
+            console.error('Error isPhoneBlocked:', error);
+        }
+        return { blocked: false };
+    }
+
+    if (!data) return { blocked: false };
+    return { blocked: true, reason: (data as any).reason || null };
 }
 
 export async function saveLogAndOkItems(log: LogJson, rawText: string): Promise<{ success: boolean; dataError?: any; logError?: any }> {

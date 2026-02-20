@@ -60,6 +60,10 @@ import {
     getBlockedKkList,
     addBlockedKk,
     removeBlockedKk,
+    getBlockedPhoneList,
+    addBlockedPhone,
+    removeBlockedPhone,
+    isPhoneBlocked,
     // --- FITUR DAFTAR ULANG ---
     isFeatureDaftarUlangEnabled,
     getFailedRegistrations,
@@ -236,6 +240,18 @@ function buildBlockedKkMenuText(): string {
         '1️⃣ Tambah No KK ke blokir',
         '2️⃣ Lihat daftar No KK terblokir',
         '3️⃣ Buka blokir No KK',
+        '',
+        '0️⃣ Kembali ke Menu Admin',
+    ].join('\n');
+}
+
+function buildBlockedPhoneMenuText(): string {
+    return [
+        '🚫 *KELOLA BLOKIR NO HP*',
+        '',
+        '1️⃣ Tambah No HP ke blokir',
+        '2️⃣ Lihat daftar No HP terblokir',
+        '3️⃣ Buka blokir No HP',
         '',
         '0️⃣ Kembali ke Menu Admin',
     ].join('\n');
@@ -661,6 +677,18 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             text: `⛔ *SISTEM TIDAK MENGENALI PERANGKAT ANDA*\n\nMohon ketik **NOMOR HP ANDA** (Contoh: 08123456789) satu kali untuk verifikasi.\n\n_Agar system bisa memproses data pendaftaran kjp anda._`
                         });
                         return; // STOP PROCESSING
+                    }
+                }
+
+                const isAdminByCurrentPhone = ADMIN_PHONES.has(normalizePhone(senderPhone));
+                if (!isAdminByCurrentPhone) {
+                    const blockedPhone = await isPhoneBlocked(senderPhone);
+                    if (blockedPhone.blocked) {
+                        const reasonText = blockedPhone.reason ? `\nAlasan: ${blockedPhone.reason}` : '';
+                        await sock.sendMessage(remoteJid, {
+                            text: `⛔ *NOMOR ANDA DIBLOKIR SYSTEM*\n\nPesan Anda tidak dapat diproses.${reasonText}`
+                        });
+                        continue;
                     }
                 }
 
@@ -2117,7 +2145,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                 }
 
                 if (isAdmin && currentAdminFlow !== 'NONE') {
-                    if ((normalized === '0' && !currentAdminFlow.startsWith('CONTACT_') && !currentAdminFlow.startsWith('BLOCKED_KK_') && !currentAdminFlow.startsWith('SETTING_')) || isGreetingOrMenu(normalized)) {
+                    if ((normalized === '0' && !currentAdminFlow.startsWith('CONTACT_') && !currentAdminFlow.startsWith('BLOCKED_KK_') && !currentAdminFlow.startsWith('BLOCKED_PHONE_') && !currentAdminFlow.startsWith('SETTING_')) || isGreetingOrMenu(normalized)) {
                         adminFlowByPhone.set(senderPhone, 'NONE');
                         await sendMainMenu(sock, remoteJid, isAdmin);
                         continue;
@@ -2416,6 +2444,9 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                         } else if (normalized === '14') {
                             adminFlowByPhone.set(senderPhone, 'BLOCKED_KK_MENU');
                             replyText = buildBlockedKkMenuText();
+                        } else if (normalized === '15') {
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_PHONE_MENU');
+                            replyText = buildBlockedPhoneMenuText();
                         } else replyText = '⚠️ Pilihan tidak dikenali.';
                     } else if (currentAdminFlow === 'SETTING_OPERATION_MENU') {
                         if (normalized === '0') {
@@ -3000,6 +3031,69 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             }
                             replyText += '\n\n' + buildBlockedKkMenuText();
                             adminFlowByPhone.set(senderPhone, 'BLOCKED_KK_MENU');
+                        }
+                    } else if (currentAdminFlow === 'BLOCKED_PHONE_MENU') {
+                        if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'MENU');
+                            replyText = ADMIN_MENU_MESSAGE;
+                        } else if (normalized === '1') {
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_PHONE_ADD');
+                            replyText = [
+                                '🚫 *TAMBAH BLOKIR NO HP*',
+                                '',
+                                'Ketik No HP yang ingin diblokir.',
+                                'Anda bisa tambah alasan setelah tanda |',
+                                'Contoh: 08123456789 | Spam',
+                                '',
+                                '_Ketik 0 untuk kembali._'
+                            ].join('\n');
+                        } else if (normalized === '2') {
+                            const list = await getBlockedPhoneList(200);
+                            if (list.length === 0) {
+                                replyText = '📂 Belum ada No HP yang diblokir.';
+                            } else {
+                                const lines = ['📋 *DAFTAR NO HP TERBLOKIR*', ''];
+                                list.forEach((row, idx) => {
+                                    const reasonText = row.reason ? ` - ${row.reason}` : '';
+                                    lines.push(`${idx + 1}. ${row.phone_number}${reasonText}`);
+                                });
+                                lines.push('');
+                                lines.push('_Ketik 3 untuk buka blokir._');
+                                replyText = lines.join('\n');
+                            }
+                        } else if (normalized === '3') {
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_PHONE_DELETE');
+                            replyText = [
+                                '♻️ *BUKA BLOKIR NO HP*',
+                                '',
+                                'Ketik No HP yang ingin dibuka blokirnya.',
+                                '',
+                                '_Ketik 0 untuk kembali._'
+                            ].join('\n');
+                        } else {
+                            replyText = '⚠️ Pilihan tidak dikenali. Ketik 1, 2, 3, atau 0.';
+                        }
+                    } else if (currentAdminFlow === 'BLOCKED_PHONE_ADD') {
+                        if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_PHONE_MENU');
+                            replyText = buildBlockedPhoneMenuText();
+                        } else {
+                            const [rawPhone, ...reasonParts] = rawTrim.split('|');
+                            const reason = reasonParts.join('|').trim();
+                            const result = await addBlockedPhone(rawPhone, reason);
+                            replyText = result.success ? `✅ ${result.message}` : `❌ ${result.message}`;
+                            replyText += '\n\n' + buildBlockedPhoneMenuText();
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_PHONE_MENU');
+                        }
+                    } else if (currentAdminFlow === 'BLOCKED_PHONE_DELETE') {
+                        if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_PHONE_MENU');
+                            replyText = buildBlockedPhoneMenuText();
+                        } else {
+                            const result = await removeBlockedPhone(rawTrim);
+                            replyText = result.success ? `✅ ${result.message}` : `❌ ${result.message}`;
+                            replyText += '\n\n' + buildBlockedPhoneMenuText();
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_PHONE_MENU');
                         }
                     } else if (currentAdminFlow === 'BROADCAST_SELECT') {
                         if (normalized === '1') {
