@@ -252,7 +252,33 @@ function normalizeKk(raw: string): string {
 function normalizePhoneNumber(raw: string): string {
     let digits = (raw || '').replace(/\D/g, '');
     if (digits.startsWith('0')) digits = `62${digits.slice(1)}`;
+    if (digits.startsWith('8')) digits = `62${digits}`;
     return digits;
+}
+
+function buildPhoneCandidates(raw: string): string[] {
+    const base = normalizePhoneNumber(raw);
+    if (!base) return [];
+
+    const set = new Set<string>();
+    set.add(base);
+
+    if (base.startsWith('62') && base.length > 2) {
+        set.add(`0${base.slice(2)}`);
+        set.add(base.slice(2));
+    }
+
+    if (base.startsWith('0') && base.length > 1) {
+        set.add(`62${base.slice(1)}`);
+        set.add(base.slice(1));
+    }
+
+    if (base.startsWith('8')) {
+        set.add(`62${base}`);
+        set.add(`0${base}`);
+    }
+
+    return Array.from(set).filter(v => v.length >= 9);
 }
 
 export async function getBlockedKkList(limit: number = 200): Promise<BlockedKkItem[]> {
@@ -443,13 +469,14 @@ export async function removeBlockedPhone(phoneRaw: string): Promise<{ success: b
 }
 
 export async function isPhoneBlocked(phoneRaw: string): Promise<{ blocked: boolean; reason?: string | null }> {
-    const phoneNumber = normalizePhoneNumber(phoneRaw);
-    if (!phoneNumber) return { blocked: false };
+    const candidates = buildPhoneCandidates(phoneRaw);
+    if (candidates.length === 0) return { blocked: false };
 
     const { data, error } = await supabase
         .from('blocked_phones')
         .select('phone_number, reason')
-        .eq('phone_number', phoneNumber)
+        .in('phone_number', candidates)
+        .limit(1)
         .maybeSingle();
 
     if (error) {
