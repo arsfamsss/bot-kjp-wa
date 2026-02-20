@@ -46,14 +46,23 @@ export function isSystemClosed(date: Date, settings?: {
     manual_close_end?: string | null;
 }): boolean {
     // 1. CEK TUTUP JANGKA PANJANG (MANUAL OVERRIDE)
+    // Jika manual aktif dan tanggal valid, mode manual MENANG atas jadwal harian:
+    // - sebelum start  => BUKA
+    // - saat rentang   => TUTUP
+    // - setelah end    => BUKA
     if (settings?.manual_close_start && settings?.manual_close_end) {
         const start = new Date(settings.manual_close_start).getTime();
         const end = new Date(settings.manual_close_end).getTime();
         const now = date.getTime();
 
-        // Jika sekarang berada di rentang tutup manual
-        if (now >= start && now <= end) {
-            return true;
+        if (!Number.isNaN(start) && !Number.isNaN(end) && end > start) {
+            // Jika sekarang berada di rentang tutup manual
+            if (now >= start && now <= end) {
+                return true;
+            }
+
+            // Di luar rentang manual => dianggap buka (override default harian)
+            return false;
         }
     }
 

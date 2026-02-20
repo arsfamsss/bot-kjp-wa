@@ -1209,14 +1209,15 @@ export function formatOpenTimeString(settings: BotSettings): string {
 
 // Render template pesan tutup dengan placeholder
 export function renderCloseMessage(settings: BotSettings): string {
-    // Cek apakah sedang dalam MODE TUTUP PANJANG (Manual Override)?
-    // Jika manual_close_end masih berlaku (di masa depan), tampilkan pesan khusus
+    // Cek apakah sedang dalam MODE TUTUP PANJANG (Manual Override).
+    // Pesan manual hanya dipakai jika waktu sekarang benar-benar berada
+    // di rentang [manual_close_start, manual_close_end].
     if (settings.manual_close_start && settings.manual_close_end) {
-        const now = new Date(); // Server Time (Asumsi WIB atau UTC). Better check with proper timezone if possible.
+        const now = new Date();
+        const start = new Date(settings.manual_close_start);
         const end = new Date(settings.manual_close_end);
 
-        // Simple check: if valid dates
-        if (!isNaN(end.getTime())) {
+        if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && now.getTime() >= start.getTime() && now.getTime() <= end.getTime()) {
             // Format End Date: DD MMM YYYY Jam HH:mm
             // Gunakan Intl untuk WIB
             const dateStr = end.toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', day: '2-digit', month: 'long', year: 'numeric' });
