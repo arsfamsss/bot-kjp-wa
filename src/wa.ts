@@ -150,8 +150,16 @@ const DEFAULT_CLOSE_END_HOUR = 6;
 const DEFAULT_CLOSE_END_MINUTE = 0;
 
 function parseAdminWibDateTimeToIso(input: string): { iso: string; display: string } | null {
-    const cleaned = (input || '').trim();
-    const m = cleaned.match(/^(\d{2})-(\d{2})-(\d{4})\s+(\d{2}):(\d{2})$/);
+    const cleaned = (input || '')
+        .normalize('NFKC')
+        .replace(/[\u200E\u200F]/g, '')
+        .replace(/[\u00A0\u2000-\u200D\u202F\u205F\u3000]/g, ' ')
+        .replace(/[\u2010-\u2015\u2212\uFE58\uFE63\uFF0D]/g, '-')
+        .replace(/[\uA789\u2236\uFF1A]/g, ':')
+        .replace(/[/.]/g, '-')
+        .replace(/\s+/g, ' ')
+        .trim();
+    const m = cleaned.match(/^(\d{1,2})-(\d{1,2})-(\d{4})\s+(\d{1,2}):(\d{1,2})$/);
     if (!m) return null;
 
     const day = Number(m[1]);
