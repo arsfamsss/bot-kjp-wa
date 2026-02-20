@@ -493,18 +493,6 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                     }
                 }
 
-                // Ambil pengaturan bot dari database
-                const botSettings = await getBotSettings();
-                const closed = isSystemClosed(receivedAt, botSettings);
-
-                // 🛑 CEK JAM TUTUP (PRIORITAS UTAMA)
-                // Jika tutup, langsung tolak (kecuali Admin)
-                if (closed && !isAdmin) {
-                    const closeMessage = renderCloseMessage(botSettings);
-                    await sock.sendMessage(remoteJid, { text: closeMessage });
-                    continue; // STOP PROCESSING
-                }
-
                 // 🔧 ADMIN SHORTCUT: #TEMPLATE (Anti State-Loss)
                 // Kebal restart karena tidak butuh state/flow
                 if (isAdmin && rawInput && rawInput.toString().trim().toUpperCase().startsWith('#TEMPLATE')) {
@@ -703,6 +691,18 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                         });
                         continue;
                     }
+                }
+
+                // Ambil pengaturan bot dari database
+                const botSettings = await getBotSettings();
+                const closed = isSystemClosed(receivedAt, botSettings);
+
+                // 🛑 CEK JAM TUTUP (PRIORITAS UTAMA)
+                // Jika tutup, langsung tolak (kecuali Admin)
+                if (closed && !isAdminByCurrentPhone) {
+                    const closeMessage = renderCloseMessage(botSettings);
+                    await sock.sendMessage(remoteJid, { text: closeMessage });
+                    continue; // STOP PROCESSING
                 }
 
                 let replyText = '';
