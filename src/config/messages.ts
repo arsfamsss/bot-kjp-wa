@@ -197,7 +197,7 @@ export const ADMIN_MENU_MESSAGE = [
     '1️⃣2️⃣ Export Data (TXT & XLSX)',
     '',
     '⚙️ *PENGATURAN BOT:*',
-    '1️⃣3️⃣ Atur Jam Tutup',
+    '1️⃣3️⃣ Atur Status Buka/Tutup',
     '1️⃣4️⃣ Kelola Blokir No KK',
     '',
     '💡 _Ketik *#TEMPLATE* untuk edit pesan tutup_',

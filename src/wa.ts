@@ -107,6 +107,7 @@ import {
     EditSession,
     editSessionByPhone as editSessionMap,
     contactSessionByPhone, // NEW: Kelola Kontak
+    closeWindowDraftByPhone,
     reregisterDataCache, // FITUR DAFTAR ULANG
     reregisterOfferedToday, // FITUR DAFTAR ULANG
 } from './state';
@@ -142,6 +143,44 @@ function getPhoneFromLid(lidJid: string): string | null {
 }
 
 const ADMIN_PHONES = new Set(ADMIN_PHONES_RAW.map(normalizePhone));
+
+const DEFAULT_CLOSE_START_HOUR = 0;
+const DEFAULT_CLOSE_START_MINUTE = 0;
+const DEFAULT_CLOSE_END_HOUR = 6;
+const DEFAULT_CLOSE_END_MINUTE = 0;
+
+function parseAdminWibDateTimeToIso(input: string): { iso: string; display: string } | null {
+    const cleaned = (input || '').trim();
+    const m = cleaned.match(/^(\d{2})-(\d{2})-(\d{4})\s+(\d{2}):(\d{2})$/);
+    if (!m) return null;
+
+    const day = Number(m[1]);
+    const month = Number(m[2]);
+    const year = Number(m[3]);
+    const hour = Number(m[4]);
+    const minute = Number(m[5]);
+
+    if (month < 1 || month > 12) return null;
+    if (hour < 0 || hour > 23) return null;
+    if (minute < 0 || minute > 59) return null;
+
+    const utcMs = Date.UTC(year, month - 1, day, hour - 7, minute, 0, 0);
+    const dt = new Date(utcMs);
+    if (isNaN(dt.getTime())) return null;
+
+    if (
+        dt.getUTCFullYear() !== year ||
+        dt.getUTCMonth() !== month - 1 ||
+        dt.getUTCDate() !== day
+    ) {
+        return null;
+    }
+
+    return {
+        iso: dt.toISOString(),
+        display: `${String(day).padStart(2, '0')}-${String(month).padStart(2, '0')}-${String(year).padStart(4, '0')} ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`,
+    };
+}
 
 // --- HELPER: BUILD DATABASE ERROR MESSAGE ---
 // Menghasilkan pesan error yang mudah dipahami user berdasarkan error database
@@ -2074,7 +2113,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                 }
 
                 if (isAdmin && currentAdminFlow !== 'NONE') {
-                    if ((normalized === '0' && !currentAdminFlow.startsWith('CONTACT_') && !currentAdminFlow.startsWith('BLOCKED_KK_')) || isGreetingOrMenu(normalized)) {
+                    if ((normalized === '0' && !currentAdminFlow.startsWith('CONTACT_') && !currentAdminFlow.startsWith('BLOCKED_KK_') && !currentAdminFlow.startsWith('SETTING_')) || isGreetingOrMenu(normalized)) {
                         adminFlowByPhone.set(senderPhone, 'NONE');
                         await sendMainMenu(sock, remoteJid, isAdmin);
                         continue;
@@ -2356,21 +2395,17 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                 '_Ketik 0 untuk batal._'
                             ].join('\n');
                         } else if (normalized === '13') {
-                            // FEATURE: ATUR JAM TUTUP
                             const currentSettings = await getBotSettings();
                             const currentTimeStr = formatCloseTimeString(currentSettings);
-                            adminFlowByPhone.set(senderPhone, 'SETTING_CLOSE_TIME_MENU');
+                            adminFlowByPhone.set(senderPhone, 'SETTING_OPERATION_MENU');
 
                             replyText = [
-                                '⏰ *ATUR JAM TUTUP BOT*',
+                                '⏰ *ATUR STATUS BOT*',
                                 '',
                                 `📌 Saat ini tutup jam: *${currentTimeStr}*`,
                                 '',
-                                'Pilih metode pengaturan:',
-                                '1️⃣ Input Manual (Harian)',
-                                '2️⃣ Tutup Sekarang (Darurat)',
-                                '3️⃣ Tutup Jangka Panjang (Libur)',
-                                '4️⃣ Buka Sekarang (Force Open)',
+                                '1️⃣ Buka Sekarang',
+                                '2️⃣ Tutup Sekarang',
                                 '',
                                 '_Ketik 0 untuk batal._'
                             ].join('\n');
@@ -2378,6 +2413,141 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             adminFlowByPhone.set(senderPhone, 'BLOCKED_KK_MENU');
                             replyText = buildBlockedKkMenuText();
                         } else replyText = '⚠️ Pilihan tidak dikenali.';
+                    } else if (currentAdminFlow === 'SETTING_OPERATION_MENU') {
+                        if (normalized === '0') {
+                            closeWindowDraftByPhone.delete(senderPhone);
+                            adminFlowByPhone.set(senderPhone, 'MENU');
+                            replyText = ADMIN_MENU_MESSAGE;
+                        } else if (normalized === '1') {
+                            const ok = await updateBotSettings({
+                                close_hour_start: DEFAULT_CLOSE_START_HOUR,
+                                close_minute_start: DEFAULT_CLOSE_START_MINUTE,
+                                close_hour_end: DEFAULT_CLOSE_END_HOUR,
+                                close_minute_end: DEFAULT_CLOSE_END_MINUTE,
+                                manual_close_start: null,
+                                manual_close_end: null,
+                            });
+
+                            clearBotSettingsCache();
+                            closeWindowDraftByPhone.delete(senderPhone);
+                            adminFlowByPhone.set(senderPhone, 'MENU');
+
+                            replyText = ok
+                                ? [
+                                    '✅ *BOT BERHASIL DIBUKA SEKARANG*',
+                                    '',
+                                    'Jam operasional kembali ke default:',
+                                    '🟢 BUKA: *06.01 - 23.59 WIB*',
+                                    '🔴 TUTUP: *00.00 - 06.00 WIB*',
+                                ].join('\n')
+                                : '❌ Gagal membuka bot. Coba lagi.';
+                        } else if (normalized === '2') {
+                            closeWindowDraftByPhone.delete(senderPhone);
+                            adminFlowByPhone.set(senderPhone, 'SETTING_MANUAL_CLOSE_START');
+                            replyText = [
+                                '🔴 *TUTUP SEKARANG (PERIODE MANUAL)*',
+                                '',
+                                'Masukkan *Tanggal & Jam MULAI tutup*.',
+                                'Format: *DD-MM-YYYY HH:mm*',
+                                'Contoh: *22-02-2026 00:01*',
+                                '',
+                                '_Ketik 0 untuk batal._',
+                            ].join('\n');
+                        } else {
+                            replyText = '⚠️ Pilihan tidak dikenali. Ketik 1, 2, atau 0.';
+                        }
+                    } else if (currentAdminFlow === 'SETTING_MANUAL_CLOSE_START') {
+                        if (normalized === '0') {
+                            closeWindowDraftByPhone.delete(senderPhone);
+                            adminFlowByPhone.set(senderPhone, 'SETTING_OPERATION_MENU');
+                            const currentSettings = await getBotSettings();
+                            const currentTimeStr = formatCloseTimeString(currentSettings);
+                            replyText = [
+                                '⏰ *ATUR STATUS BOT*',
+                                '',
+                                `📌 Saat ini tutup jam: *${currentTimeStr}*`,
+                                '',
+                                '1️⃣ Buka Sekarang',
+                                '2️⃣ Tutup Sekarang',
+                                '',
+                                '_Ketik 0 untuk batal._',
+                            ].join('\n');
+                        } else {
+                            const parsed = parseAdminWibDateTimeToIso(rawTrim);
+                            if (!parsed) {
+                                replyText = '⚠️ Format salah. Gunakan *DD-MM-YYYY HH:mm* (contoh: 22-02-2026 00:01).';
+                            } else {
+                                closeWindowDraftByPhone.set(senderPhone, {
+                                    startIso: parsed.iso,
+                                    startDisplay: parsed.display,
+                                });
+                                adminFlowByPhone.set(senderPhone, 'SETTING_MANUAL_CLOSE_END');
+                                replyText = [
+                                    `✅ Mulai tutup diset: *${parsed.display} WIB*`,
+                                    '',
+                                    'Sekarang masukkan *Tanggal & Jam SELESAI tutup*.',
+                                    'Format: *DD-MM-YYYY HH:mm*',
+                                    'Contoh: *22-02-2026 23:59*',
+                                    '',
+                                    '_Ketik 0 untuk batal._',
+                                ].join('\n');
+                            }
+                        }
+                    } else if (currentAdminFlow === 'SETTING_MANUAL_CLOSE_END') {
+                        if (normalized === '0') {
+                            closeWindowDraftByPhone.delete(senderPhone);
+                            adminFlowByPhone.set(senderPhone, 'SETTING_OPERATION_MENU');
+                            const currentSettings = await getBotSettings();
+                            const currentTimeStr = formatCloseTimeString(currentSettings);
+                            replyText = [
+                                '⏰ *ATUR STATUS BOT*',
+                                '',
+                                `📌 Saat ini tutup jam: *${currentTimeStr}*`,
+                                '',
+                                '1️⃣ Buka Sekarang',
+                                '2️⃣ Tutup Sekarang',
+                                '',
+                                '_Ketik 0 untuk batal._',
+                            ].join('\n');
+                        } else {
+                            const draft = closeWindowDraftByPhone.get(senderPhone);
+                            if (!draft) {
+                                adminFlowByPhone.set(senderPhone, 'SETTING_MANUAL_CLOSE_START');
+                                replyText = '⚠️ Sesi pengaturan hilang. Ulangi input tanggal mulai tutup.';
+                            } else {
+                                const parsedEnd = parseAdminWibDateTimeToIso(rawTrim);
+                                if (!parsedEnd) {
+                                    replyText = '⚠️ Format salah. Gunakan *DD-MM-YYYY HH:mm* (contoh: 22-02-2026 23:59).';
+                                } else {
+                                    const startMs = new Date(draft.startIso).getTime();
+                                    const endMs = new Date(parsedEnd.iso).getTime();
+
+                                    if (endMs <= startMs) {
+                                        replyText = '⚠️ Tanggal/jam selesai harus lebih besar dari mulai tutup.';
+                                    } else {
+                                        const ok = await updateBotSettings({
+                                            manual_close_start: draft.startIso,
+                                            manual_close_end: parsedEnd.iso,
+                                        });
+
+                                        clearBotSettingsCache();
+                                        closeWindowDraftByPhone.delete(senderPhone);
+                                        adminFlowByPhone.set(senderPhone, 'MENU');
+
+                                        replyText = ok
+                                            ? [
+                                                '✅ *TUTUP MANUAL BERHASIL DIAKTIFKAN*',
+                                                '',
+                                                `🕒 Mulai: *${draft.startDisplay} WIB*`,
+                                                `🕒 Sampai: *${parsedEnd.display} WIB*`,
+                                                '',
+                                                'User tidak bisa input data pada periode tersebut.',
+                                            ].join('\n')
+                                            : '❌ Gagal menyimpan periode tutup manual. Coba lagi.';
+                                    }
+                                }
+                            }
+                        }
                     } else if (currentAdminFlow === 'RECAP_SPECIFIC_MENU') {
                         // SUB-MENU REKAP TANGGAL TERTENTU
                         if (normalized === '1') {

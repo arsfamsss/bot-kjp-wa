@@ -58,6 +58,9 @@ export type AdminFlowState =
     | 'SETTING_CLOSE_TIME_START'
     | 'SETTING_CLOSE_TIME_END'
     | 'SETTING_CLOSE_LONG_TERM'
+    | 'SETTING_OPERATION_MENU'
+    | 'SETTING_MANUAL_CLOSE_START'
+    | 'SETTING_MANUAL_CLOSE_END'
     | 'BLOCKED_KK_MENU'
     | 'BLOCKED_KK_ADD'
     | 'BLOCKED_KK_DELETE'
@@ -117,6 +120,13 @@ export type ContactSession = {
     newContactName?: string; // Sementara simpan nama saat tambah kontak baru
 };
 export const contactSessionByPhone = new Map<string, ContactSession>();
+
+export type CloseWindowDraft = {
+    startIso: string;
+    startDisplay: string;
+};
+
+export const closeWindowDraftByPhone = new Map<string, CloseWindowDraft>();
 
 // --- NEW: Fitur Daftar Ulang (REREGISTER) ---
 // Cache data gagal per user (senderPhone -> array of failed registration data)
