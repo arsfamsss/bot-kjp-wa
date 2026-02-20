@@ -168,21 +168,17 @@ function parseAdminWibDateTimeToIso(input: string): { iso: string; display: stri
     const hour = Number(m[4]);
     const minute = Number(m[5]);
 
+    if (day < 1 || day > 31) return null;
     if (month < 1 || month > 12) return null;
     if (hour < 0 || hour > 23) return null;
     if (minute < 0 || minute > 59) return null;
 
+    const maxDayInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    if (day > maxDayInMonth) return null;
+
     const utcMs = Date.UTC(year, month - 1, day, hour - 7, minute, 0, 0);
     const dt = new Date(utcMs);
     if (isNaN(dt.getTime())) return null;
-
-    if (
-        dt.getUTCFullYear() !== year ||
-        dt.getUTCMonth() !== month - 1 ||
-        dt.getUTCDate() !== day
-    ) {
-        return null;
-    }
 
     return {
         iso: dt.toISOString(),
