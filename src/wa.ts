@@ -480,6 +480,19 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
 
                 if (!rawInput) continue;
 
+                const senderPhoneAtEarlyCheck = senderPhone;
+
+                if (!isAdmin) {
+                    const blockedPhoneEarly = await isPhoneBlocked(senderPhone);
+                    if (blockedPhoneEarly.blocked) {
+                        const reasonText = blockedPhoneEarly.reason ? `\nAlasan: ${blockedPhoneEarly.reason}` : '';
+                        await sock.sendMessage(remoteJid, {
+                            text: `⛔ *NOMOR ANDA DIBLOKIR SYSTEM*\n\nPesan Anda tidak dapat diproses.${reasonText}`
+                        });
+                        continue;
+                    }
+                }
+
                 // Ambil pengaturan bot dari database
                 const botSettings = await getBotSettings();
                 const closed = isSystemClosed(receivedAt, botSettings);
@@ -681,7 +694,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                 }
 
                 const isAdminByCurrentPhone = ADMIN_PHONES.has(normalizePhone(senderPhone));
-                if (!isAdminByCurrentPhone) {
+                if (!isAdminByCurrentPhone && senderPhone !== senderPhoneAtEarlyCheck) {
                     const blockedPhone = await isPhoneBlocked(senderPhone);
                     if (blockedPhone.blocked) {
                         const reasonText = blockedPhone.reason ? `\nAlasan: ${blockedPhone.reason}` : '';
