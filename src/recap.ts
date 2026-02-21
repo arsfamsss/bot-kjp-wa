@@ -292,7 +292,7 @@ export async function getGlobalRecap(
         .select('*')
         .order('processing_day_key', { ascending: true })
         .order('sender_phone', { ascending: true })
-        .order('received_at', { ascending: true });
+        .order('nama', { ascending: true });
 
     if (endKey) {
         query = query.gte('processing_day_key', startKey).lte('processing_day_key', endKey);
@@ -345,7 +345,18 @@ export async function getGlobalRecap(
     lines.push('');
     lines.push('👇 *RINCIAN DATA MASUK:*');
 
-    Object.keys(grouped).forEach((phone, idx) => {
+    // Sort pengirim berdasarkan nama A-Z
+    const sortedSenderPhones = Object.keys(grouped).sort((a, b) => {
+        let nameA: string | null | undefined = getContactName(a);
+        if (!nameA) nameA = dbNamesMap.get(a) || null;
+        if (!nameA && nameLookup) nameA = nameLookup(a);
+        let nameB: string | null | undefined = getContactName(b);
+        if (!nameB) nameB = dbNamesMap.get(b) || null;
+        if (!nameB && nameLookup) nameB = nameLookup(b);
+        return (nameA || '').localeCompare(nameB || '');
+    });
+
+    sortedSenderPhones.forEach((phone, idx) => {
         const items = grouped[phone];
 
         // Lookup name logic:
@@ -431,6 +442,30 @@ export async function getGlobalRecap(
             }
         }
     });
+
+    // --- RINGKASAN TOTAL DATA PER LOKASI ---
+    const locationTotals = new Map<string, number>();
+    for (const row of (data as any[])) {
+        let locLabel = '';
+        if (row.lokasi && row.lokasi.startsWith('DHARMAJAYA')) {
+            locLabel = row.lokasi.replace(/^DHARMAJAYA\s*-\s*/i, '').trim();
+            if (!locLabel) locLabel = 'Duri Kosambi';
+        } else if (row.lokasi && row.lokasi.startsWith('PASARJAYA')) {
+            locLabel = row.lokasi.replace(/^PASARJAYA\s*-\s*/i, '').trim();
+            if (!locLabel) locLabel = 'PASARJAYA';
+        } else {
+            locLabel = 'Duri Kosambi';
+        }
+        locationTotals.set(locLabel, (locationTotals.get(locLabel) || 0) + 1);
+    }
+
+    lines.push(`────────────────────────────────────`);
+    lines.push(`📍 *TOTAL DATA MASUK PER LOKASI:*`);
+    const sortedLocations = Array.from(locationTotals.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+    for (const [locName, count] of sortedLocations) {
+        lines.push(`   • ${locName} : ${count} data`);
+    }
+    lines.push(`────────────────────────────────────`);
 
     lines.push(`_Akhir laporan (${data.length} data)_`);
     return lines.join('\n');
