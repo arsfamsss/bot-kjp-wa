@@ -60,7 +60,7 @@ export function isSystemClosed(date: Date, settings?: {
             if (now >= start && now <= end) {
                 return true;
             }
-
+        }
     }
 
     // 2. CEK JAM TUTUP HARIAN
