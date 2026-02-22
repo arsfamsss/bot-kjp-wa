@@ -61,9 +61,6 @@ export function isSystemClosed(date: Date, settings?: {
                 return true;
             }
 
-            // Di luar rentang manual => dianggap buka (override default harian)
-            return false;
-        }
     }
 
     // 2. CEK JAM TUTUP HARIAN
