@@ -200,6 +200,7 @@ export const ADMIN_MENU_MESSAGE = [
     '1️⃣3️⃣ Atur Status Buka/Tutup',
     '1️⃣4️⃣ Kelola Blokir No KK',
     '1️⃣5️⃣ Kelola Blokir No HP',
+    '1️⃣6️⃣ Kelola Blokir No KTP',
     '',
     '💡 _Ketik *#TEMPLATE* untuk edit pesan tutup_',
     '💡 _Ketik *#TEMPLATE RESET* untuk kembali ke default_',
