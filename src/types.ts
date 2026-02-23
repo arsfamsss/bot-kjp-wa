@@ -20,6 +20,7 @@ export interface ItemError {
     | "duplicate"
     | "duplicate_in_message"
     | "blocked_kk"
+    | "ktp_blocked"
     | "same_as_other"
     | "wrong_order";
     detail: string;

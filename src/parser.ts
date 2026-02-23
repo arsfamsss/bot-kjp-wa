@@ -1,7 +1,7 @@
 // src/parser.ts
 
 import type { LogItem, ParsedFields, ItemError, LogJson, LogStats } from './types';
-import { checkBlockedKkBatch, checkDuplicateForItem, checkDuplicatesBatch } from './supabase';
+import { checkBlockedKkBatch, checkBlockedKtpBatch, checkDuplicateForItem, checkDuplicatesBatch } from './supabase';
 import { parseFlexibleDate } from './utils/dateParser';
 
 // --- BAGIAN 1: PEMBERSIH INPUT ---
@@ -371,6 +371,7 @@ export async function processRawMessageToLogJson(params: {
     }
 
     items = await checkBlockedKkBatch(items);
+    items = await checkBlockedKtpBatch(items);
 
     const updatedItems = await checkDuplicatesBatch(items, {
         processingDayKey,

@@ -58,6 +58,9 @@ import {
     clearBotSettingsCache,
     updateDailyDataField, // PATCH 2
     getBlockedKkList,
+    getBlockedKtpList,
+    addBlockedKtp,
+    removeBlockedKtp,
     addBlockedKk,
     removeBlockedKk,
     getBlockedPhoneList,
@@ -231,6 +234,18 @@ async function sendMainMenu(sock: WASocket, remoteJid: string, isAdmin: boolean)
     if (isAdmin) finalMenu += `\n\n${ADMIN_LAUNCHER_LINE}`;
     await sock.sendMessage(remoteJid, { text: finalMenu });
     console.log(`✅ Menu teks terkirim ke ${remoteJid} (isAdmin: ${isAdmin})`);
+}
+
+function buildBlockedKtpMenuText(): string {
+    return [
+        '🛡️ *KELOLA BLOKIR NO KTP*',
+        '',
+        '1️⃣ Tambah No KTP ke blokir',
+        '2️⃣ Lihat daftar No KTP terblokir',
+        '3️⃣ Buka blokir No KTP',
+        '',
+        '0️⃣ Kembali ke Menu Admin',
+    ].join('\n');
 }
 
 function buildBlockedKkMenuText(): string {
@@ -2460,6 +2475,9 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                         } else if (normalized === '15') {
                             adminFlowByPhone.set(senderPhone, 'BLOCKED_PHONE_MENU');
                             replyText = buildBlockedPhoneMenuText();
+                        } else if (normalized === '16') {
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_KTP_MENU');
+                            replyText = buildBlockedKtpMenuText();
                         } else replyText = '⚠️ Pilihan tidak dikenali.';
                     } else if (currentAdminFlow === 'SETTING_OPERATION_MENU') {
                         if (normalized === '0') {
@@ -2974,7 +2992,79 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                 adminFlowByPhone.set(senderPhone, 'MENU');
                             }
                         }
-                    } else if (currentAdminFlow === 'BLOCKED_KK_MENU') {
+                    
+                    } else if (currentAdminFlow === 'BLOCKED_KTP_MENU') {
+                        if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'MENU');
+                            replyText = ADMIN_MENU_MESSAGE;
+                        } else if (normalized === '1') {
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_KTP_ADD');
+                            replyText = [
+                                '🛡️ *TAMBAH BLOKIR NO KTP*',
+                                '',
+                                'Ketik No KTP yang ingin diblokir (16 digit).',
+                                'Anda bisa tambah alasan setelah tanda |',
+                                'Contoh: 3173010202020001 | KTP bermasalah',
+                                '',
+                                '_Ketik 0 untuk kembali._'
+                            ].join('\n');
+                        } else if (normalized === '2') {
+                            const list = await getBlockedKtpList(200);
+                            if (list.length === 0) {
+                                replyText = '📂 Belum ada No KTP yang diblokir.';
+                            } else {
+                                const lines = ['📋 *DAFTAR NO KTP TERBLOKIR*', ''];
+                                list.forEach((row: any, idx: number) => {
+                                    const reasonText = row.reason ? ` - ${row.reason}` : '';
+                                    lines.push(`${idx + 1}. ${row.no_ktp}${reasonText}`);
+                                });
+                                replyText = lines.join('\n');
+                            }
+                            replyText += '\n\n' + buildBlockedKtpMenuText();
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_KTP_MENU');
+                        } else if (normalized === '3') {
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_KTP_DELETE');
+                            replyText = [
+                                '🛡️ *HAPUS BLOKIR NO KTP*',
+                                '',
+                                'Ketik No KTP yang ingin dihapus blokirnya.',
+                                '',
+                                '_Ketik 0 untuk kembali._'
+                            ].join('\n');
+                        } else {
+                            replyText = '⚠️ Pilihan tidak dikenali. Ketik 1, 2, 3, atau 0.';
+                        }
+                    } else if (currentAdminFlow === 'BLOCKED_KTP_ADD') {
+                        if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_KTP_MENU');
+                            replyText = buildBlockedKtpMenuText();
+                        } else {
+                            const [rawKtp, ...reasonParts] = rawTrim.split('|');
+                            const reason = reasonParts.join('|').trim();
+                            const result = await addBlockedKtp(rawKtp, reason);
+                            if (result.success) {
+                                replyText = `✅ ${result.message}`;
+                            } else {
+                                replyText = `❌ ${result.message}`;
+                            }
+                            replyText += '\n\n' + buildBlockedKtpMenuText();
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_KTP_MENU');
+                        }
+                    } else if (currentAdminFlow === 'BLOCKED_KTP_DELETE') {
+                        if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_KTP_MENU');
+                            replyText = buildBlockedKtpMenuText();
+                        } else {
+                            const result = await removeBlockedKtp(rawTrim);
+                            if (result.success) {
+                                replyText = `✅ ${result.message}`;
+                            } else {
+                                replyText = `❌ ${result.message}`;
+                            }
+                            replyText += '\n\n' + buildBlockedKtpMenuText();
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_KTP_MENU');
+                        }
+} else if (currentAdminFlow === 'BLOCKED_KK_MENU') {
                         if (normalized === '0') {
                             adminFlowByPhone.set(senderPhone, 'MENU');
                             replyText = ADMIN_MENU_MESSAGE;

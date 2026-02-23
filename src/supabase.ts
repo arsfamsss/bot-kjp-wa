@@ -233,6 +233,12 @@ export async function checkDuplicatesBatch(
     });
 }
 
+export type BlockedKtpItem = {
+    no_ktp: string;
+    reason?: string | null;
+    created_at?: string;
+};
+
 export type BlockedKkItem = {
     no_kk: string;
     reason?: string | null;
@@ -1394,4 +1400,119 @@ export async function markOfferedReregister(senderPhone: string): Promise<void> 
     } catch (err) {
         console.error('❌ markOfferedReregister error:', err);
     }
+}
+
+
+export async function getBlockedKtpList(limit: number = 50): Promise<BlockedKtpItem[]> {
+    const { data, error } = await supabase
+        .from('blocked_ktp')
+        .select('no_ktp, reason, created_at')
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+    if (error) {
+        if (error.code !== '42P01') {
+            console.error('Error getBlockedKtpList:', error);
+        }
+        return [];
+    }
+
+    return (data || []) as BlockedKtpItem[];
+}
+
+export async function addBlockedKtp(noKtpRaw: string, reason?: string): Promise<{ success: boolean; message: string }> {
+    const noKtp = noKtpRaw.replace(/D/g, '');
+    if (noKtp.length !== 16) {
+        return { success: false, message: 'No KTP harus 16 digit.' };
+    }
+
+    const payload: any = {
+        no_ktp: noKtp,
+        reason: (reason || '').trim() || null,
+    };
+
+    const { error } = await supabase
+        .from('blocked_ktp')
+        .upsert(payload, { onConflict: 'no_ktp' });
+
+    if (error) {
+        if (error.code === '42P01') {
+            return { success: false, message: 'Tabel blocked_ktp belum dibuat di database.' };
+        }
+        console.error('Error addBlockedKtp:', error);
+        return { success: false, message: 'Gagal menyimpan KTP ke daftar blokir.' };
+    }
+
+    return { success: true, message: `No KTP ${noKtp} berhasil diblokir.` };
+}
+
+export async function removeBlockedKtp(noKtpRaw: string): Promise<{ success: boolean; message: string }> {
+    const noKtp = noKtpRaw.replace(/D/g, '');
+    if (noKtp.length !== 16) {
+        return { success: false, message: 'No KTP harus 16 digit.' };
+    }
+
+    const { count, error } = await supabase
+        .from('blocked_ktp')
+        .delete({ count: 'exact' })
+        .eq('no_ktp', noKtp);
+
+    if (error) {
+        if (error.code === '42P01') {
+            return { success: false, message: 'Tabel blocked_ktp belum dibuat di database.' };
+        }
+        console.error('Error removeBlockedKtp:', error);
+        return { success: false, message: 'Gagal menghapus KTP dari daftar blokir.' };
+    }
+
+    if ((count || 0) === 0) {
+        return { success: false, message: `No KTP ${noKtp} tidak ditemukan di daftar blokir.` };
+    }
+
+    return { success: true, message: `No KTP ${noKtp} berhasil dibuka blokirnya.` };
+}
+
+export async function checkBlockedKtpBatch(items: LogItem[]): Promise<LogItem[]> {
+    const activeItems = items.filter(it => it.status === 'OK' && it.parsed.no_ktp);
+    if (activeItems.length === 0) return items;
+
+    const ktpValues = Array.from(new Set(activeItems.map(it => it.parsed.no_ktp)));
+    const { data, error } = await supabase
+        .from('blocked_ktp')
+        .select('no_ktp, reason')
+        .in('no_ktp', ktpValues);
+
+    if (error) {
+        if (error.code !== '42P01') {
+            console.error('Error checkBlockedKtpBatch:', error);
+        }
+        return items;
+    }
+
+    const blockedMap = new Map<string, string | null>();
+    (data || []).forEach((row: any) => {
+        blockedMap.set(row.no_ktp, row.reason || null);
+    });
+
+    if (blockedMap.size === 0) return items;
+
+    return items.map(item => {
+        if (item.status !== 'OK') return item;
+
+        const reason = blockedMap.get(item.parsed.no_ktp);
+        if (reason === undefined) return item;
+
+        return {
+            ...item,
+            status: 'SKIP_FORMAT',
+            errors: [
+                ...item.errors,
+                {
+                    field: 'no_ktp',
+                    type: 'ktp_blocked',
+                    detail: 'KTP Telah Mencapai Batas 5x Pendaftaran Bulan ini'
+                }
+            ]
+        };
+    });
 }
