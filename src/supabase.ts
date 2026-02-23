@@ -1403,10 +1403,26 @@ export async function markOfferedReregister(senderPhone: string): Promise<void> 
 }
 
 
+export function getStartOfCurrentMonthUTC(): string {
+    const now = new Date();
+    const wibYear = parseInt(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Jakarta', year: 'numeric' }).format(now));
+    const wibMonth = parseInt(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Jakarta', month: 'numeric' }).format(now));
+    const isoStringWIB = `${wibYear}-${String(wibMonth).padStart(2, '0')}-01T00:00:00.000+07:00`;
+    return new Date(isoStringWIB).toISOString();
+}
+
 export async function getBlockedKtpList(limit: number = 50): Promise<BlockedKtpItem[]> {
+    const startOfMonth = getStartOfCurrentMonthUTC();
+
+    // Auto-cleanup fire and forget
+    supabase.from('blocked_ktp').delete().lt('created_at', startOfMonth).then(({error}) => {
+        if(error && error.code !== '42P01') console.error('Auto-cleanup blocked KTP error:', error);
+    });
+
     const { data, error } = await supabase
         .from('blocked_ktp')
         .select('no_ktp, reason, created_at')
+        .gte('created_at', startOfMonth)
         .order('created_at', { ascending: false })
         .limit(limit);
 
@@ -1476,11 +1492,13 @@ export async function checkBlockedKtpBatch(items: LogItem[]): Promise<LogItem[]>
     const activeItems = items.filter(it => it.status === 'OK' && it.parsed.no_ktp);
     if (activeItems.length === 0) return items;
 
+    const startOfMonth = getStartOfCurrentMonthUTC();
     const ktpValues = Array.from(new Set(activeItems.map(it => it.parsed.no_ktp)));
     const { data, error } = await supabase
         .from('blocked_ktp')
         .select('no_ktp, reason')
-        .in('no_ktp', ktpValues);
+        .in('no_ktp', ktpValues)
+        .gte('created_at', startOfMonth);
 
     if (error) {
         if (error.code !== '42P01') {
