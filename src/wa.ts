@@ -2470,14 +2470,14 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                 '_Ketik 0 untuk batal._'
                             ].join('\n');
                         } else if (normalized === '14') {
-                            adminFlowByPhone.set(senderPhone, 'BLOCKED_KK_MENU');
-                            replyText = buildBlockedKkMenuText();
-                        } else if (normalized === '15') {
                             adminFlowByPhone.set(senderPhone, 'BLOCKED_PHONE_MENU');
                             replyText = buildBlockedPhoneMenuText();
-                        } else if (normalized === '16') {
+                        } else if (normalized === '15') {
                             adminFlowByPhone.set(senderPhone, 'BLOCKED_KTP_MENU');
                             replyText = buildBlockedKtpMenuText();
+                        } else if (normalized === '16') {
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_KK_MENU');
+                            replyText = buildBlockedKkMenuText();
                         } else replyText = '⚠️ Pilihan tidak dikenali.';
                     } else if (currentAdminFlow === 'SETTING_OPERATION_MENU') {
                         if (normalized === '0') {
