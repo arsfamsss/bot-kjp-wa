@@ -1421,7 +1421,7 @@ export async function getBlockedKtpList(limit: number = 50): Promise<BlockedKtpI
 }
 
 export async function addBlockedKtp(noKtpRaw: string, reason?: string): Promise<{ success: boolean; message: string }> {
-    const noKtp = noKtpRaw.replace(/D/g, '');
+    const noKtp = noKtpRaw.replace(/\D/g, '');
     if (noKtp.length !== 16) {
         return { success: false, message: 'No KTP harus 16 digit.' };
     }
@@ -1440,14 +1440,14 @@ export async function addBlockedKtp(noKtpRaw: string, reason?: string): Promise<
             return { success: false, message: 'Tabel blocked_ktp belum dibuat di database.' };
         }
         console.error('Error addBlockedKtp:', error);
-        return { success: false, message: 'Gagal menyimpan KTP ke daftar blokir.' };
+        return { success: false, message: 'Gagal database: ' + error.message };
     }
 
     return { success: true, message: `No KTP ${noKtp} berhasil diblokir.` };
 }
 
 export async function removeBlockedKtp(noKtpRaw: string): Promise<{ success: boolean; message: string }> {
-    const noKtp = noKtpRaw.replace(/D/g, '');
+    const noKtp = noKtpRaw.replace(/\D/g, '');
     if (noKtp.length !== 16) {
         return { success: false, message: 'No KTP harus 16 digit.' };
     }
@@ -1462,7 +1462,7 @@ export async function removeBlockedKtp(noKtpRaw: string): Promise<{ success: boo
             return { success: false, message: 'Tabel blocked_ktp belum dibuat di database.' };
         }
         console.error('Error removeBlockedKtp:', error);
-        return { success: false, message: 'Gagal menghapus KTP dari daftar blokir.' };
+        return { success: false, message: 'Gagal database: ' + error.message };
     }
 
     if ((count || 0) === 0) {
