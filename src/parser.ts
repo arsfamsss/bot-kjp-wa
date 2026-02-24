@@ -44,12 +44,14 @@ function cleanName(raw: string): string {
     const blacklistRegex = new RegExp(`\\b(${blacklist.join('|')})\\b`, 'gi');
     cleaned = cleaned.replace(blacklistRegex, '');
 
-    // 3. Hapus angka saja (sisakan huruf, spasi, tanda kurung, dll)
-    // Terima apa adanya nama yang di-input user, kecuali angka
-    cleaned = cleaned.replace(/[0-9]/g, '');
+    // 3. Angka TIDAK dihapus dari nama (dibiarkan apa adanya)
 
-    // 4. Hapus kata "nama" di awal (case insensitive), termasuk dengan tanda baca
-    cleaned = cleaned.replace(/^\s*nama\s*[:\-]?\s*/i, '');
+    // 4. Hapus kata "nama" atau "nm" (hanya kata utuh, case-insensitive)
+    //    Menggunakan \b agar nama seperti "Purnama" tidak rusak menjadi "Pur"
+    cleaned = cleaned.replace(/\b(nama|nm)\b/gi, '');
+
+    // 5. Hapus tanda baca: =, :, ;, dan ,
+    cleaned = cleaned.replace(/[=:;,]/g, '');
 
     // 5. Rapikan spasi berlebih
     return cleaned.replace(/\s+/g, ' ').trim();
