@@ -1214,6 +1214,7 @@ export function formatOpenTimeString(settings: BotSettings): string {
 }
 
 // Render template pesan tutup dengan placeholder
+// Render template pesan tutup dengan placeholder
 export function renderCloseMessage(settings: BotSettings): string {
     // Cek apakah sedang dalam MODE TUTUP PANJANG (Manual Override).
     // Pesan manual hanya dipakai jika waktu sekarang benar-benar berada
@@ -1232,10 +1233,14 @@ export function renderCloseMessage(settings: BotSettings): string {
             const jamBuka = `${dateStr} Pukul ${timeStr} WIB`;
 
             // Custom Message for Long Term Close
-            return settings.close_message_template
-                .replace(/{JAM_TUTUP}/g, 'LIBUR SEMENTARA')
-                .replace(/{JAM_BUKA}/g, jamBuka)
-                .replace('(Maintenance Harian)', '(Sedang Libur/Tutup)');
+            return `⛔ *MOHON MAAF, SISTEM SEDANG TUTUP (Maintenance dan rekap Harian) ⛔*
+
+🕒 Jam Tutup: *00.00 - 06.00 WIB*
+✅ Buka Kembali: *${jamBuka}*
+
+📌 Data yang Anda kirim sekarang *tidak akan diproses*. Silakan kirim ulang setelah jam buka untuk pendaftaran besok.
+
+Terima kasih atas pengertiannya. 🙏`;
         }
     }
 
@@ -1243,9 +1248,14 @@ export function renderCloseMessage(settings: BotSettings): string {
     const jamTutup = formatCloseTimeString(settings);
     const jamBuka = formatOpenTimeString(settings);
 
-    return settings.close_message_template
-        .replace(/{JAM_TUTUP}/g, jamTutup)
-        .replace(/{JAM_BUKA}/g, jamBuka);
+    return `⛔ *MOHON MAAF, SISTEM SEDANG TUTUP (Maintenance dan rekap Harian) ⛔*
+
+🕒 Jam Tutup: *${jamTutup}*
+✅ Buka Kembali: *Pukul ${jamBuka} WIB*
+
+📌 Data yang Anda kirim sekarang *tidak akan diproses*. Silakan kirim ulang setelah jam buka untuk pendaftaran besok.
+
+Terima kasih atas pengertiannya. 🙏`;
 }
 
 // Refresh cache settings (dipanggil setelah admin update)

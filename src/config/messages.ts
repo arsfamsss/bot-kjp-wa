@@ -213,7 +213,7 @@ export const ADMIN_MENU_MESSAGE = [
 export const ADMIN_PHONES_RAW = ['085641411818', '08568511113'];
 
 export const CLOSE_MESSAGE_TEMPLATE_UNIFIED = [
-    '⛔ *MOHON MAAF, SISTEM SEDANG TUTUP (Maintenance Harian) ⛔*',
+    '⛔ *MOHON MAAF, SISTEM SEDANG TUTUP (Maintenance dan rekap Harian) ⛔*',
     '',
     '🕒 Jam Tutup: 00.00 - 06.00 WIB',
     '✅ Buka Kembali: Pukul 06.01 WIB',
