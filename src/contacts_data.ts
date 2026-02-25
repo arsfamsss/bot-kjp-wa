@@ -20,7 +20,7 @@ export const KNOWN_CONTACTS: Record<string, string> = {
     '6289633628259': 'Dewi Timbul',
     '62887433302100': 'Dhafin 09',
     '6281240313573': 'Dila Tri',
-    '6285811359637': 'DINA',
+    '6285811359637': 'Dina Ely',
     '6285886970323': 'Dini Afif',
     '6281355330105': 'Dini Dapur Dinwati Cakpul',
     '6285771269729': 'Dirta Yasa Rt 02',
