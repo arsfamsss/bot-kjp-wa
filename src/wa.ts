@@ -137,6 +137,23 @@ setInterval(() => {
 
 let sock: WASocket;
 
+// --- EXPONENTIAL BACKOFF RECONNECT ---
+let retryCount = 0;
+const MAX_RETRIES = 10;
+const BASE_DELAY_MS = 3000;
+
+function reconnectWithBackoff(): void {
+    if (retryCount >= MAX_RETRIES) {
+        console.log(`⛔ Gagal reconnect setelah ${MAX_RETRIES} percobaan. Butuh restart manual.`);
+        retryCount = 0;
+        return;
+    }
+    const delay = Math.min(BASE_DELAY_MS * Math.pow(2, retryCount), 60000);
+    retryCount++;
+    console.log(`🔄 Reconnect percobaan ${retryCount}/${MAX_RETRIES} dalam ${delay / 1000}s...`);
+    setTimeout(() => connectToWhatsApp(), delay);
+}
+
 
 
 // --- UTILS: LID LOOKUP VIA STORE ---
@@ -368,14 +385,19 @@ export async function connectToWhatsApp() {
         if (connection === 'close') {
             const err = lastDisconnect?.error as Boom;
             const statusCode = err?.output?.statusCode;
-            const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-            console.log('❌ Koneksi terputus:', err);
+            const noReconnectCodes = [DisconnectReason.loggedOut, DisconnectReason.forbidden, DisconnectReason.connectionReplaced, DisconnectReason.badSession];
+            const shouldReconnect = !noReconnectCodes.includes(statusCode as number);
+            console.log('❌ Koneksi terputus:', err?.message ?? err);
             console.log('👉 Status Code:', statusCode);
-            console.log('🔄 Reconnect otomatis?', shouldReconnect);
-
-            if (shouldReconnect) connectToWhatsApp();
-            else console.log('⛔ Sesi logout. Hapus folder auth_info_baileys dan scan ulang.');
+            console.log('🔄 Reconnect?', shouldReconnect);
+            if (shouldReconnect) {
+                reconnectWithBackoff();
+            } else {
+                retryCount = 0;
+                console.log('⛔ Sesi logout/invalid. Hapus folder auth_info_baileys dan scan ulang.');
+            }
         } else if (connection === 'open') {
+            retryCount = 0; // Reset backoff counter saat koneksi berhasil
             console.log('✅ WhatsApp Terhubung! Siap menerima pesan.');
         }
     });
