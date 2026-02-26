@@ -335,14 +335,14 @@ export async function processRawMessageToLogJson(params: {
     // ✅ PENTING: KK BOLEH SAMA DALAM 1 PESAN (Sesuai Request)
     // ✅ Tapi KJP dan KTP/NIK Tetap TIDAK BOLEH SAMA DALAM 1 PESAN
 
-    const occurrences = new Map<string, { itemIdx: number; field: 'no_kjp' | 'no_ktp' }[]>();
+    const occurrences = new Map<string, { itemIdx: number; field: 'no_kjp' | 'no_ktp' | 'nama' }[]>();
 
     items.forEach((it, idx) => {
         // PERBAIKAN: Hanya cek item yang statusnya masih OK
         if (it.status !== 'OK') return;
 
         // Cek duplikat internal hanya untuk KJP dan KTP
-        (['no_kjp', 'no_ktp'] as const).forEach((field) => {
+        (['no_kjp', 'no_ktp', 'nama'] as const).forEach((field) => {
             const val = it.parsed[field];
             if (!val) return;
 
@@ -363,10 +363,16 @@ export async function processRawMessageToLogJson(params: {
             const it = items[itemIdx];
             if (it.status === 'OK') {
                 it.status = 'SKIP_FORMAT';
+                
+                let detailMsg = `Data ini duplikat (${field === 'no_kjp' ? 'No Kartu' : 'No KTP'} sama dengan data sebelumnya dalam pesan ini).`;
+                if ((field as any) === 'nama') {
+                    detailMsg = `❌ Maaf, nama ${it.parsed.nama} double. silahkan edit salah satu nama yg duplikat`;
+                }
+
                 it.errors.push({
                     field,
-                    type: 'duplicate_in_message',
-                    detail: `Data ini duplikat (${field === 'no_kjp' ? 'No Kartu' : 'No KTP'} sama dengan data sebelumnya dalam pesan ini).`,
+                    type: 'duplicate_in_message' as any,
+                    detail: detailMsg,
                 });
             }
         });
