@@ -24,13 +24,14 @@ export const FORMAT_DAFTAR_MESSAGE = [
     '',
     'Mau ambil sembako dimana?',
     '',
-    '~1. PASARJAYA~ (⛔ Tutup Sementara)',
+    '1️⃣ *PASARJAYA*',
+    '(Jakgrosir Kedoya, Rusun Pesakih, Mini DC Cengkareng, Bambu Larangan)',
     '',
     '2️⃣ *DHARMAJAYA*',
     '(Kosambi,Kapuk Jagal,Pulogadung,Cakung)',
     '',
-    'Silakan ketik *2* untuk lanjut ke Dharmajaya.',
-    'Ketik 0 kalau batal 😊',
+    'Silakan ketik *1* atau *2* untuk pilih lokasi.',
+    'Ketik 0 kalau batal 😊'
 ].join('\n');
 
 // --- MENU & MAPPING LOKASI PASARJAYA (NEW) ---

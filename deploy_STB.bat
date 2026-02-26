@@ -12,7 +12,7 @@ set /p commit_msg="Masukkan Pesan Commit: "
 
 if "%commit_msg%"=="" (
     echo [WARNING] Pesan commit kosong! Menggunakan default: "update bot"
-    set commit_msg="update bot"
+    set commit_msg=update bot
 )
 
 echo [GIT] Menambahkan semua perubahan...

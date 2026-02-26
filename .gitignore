@@ -8,3 +8,6 @@ opencode.json
 # Multi-device session files
 auth_info_multi/
 baileys_store_multi.json
+
+# Windows reserved device name (tidak bisa dihapus)
+nul

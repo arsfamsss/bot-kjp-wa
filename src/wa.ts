@@ -1785,19 +1785,9 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                 else if (currentUserFlow === 'SELECT_LOCATION') {
                     // Logic Unified: Pilihan 1 -> Menu Pasarjaya, Pilihan 2 -> Dharmajaya (Auto Process Pending)
                     if (normalized === '1') {
-                        // ⛔ BLOCK PASARJAYA (REQUESTED BY USER)
-                        replyText = [
-                            '⛔ *MOHON MAAF*',
-                            '',
-                            'Layanan pengambilan di **Pasarjaya** saat ini sedang **TUTUP SEMENTARA**.',
-                            '',
-                            'Silakan pilih lokasi lain (Dharmajaya) atau tunggu informasi selanjutnya.',
-                            '',
-                            '_Ketik 0 untuk batal._'
-                        ].join('\n');
-
-                        // JANGAN SET FLOW KE SELECT_PASARJAYA_SUB
-                        // userFlowByPhone.set(senderPhone, 'SELECT_PASARJAYA_SUB');
+                        // ✅ BUKA PASARJAYA - Tampilkan menu sub-lokasi
+                        replyText = MENU_PASARJAYA_LOCATIONS;
+                        userFlowByPhone.set(senderPhone, 'SELECT_PASARJAYA_SUB');
                     } else if (normalized === '2') {
                         // CEK VALIDASI AWAL: DHARMAJAYA WAJIB 4 BARIS
                         const pendingData = pendingRegistrationData.get(senderPhone);
