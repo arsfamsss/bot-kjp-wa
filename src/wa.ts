@@ -2376,18 +2376,16 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                 '',
                                 '📈 *RINGKASAN DATA:*',
                                 `├ Hari Ini: *${stats.todayCount}* data`,
-                                `├ 7 Hari Terakhir: *${stats.weekCount}* data`,
-                                `└ 30 Hari Terakhir: *${stats.monthCount}* data`,
+                                `└ Bulan Ini: *${stats.monthCount}* data`,
                                 '',
                                 '👥 *PENGGUNA AKTIF:*',
                                 `├ Hari Ini: *${stats.activeUsersToday}* orang`,
-                                `├ 7 Hari Terakhir: *${stats.activeUsersWeek}* orang`,
                                 `└ Total Terdaftar: *${stats.totalRegisteredUsers}* orang`,
                             ];
 
                             if (stats.topUsers.length > 0) {
                                 lines.push('');
-                                lines.push('🏆 *TOP 10 PENGIRIM HARI INI:*');
+                                lines.push('🏆 *TOP 20 PENGIRIM HARI INI:*');
                                 stats.topUsers.forEach((u, i) => {
                                     const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '  ';
                                     lines.push(`${medal} ${i + 1}. ${u.name} (${u.count} data)`);
@@ -3005,7 +3003,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                 adminFlowByPhone.set(senderPhone, 'MENU');
                             }
                         }
-                    
+
                     } else if (currentAdminFlow === 'BLOCKED_KTP_MENU') {
                         if (normalized === '0') {
                             adminFlowByPhone.set(senderPhone, 'MENU');
@@ -3077,7 +3075,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             replyText += '\n\n' + buildBlockedKtpMenuText();
                             adminFlowByPhone.set(senderPhone, 'BLOCKED_KTP_MENU');
                         }
-} else if (currentAdminFlow === 'BLOCKED_KK_MENU') {
+                    } else if (currentAdminFlow === 'BLOCKED_KK_MENU') {
                         if (normalized === '0') {
                             adminFlowByPhone.set(senderPhone, 'MENU');
                             replyText = ADMIN_MENU_MESSAGE;

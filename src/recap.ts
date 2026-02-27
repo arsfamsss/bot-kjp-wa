@@ -376,10 +376,10 @@ export async function getGlobalRecap(
             contactName = nameLookup(phone);
         }
 
-        const nameDisplay = contactName ? ` ${contactName}` : '';
+        const nameDisplay = contactName ? contactName : 'Tanpa Nama';
 
         lines.push(`----------------------------------------`);
-        lines.push(`👤 *PENGIRIM ${idx + 1}:${nameDisplay}  (${formatWaPhone(phone)})*`);
+        lines.push(`${idx + 1}. ${nameDisplay}  (${formatWaPhone(phone)})`);
         lines.push(`📥 Jumlah Data: ${items.length}`);
 
         // --- GROUPING PER LOKASI ---

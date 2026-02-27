@@ -1,0 +1,5 @@
+- Updated CetakPDF_Update_data_no_kjp.py to read contacts from CSV (D:\BOT\PERSIAPAN HARIAN KJP\data_no_kjp.csv).
+- Implemented deduplication by phone number.
+- Added sorting by name alphabetically.
+- Updated output filename to CetakPDF_Update_data_no_kjp.pdf.
+- Handled Unicode BOM by using utf-8-sig encoding.

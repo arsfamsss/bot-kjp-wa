@@ -856,7 +856,7 @@ export async function getStatistics(processingDayKey: string): Promise<Dashboard
 
     const topUsers = Array.from(userCounts.entries())
         .sort((a, b) => b[1] - a[1])
-        .slice(0, 10)
+        .slice(0, 20)
         .map(([phone, count]) => ({
             phone,
             name: registeredUsersCache.get(phone) || phone,
