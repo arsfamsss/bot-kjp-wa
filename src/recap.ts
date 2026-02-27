@@ -532,7 +532,8 @@ export async function generateExportData(
 
     // Helper untuk lookup nama
     const getSenderName = (phone: string): string => {
-        let name = dbNamesMap.get(phone) || null;
+        let name: string | null = getContactName(phone);
+        if (!name) name = dbNamesMap.get(phone) || null;
         if (!name && nameLookup) {
             name = nameLookup(phone) || null;
         }

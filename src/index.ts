@@ -1,6 +1,7 @@
 // src/index.ts
 import express from 'express';
 import { connectToWhatsApp } from './wa';
+import { startCsvContactsSync } from './services/csvContactsSync';
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -14,6 +15,10 @@ app.get('/', (req, res) => {
 
 app.listen(port, async () => {
     console.log(`🚀 Server HTTP berjalan di http://localhost:${port}`);
+
+    // JALANKAN BOT WHATSAPP
+    // SYNC CONTACTS DARI CSV (jalankan sebelum bot WA)
+    startCsvContactsSync();
 
     // JALANKAN BOT WHATSAPP
     await connectToWhatsApp();

@@ -75,6 +75,7 @@ import {
     markOfferedReregister,
 } from './supabase';
 import { getProcessingDayKey, getWibIsoDate, shiftIsoDate, isSystemClosed, getWibParts } from './time';
+import { getContactName } from './contacts_data';
 import { parseFlexibleDate, looksLikeDate } from './utils/dateParser';
 import {
     MENU_MESSAGE,
@@ -2236,7 +2237,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                         existing.count++;
                                     } else {
                                         userMap.set(u.sender_phone, {
-                                            name: u.sender_name || getRegisteredUserNameSync(u.sender_phone) || u.sender_phone,
+                                            name: getContactName(u.sender_phone) || u.sender_name || getRegisteredUserNameSync(u.sender_phone) || u.sender_phone,
                                             count: 1
                                         });
                                     }
@@ -2435,7 +2436,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                         minute: '2-digit',
                                         timeZone: 'Asia/Jakarta'
                                     });
-                                    const senderName = getRegisteredUserNameSync(log.sender_phone) || log.sender_phone;
+                                    const senderName = getContactName(log.sender_phone) || getRegisteredUserNameSync(log.sender_phone) || log.sender_phone;
 
                                     // FIX: Ambil dari kolom database langsung, bukan dari property .stats yang mungkin tidak ada di level root row
                                     const okCount = log.stats_ok_count ?? 0;
@@ -2693,7 +2694,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
 
                                 (data as any[]).forEach((row, i) => {
                                     const dateDisplay = String(row.processing_day_key).split('-').reverse().join('-');
-                                    const senderName = getRegisteredUserNameSync(row.sender_phone) || row.sender_phone;
+                                    const senderName = getContactName(row.sender_phone) || getRegisteredUserNameSync(row.sender_phone) || row.sender_phone;
                                     lines.push(`${i + 1}. *${row.nama}* (${dateDisplay})`);
                                     lines.push(`   💳 Kartu: ${row.no_kjp}`);
                                     lines.push(`   📱 Pengirim: ${senderName}`);
@@ -3547,10 +3548,11 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
 
                                 if (excelDataRaw && excelDataRaw.length > 0) {
                                     // ENRICH & SORT BY NAME
-                                    // PRIORITAS: 1. Cache/LID (Nama Terbaru), 2. DB History (Nama Lama/Snapshot), 3. No HP
+                                    // PRIORITAS: 1. contacts_data.ts (manual), 2. Cache/LID (Nama Terbaru), 3. DB History, 4. No HP
                                     const enriched = excelDataRaw.map((row: any) => {
+                                        const contactName = getContactName(row.sender_phone);
                                         const currentName = getRegisteredUserNameSync(row.sender_phone);
-                                        const finalSender = currentName || row.sender_name || row.sender_phone;
+                                        const finalSender = contactName || currentName || row.sender_name || row.sender_phone;
                                         return { ...row, sender_name: finalSender };
                                     });
 
@@ -3604,8 +3606,9 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
 
                                 if (excelDataRaw && excelDataRaw.length > 0) {
                                     const enriched = excelDataRaw.map((row: any) => {
+                                        const contactName = getContactName(row.sender_phone);
                                         const currentName = getRegisteredUserNameSync(row.sender_phone);
-                                        const finalSender = currentName || row.sender_name || row.sender_phone;
+                                        const finalSender = contactName || currentName || row.sender_name || row.sender_phone;
                                         return { ...row, sender_name: finalSender };
                                     });
 
@@ -3680,8 +3683,9 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                     // ENRICH & SORT BY NAME
                                     // PRIORITAS: 1. Cache/LID (Nama Terbaru), 2. DB History (Nama Lama/Snapshot), 3. No HP
                                     const enriched = excelDataRaw.map((row: any) => {
+                                        const contactName = getContactName(row.sender_phone);
                                         const currentName = getRegisteredUserNameSync(row.sender_phone);
-                                        const finalSender = currentName || row.sender_name || row.sender_phone;
+                                        const finalSender = contactName || currentName || row.sender_name || row.sender_phone;
                                         return { ...row, sender_name: finalSender };
                                     });
 
