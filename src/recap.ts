@@ -379,7 +379,7 @@ export async function getGlobalRecap(
         const nameDisplay = contactName ? contactName : 'Tanpa Nama';
 
         lines.push(`----------------------------------------`);
-        lines.push(`${idx + 1}. ${nameDisplay}  (${formatWaPhone(phone)})`);
+        lines.push(`${idx + 1}. *${nameDisplay}*  (${formatWaPhone(phone)})`);
         lines.push(`📥 Jumlah Data: ${items.length}`);
 
         // --- GROUPING PER LOKASI ---
