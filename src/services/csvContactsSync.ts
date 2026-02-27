@@ -1,5 +1,5 @@
 // src/services/csvContactsSync.ts
-// Membaca data_no_kjp.csv dari folder PERSIAPAN HARIAN KJP,
+// Membaca data_no_kjp.csv dari folder data/ di root bot,
 // mengupdate in-memory contactsMap di contacts_data.ts secara langsung.
 // Tidak perlu restart bot — aktif langsung saat CSV berubah.
 
@@ -7,7 +7,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { updateContactsMap, getContactsCount } from '../contacts_data';
 
-const CSV_PATH = path.resolve('D:/BOT/PERSIAPAN HARIAN KJP/data_no_kjp.csv');
+// Path CSV di VPS Linux: /root/bot-kjp/data/data_no_kjp.csv
+// __dirname = /root/bot-kjp/dist/services → naik 2 level → /root/bot-kjp/data/
+const CSV_PATH = path.join(__dirname, '..', '..', 'data', 'data_no_kjp.csv');
 
 // Interval polling watchFile (ms) — cek setiap 60 detik
 const POLL_INTERVAL_MS = 60_000;
