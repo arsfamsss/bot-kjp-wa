@@ -174,6 +174,20 @@ const DEFAULT_CLOSE_START_MINUTE = 0;
 const DEFAULT_CLOSE_END_HOUR = 6;
 const DEFAULT_CLOSE_END_MINUTE = 0;
 
+function formatOperationStatus(settings: {
+    close_hour_start: number;
+    close_minute_start: number;
+    close_hour_end: number;
+    close_minute_end: number;
+}): string {
+    const start = settings.close_hour_start * 60 + settings.close_minute_start;
+    const end = settings.close_hour_end * 60 + settings.close_minute_end;
+    if (start === end) return '24 jam (tanpa jam tutup)';
+    const startText = `${String(settings.close_hour_start).padStart(2, '0')}.${String(settings.close_minute_start).padStart(2, '0')}`;
+    const endText = `${String(settings.close_hour_end).padStart(2, '0')}.${String(settings.close_minute_end).padStart(2, '0')}`;
+    return `${startText} - ${endText} WIB`;
+}
+
 function parseAdminWibDateTimeToIso(input: string): { iso: string; display: string } | null {
     const cleaned = (input || '')
         .normalize('NFKC')
@@ -2467,16 +2481,17 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             ].join('\n');
                         } else if (normalized === '13') {
                             const currentSettings = await getBotSettings();
-                            const currentTimeStr = formatCloseTimeString(currentSettings);
+                            const currentTimeStr = formatOperationStatus(currentSettings);
                             adminFlowByPhone.set(senderPhone, 'SETTING_OPERATION_MENU');
 
                             replyText = [
                                 '⏰ *ATUR STATUS BOT*',
                                 '',
-                                `📌 Saat ini tutup jam: *${currentTimeStr}*`,
+                                `📌 Status saat ini: *${currentTimeStr}*`,
                                 '',
                                 '1️⃣ Buka Sekarang',
                                 '2️⃣ Tutup Sekarang',
+                                '3️⃣ Kembali ke Default (00.00 - 06.00)',
                                 '',
                                 '_Ketik 0 untuk batal._'
                             ].join('\n');
@@ -2497,10 +2512,10 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             replyText = ADMIN_MENU_MESSAGE;
                         } else if (normalized === '1') {
                             const ok = await updateBotSettings({
-                                close_hour_start: DEFAULT_CLOSE_START_HOUR,
-                                close_minute_start: DEFAULT_CLOSE_START_MINUTE,
-                                close_hour_end: DEFAULT_CLOSE_END_HOUR,
-                                close_minute_end: DEFAULT_CLOSE_END_MINUTE,
+                                close_hour_start: 0,
+                                close_minute_start: 0,
+                                close_hour_end: 0,
+                                close_minute_end: 0,
                                 manual_close_start: null,
                                 manual_close_end: null,
                             });
@@ -2513,9 +2528,9 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                 ? [
                                     '✅ *BOT BERHASIL DIBUKA SEKARANG*',
                                     '',
-                                    'Jam operasional kembali ke default:',
-                                    '🟢 BUKA: *06.01 - 23.59 WIB*',
-                                    '🔴 TUTUP: *00.00 - 06.00 WIB*',
+                                    'Status sekarang: *24 jam buka* (tanpa jam tutup).',
+                                    'Untuk mengaktifkan lagi jadwal normal, pilih:',
+                                    '3️⃣ *Kembali ke Default (00.00 - 06.00)*',
                                 ].join('\n')
                                 : '❌ Gagal membuka bot. Coba lagi.';
                         } else if (normalized === '2') {
@@ -2530,22 +2545,46 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                 '',
                                 '_Ketik 0 untuk batal._',
                             ].join('\n');
+                        } else if (normalized === '3') {
+                            const ok = await updateBotSettings({
+                                close_hour_start: DEFAULT_CLOSE_START_HOUR,
+                                close_minute_start: DEFAULT_CLOSE_START_MINUTE,
+                                close_hour_end: DEFAULT_CLOSE_END_HOUR,
+                                close_minute_end: DEFAULT_CLOSE_END_MINUTE,
+                                manual_close_start: null,
+                                manual_close_end: null,
+                            });
+
+                            clearBotSettingsCache();
+                            closeWindowDraftByPhone.delete(senderPhone);
+                            adminFlowByPhone.set(senderPhone, 'MENU');
+
+                            replyText = ok
+                                ? [
+                                    '✅ *JADWAL DEFAULT BERHASIL DIAKTIFKAN*',
+                                    '',
+                                    'Jam operasional sekarang:',
+                                    '🟢 BUKA: *06.01 - 23.59 WIB*',
+                                    '🔴 TUTUP: *00.00 - 06.00 WIB*',
+                                ].join('\n')
+                                : '❌ Gagal mengaktifkan jadwal default. Coba lagi.';
                         } else {
-                            replyText = '⚠️ Pilihan tidak dikenali. Ketik 1, 2, atau 0.';
+                            replyText = '⚠️ Pilihan tidak dikenali. Ketik 1, 2, 3, atau 0.';
                         }
                     } else if (currentAdminFlow === 'SETTING_MANUAL_CLOSE_START') {
                         if (normalized === '0') {
                             closeWindowDraftByPhone.delete(senderPhone);
                             adminFlowByPhone.set(senderPhone, 'SETTING_OPERATION_MENU');
                             const currentSettings = await getBotSettings();
-                            const currentTimeStr = formatCloseTimeString(currentSettings);
+                            const currentTimeStr = formatOperationStatus(currentSettings);
                             replyText = [
                                 '⏰ *ATUR STATUS BOT*',
                                 '',
-                                `📌 Saat ini tutup jam: *${currentTimeStr}*`,
+                                `📌 Status saat ini: *${currentTimeStr}*`,
                                 '',
                                 '1️⃣ Buka Sekarang',
                                 '2️⃣ Tutup Sekarang',
+                                '3️⃣ Kembali ke Default (00.00 - 06.00)',
                                 '',
                                 '_Ketik 0 untuk batal._',
                             ].join('\n');
@@ -2575,14 +2614,15 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             closeWindowDraftByPhone.delete(senderPhone);
                             adminFlowByPhone.set(senderPhone, 'SETTING_OPERATION_MENU');
                             const currentSettings = await getBotSettings();
-                            const currentTimeStr = formatCloseTimeString(currentSettings);
+                            const currentTimeStr = formatOperationStatus(currentSettings);
                             replyText = [
                                 '⏰ *ATUR STATUS BOT*',
                                 '',
-                                `📌 Saat ini tutup jam: *${currentTimeStr}*`,
+                                `📌 Status saat ini: *${currentTimeStr}*`,
                                 '',
                                 '1️⃣ Buka Sekarang',
                                 '2️⃣ Tutup Sekarang',
+                                '3️⃣ Kembali ke Default (00.00 - 06.00)',
                                 '',
                                 '_Ketik 0 untuk batal._',
                             ].join('\n');
