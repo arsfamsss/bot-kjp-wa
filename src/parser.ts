@@ -60,10 +60,17 @@ function resolveJenisKartu(noKjp: string, textManual: string): {
     prefix_type: string | null;
 } {
     const prefix8 = noKjp.length >= 8 ? noKjp.substring(0, 8) : null;
-    const fromPrefix = prefix8 ? getCardPrefixType(prefix8) : null;
+    let fromPrefix = prefix8 ? getCardPrefixType(prefix8) : null;
     const fromText = normalizeCardType(textManual);
     const hasManualText = textManual.trim().length > 0;
     const manualInvalid = hasManualText && !fromText;
+
+    const isLegacyKjpPrefix = prefix8 === '50494812';
+    const isLegacyKjpLength = noKjp.length === 17 || noKjp.length === 18;
+
+    if (isLegacyKjpPrefix && fromPrefix === 'KJP' && !isLegacyKjpLength) {
+        fromPrefix = null;
+    }
 
     if (fromPrefix) {
         // Prefix dikenali — selalu menang
@@ -312,6 +319,17 @@ export function validateBlockToItem(block: string[], index: number, location: 'P
             type: 'invalid_prefix',
             detail: `Nomor Kartu tidak valid. Nomor Kartu harus diawali dengan 504948.`,
         });
+    } else if (
+        location !== 'PASARJAYA' &&
+        parsed.no_kjp.startsWith('50494812') &&
+        parsed.jenis_kartu_manual === 'KJP' &&
+        !(parsed.no_kjp.length === 17 || parsed.no_kjp.length === 18)
+    ) {
+        errors.push({
+            field: 'no_kjp',
+            type: 'card_type_mismatch',
+            detail: `Untuk prefix 50494812, KJP lama hanya valid jika panjang nomor 17-18 digit. Nomor ${parsed.no_kjp} tidak memenuhi aturan itu.`,
+        });
     } else if (location !== 'PASARJAYA' && parsed.jenis_kartu_manual_invalid) {
         const kartuList = getCardTypeChoicesText();
         const inputManual = (parsed.jenis_kartu_manual_input || '').trim() || '-';
@@ -325,10 +343,11 @@ export function validateBlockToItem(block: string[], index: number, location: 'P
         !parsed.jenis_kartu_prefix &&
         parsed.jenis_kartu_manual === 'KJP'
     ) {
+        const prefix8 = parsed.no_kjp.substring(0, 8);
         errors.push({
             field: 'no_kjp',
             type: 'card_type_mismatch',
-            detail: `KJP hanya untuk prefix 50494885. Nomor ${parsed.no_kjp} bukan prefix KJP, mohon tulis jenis kartu yang sesuai.`,
+            detail: `Jenis KJP tidak cocok untuk prefix ${prefix8}. Gunakan jenis kartu yang sesuai prefix, atau daftarkan prefix ini sebagai KJP di Menu Admin 17.`,
         });
     } else if (location !== 'PASARJAYA' && !parsed.jenis_kartu) {
         // Validasi JENIS KARTU (Dharmajaya only): prefix belum dikenal dan tidak ada teks manual
