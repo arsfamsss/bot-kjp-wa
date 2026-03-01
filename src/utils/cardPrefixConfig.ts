@@ -4,6 +4,7 @@ import * as path from 'path';
 const CONFIG_FILE = path.join(process.cwd(), 'card_prefix_map.json');
 const DEFAULT_PREFIX_MAP: Record<string, string> = {
     '50494885': 'KJP',
+    '50494812': 'KJP',
 };
 
 let prefixCache: Record<string, string> | null = null;
@@ -20,9 +21,8 @@ function sanitizePrefixMap(input: unknown): Record<string, string> {
         }
     }
 
-    if (!clean['50494885']) {
-        clean['50494885'] = 'KJP';
-    }
+    if (!clean['50494885']) clean['50494885'] = 'KJP';
+    if (!clean['50494812']) clean['50494812'] = 'KJP';
 
     return clean;
 }
