@@ -3,8 +3,7 @@ import { resolveCardTypeLabel } from '../utils/cardType';
 
 export const generateKJPExcel = (data: any[]): Buffer => {
     // 1. Prepare Header and Data
-    // Header: No, Nama, No KJP, No KTP, No KK, Tgl Lahir, Lokasi
-    const headers = ["No", "Nama", "Jenis/No Kartu", "No KTP", "No KK", "Tgl Lahir", "Lokasi"];
+    const headers = ["No", "Nama", "Jenis Kartu", "No Kartu", "No KTP", "No KK", "Tgl Lahir", "Lokasi"];
 
     // Map data to array of arrays
     const rows = data.map((item, index) => {
@@ -41,7 +40,8 @@ export const generateKJPExcel = (data: any[]): Buffer => {
             item.sender_name && item.sender_name !== item.nama
                 ? `${item.sender_name} (${item.nama})`
                 : (item.nama || ""),
-            formatCardCell(item.no_kjp, item.jenis_kartu),
+            formatCardTypeCell(item.no_kjp, item.jenis_kartu),
+            formatCardNumberCell(item.no_kjp),
             item.no_ktp || "",
             item.no_kk || "",
             formatDateCell(item.tanggal_lahir, item.no_ktp), // Format Date
@@ -98,10 +98,13 @@ export const generateKJPExcel = (data: any[]): Buffer => {
         return dbDate || "-";
     }
 
-    function formatCardCell(cardNumber: string | null, cardType: string | null): string {
+    function formatCardTypeCell(cardNumber: string | null, cardType: string | null): string {
         if (!cardNumber) return "";
-        const jenis = resolveCardTypeLabel(cardNumber, cardType);
-        return `${jenis} ${cardNumber}`;
+        return resolveCardTypeLabel(cardNumber, cardType);
+    }
+
+    function formatCardNumberCell(cardNumber: string | null): string {
+        return cardNumber || "";
     }
 
     // 2. Create Worksheet
