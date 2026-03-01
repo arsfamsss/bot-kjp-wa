@@ -59,7 +59,8 @@ export function buildReplyForNewData(
                 const subLoc = item.lokasi
                     ? item.lokasi.replace(/^(PASARJAYA|DHARMAJAYA)\s*-\s*/i, '').trim()
                     : '';
-                lines.push(`   └ ${item.no_kjp}${subLoc ? ` 📍 ${subLoc}` : ''}`); // Tree style + lokasi
+                const jenisLabel = item.jenis_kartu ? ` (${item.jenis_kartu})` : '';
+                lines.push(`   └ ${item.no_kjp}${jenisLabel}${subLoc ? ` 📍 ${subLoc}` : ''}`); // Tree style + lokasi + jenis
             });
         } else if (totalDataToday !== undefined && totalDataToday > 0) {
             lines.push(`🔥 Total: *${totalDataToday} Orang*`);
