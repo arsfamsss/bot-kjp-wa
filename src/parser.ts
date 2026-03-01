@@ -318,13 +318,6 @@ export function validateBlockToItem(block: string[], index: number, location: 'P
             type: 'invalid_length',
             detail: `Panjang Nomor Kartu salah (${parsed.no_kjp.length} digit). Harusnya 16-18 digit.`,
         });
-    } else if (!parsed.no_kjp.startsWith('504948')) {
-        // Validasi PREFIX: Nomor Kartu KJP harus diawali dengan 504948
-        errors.push({
-            field: 'no_kjp',
-            type: 'invalid_prefix',
-            detail: `Nomor Kartu tidak valid. Nomor Kartu KJP harus diawali dengan 504948.`,
-        });
     } else if (location !== 'PASARJAYA' && !parsed.jenis_kartu) {
         // Validasi JENIS KARTU (Dharmajaya only): prefix belum dikenal dan tidak ada teks manual
         const kartuList = 'KJP · LANSIA · RUSUN · DISABILITAS · DASAWISMA\nPEKERJA · GURU HONORER · PJLP · KAJ';
