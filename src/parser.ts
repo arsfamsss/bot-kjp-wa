@@ -4,7 +4,7 @@ import type { LogItem, ParsedFields, ItemError, LogJson, LogStats } from './type
 import { checkBlockedKkBatch, checkBlockedKtpBatch, checkDuplicateForItem, checkDuplicatesBatch } from './supabase';
 import { parseFlexibleDate } from './utils/dateParser';
 import { normalizeCardTypeName, getCardTypeChoicesText } from './utils/cardTypeRules';
-import { getCardPrefixType } from './utils/cardPrefixConfig';
+import { getCardPrefixMap, getCardPrefixType } from './utils/cardPrefixConfig';
 
 // --- BAGIAN 1: PEMBERSIH INPUT ---
 
@@ -46,6 +46,13 @@ function normalizeCardType(text: string): string | null {
     return normalizeCardTypeName(text);
 }
 
+function isAdminConfiguredPrefix(prefix8: string | null): boolean {
+    if (!prefix8) return false;
+    if (prefix8 === '50494885' || prefix8 === '50494812') return false;
+    const map = getCardPrefixMap();
+    return !!map[prefix8];
+}
+
 /**
  * Deteksi jenis kartu dari nomor KJP dan teks manual.
  * Prioritas: prefix map > teks manual (alias) > null
@@ -64,16 +71,43 @@ function resolveJenisKartu(noKjp: string, textManual: string): {
     const fromText = normalizeCardType(textManual);
     const hasManualText = textManual.trim().length > 0;
     const manualInvalid = hasManualText && !fromText;
+    const isMainAutoKjpPrefix = prefix8 === '50494885';
+    const adminConfigured = isAdminConfiguredPrefix(prefix8);
 
-    const isLegacyKjpPrefix = prefix8 === '50494812';
-    const isLegacyKjpLength = noKjp.length === 17 || noKjp.length === 18;
+    if (fromPrefix) {
+        if (adminConfigured) {
+            const koreksi = !!(fromText && fromText !== fromPrefix);
+            return {
+                jenis_kartu: fromPrefix,
+                sumber: koreksi ? 'koreksi' : 'prefix',
+                koreksi,
+                has_manual_text: hasManualText,
+                manual_invalid: manualInvalid,
+                manual_type: fromText,
+                prefix_type: fromPrefix,
+            };
+        }
 
-    if (isLegacyKjpPrefix && fromPrefix === 'KJP' && !isLegacyKjpLength) {
-        fromPrefix = null;
+        const shouldFollowManual = !isMainAutoKjpPrefix && !!fromText;
+        if (shouldFollowManual) {
+            return {
+                jenis_kartu: fromText,
+                sumber: 'manual',
+                koreksi: false,
+                has_manual_text: hasManualText,
+                manual_invalid: false,
+                manual_type: fromText,
+                prefix_type: fromPrefix,
+            };
+        }
+
+        const isNonMainAutoKjpPrefix = fromPrefix === 'KJP' && !isMainAutoKjpPrefix;
+        if (isNonMainAutoKjpPrefix) {
+            fromPrefix = null;
+        }
     }
 
     if (fromPrefix) {
-        // Prefix dikenali — selalu menang
         const koreksi = !!(fromText && fromText !== fromPrefix);
         return {
             jenis_kartu: fromPrefix,
@@ -313,41 +347,28 @@ export function validateBlockToItem(block: string[], index: number, location: 'P
             detail: `Panjang Nomor Kartu salah (${parsed.no_kjp.length} digit). Harusnya 16-18 digit.`,
         });
     } else if (!parsed.no_kjp.startsWith('504948')) {
-        // Validasi PREFIX: Nomor Kartu harus diawali dengan 504948
-        errors.push({
-            field: 'no_kjp',
-            type: 'invalid_prefix',
-            detail: `Nomor Kartu tidak valid. Nomor Kartu harus diawali dengan 504948.`,
-        });
+        const allowManualKjpAnyPrefix =
+            location !== 'PASARJAYA' &&
+            parsed.jenis_kartu_manual === 'KJP';
+
+        if (!allowManualKjpAnyPrefix) {
+            errors.push({
+                field: 'no_kjp',
+                type: 'invalid_prefix',
+                detail: `Nomor Kartu tidak valid. Nomor Kartu harus diawali dengan 504948, atau tulis jenis kartu KJP di baris kartu.`,
+            });
+        }
     } else if (
         location !== 'PASARJAYA' &&
-        parsed.no_kjp.startsWith('50494812') &&
-        parsed.jenis_kartu_manual === 'KJP' &&
-        !(parsed.no_kjp.length === 17 || parsed.no_kjp.length === 18)
+        parsed.jenis_kartu_manual_invalid &&
+        !(parsed.no_kjp.startsWith('50494885') || isAdminConfiguredPrefix(parsed.no_kjp.substring(0, 8)))
     ) {
-        errors.push({
-            field: 'no_kjp',
-            type: 'card_type_mismatch',
-            detail: `Untuk prefix 50494812, KJP lama hanya valid jika panjang nomor 17-18 digit. Nomor ${parsed.no_kjp} tidak memenuhi aturan itu.`,
-        });
-    } else if (location !== 'PASARJAYA' && parsed.jenis_kartu_manual_invalid) {
         const kartuList = getCardTypeChoicesText();
         const inputManual = (parsed.jenis_kartu_manual_input || '').trim() || '-';
         errors.push({
             field: 'no_kjp',
             type: 'invalid_card_type',
             detail: `Nama kartu "${inputManual}" tidak dikenali. Gunakan salah satu: ${kartuList}`,
-        });
-    } else if (
-        location !== 'PASARJAYA' &&
-        !parsed.jenis_kartu_prefix &&
-        parsed.jenis_kartu_manual === 'KJP'
-    ) {
-        const prefix8 = parsed.no_kjp.substring(0, 8);
-        errors.push({
-            field: 'no_kjp',
-            type: 'card_type_mismatch',
-            detail: `Jenis KJP tidak cocok untuk prefix ${prefix8}. Gunakan jenis kartu yang sesuai prefix, atau daftarkan prefix ini sebagai KJP di Menu Admin 17.`,
         });
     } else if (location !== 'PASARJAYA' && !parsed.jenis_kartu) {
         // Validasi JENIS KARTU (Dharmajaya only): prefix belum dikenal dan tidak ada teks manual
