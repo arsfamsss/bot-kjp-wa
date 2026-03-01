@@ -502,31 +502,8 @@ export async function connectToWhatsApp() {
                 // Jika pesan adalah gambar/video tanpa caption, beritahu user
                 if (!rawInput && (mAny?.imageMessage || mAny?.videoMessage)) {
                     await sock.sendMessage(remoteJid, {
-                        text: `⚠️ Maaf, saya tidak bisa membaca gambar/foto
-
-Format yang diterima seperti ini:
-Kirim data dengan urutan 4 baris kebawah:
-
-1. Nama
-2. Nomor Kartu
-3. Nomor KTP (NIK)
-4. Nomor KK
-
-✅ Contoh:
-Budi
-5049488500001111
-3173444455556666
-3173555566667777
-
-Jika lebih dari 1 data seperti ini:
-Budi
-5049488522223333
-3173000011112222
-3173888877776666
-
-Dan seterusnya.
-
-Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
+                        text: `⚠️ Maaf, saya tidak bisa membaca gambar/foto\n\nFormat yang diterima seperti ini:\nKirim data dengan urutan 4 baris kebawah:\n\n1. Nama\n2. Nomor Kartu (+ jenis kartu jika prefix tidak dikenali)\n3. Nomor KTP (NIK)\n4. Nomor KK\n\n✅ Contoh 1 (prefix KJP dikenali otomatis):\nBudi\n5049488500001111\n3173444455556666\n3173555566667777\n\n✅ Contoh 2 (jenis kartu di samping nomor):\nBudi\n5049441234567890 LANSIA\n3173444455556666\n3173555566667777\n\nJenis kartu yang didukung:\nKJP · LANSIA · RUSUN · DISABILITAS · DASAWISMA\nPEKERJA · GURU HONORER · PJLP · KAJ\n\nSilakan ketik pesan teks atau kirim MENU untuk melihat pilihan.`
+                    });
                     continue;
                 }
 
@@ -696,15 +673,15 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                             existingName = finalName;
 
                             // Reply Sukses & Panduan Input
-                            const exampleFormat = `Budi\n5049488500001111\n3173444455556666\n3173555566667777`;
-                            const exampleFormat2 = `Budi\nKjp 5049488500001111\nKtp 3173444455556666\nKk 3173555566667777`;
-
                             await sock.sendMessage(remoteJid, {
                                 text: `✅ *Nomor kamu sudah dicatat: ${possiblePhoneVerify}*\nSilakan lanjut.\n\n` +
-                                    `📋 *Selanjutnya silakan kirim data yang akan didaftarkan dengan format seperti ini:*\n\n` +
-                                    `1. Nama\n2. Nomor Kartu\n3. Nomor KTP (NIK)\n4. Nomor KK\n\n` +
-                                    `*Contoh 1:*\n${exampleFormat}\n\n` +
-                                    `*Contoh 2:*\n` + exampleFormat2
+                                    `📋 *Selanjutnya silakan kirim data yang akan didaftarkan:*\n\n` +
+                                    `1. Nama\n2. Nomor Kartu (+ jenis kartu jika prefix tidak dikenali)\n3. Nomor KTP (NIK)\n4. Nomor KK\n\n` +
+                                    `*Contoh 1 (prefix KJP dikenali otomatis):*\n` +
+                                    `Budi\n5049488500001111\n3173444455556666\n3173555566667777\n\n` +
+                                    `*Contoh 2 (jenis kartu ditulis di samping nomor):*\n` +
+                                    `Budi\n5049441234567890 LANSIA\n3173444455556666\n3173555566667777\n\n` +
+                                    `Jenis kartu yang didukung:\nKJP · LANSIA · RUSUN · DISABILITAS · DASAWISMA · PEKERJA · GURU HONORER · PJLP · KAJ`
                             });
                             return; // Stop disini agar user baca panduan
                         }
@@ -727,7 +704,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                     else {
                         console.log(`⛔ Blocked unknown LID: ${senderPhone}`);
                         await sock.sendMessage(remoteJid, {
-                            text: `⛔ *SISTEM TIDAK MENGENALI PERANGKAT ANDA*\n\nMohon ketik **NOMOR HP ANDA** (Contoh: 08123456789) satu kali untuk verifikasi.\n\n_Agar system bisa memproses data pendaftaran kjp anda._`
+                            text: `⛔ *SISTEM TIDAK MENGENALI PERANGKAT ANDA*\n\nMohon ketik **NOMOR HP ANDA** (Contoh: 08123456789) satu kali untuk verifikasi.\n\n_Agar sistem bisa memproses data pendaftaran kartu Anda._`
                         });
                         return; // STOP PROCESSING
                     }
@@ -1690,7 +1667,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                     childName = match[1]; // Ambil isi dalam kurung saja
                                 }
                                 lines.push(`*${idx + 1}.* ${childName}`);
-                                lines.push(`   KJP: ${item.no_kjp}`);
+                                lines.push(`   Kartu: ${item.no_kjp}`);
                                 lines.push(`   Lokasi: ${item.lokasi || '-'}`);
                                 lines.push('');
                             });
@@ -4402,7 +4379,7 @@ Silakan ketik pesan teks atau kirim MENU untuk melihat pilihan.` });
                                             childName = match[1];
                                         }
                                         lines.push(`*${idx + 1}.* ${childName}`);
-                                        lines.push(`   KJP: ${item.no_kjp}`);
+                                        lines.push(`   Kartu: ${item.no_kjp}`);
                                         lines.push(`   KTP: ${item.no_ktp || '-'}`);
                                         lines.push(`   KK: ${item.no_kk || '-'}`);
                                         lines.push(`   Lokasi: ${item.lokasi || '-'}`);

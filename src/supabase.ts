@@ -194,7 +194,7 @@ export async function checkDuplicatesBatch(
             firstKind = firstKind || 'NO_KJP';
             firstDupData = firstDupData || kjpMatch;
             const owner = getOwnerName(kjpMatch);
-            errorMessages.push(`• 💳 No KJP sudah terdaftar atas nama *${owner}*`);
+            errorMessages.push(`• 💳 No Kartu sudah terdaftar atas nama *${owner}*`);
         }
 
         const ktpMatch = globalDupes.find(d => d.no_ktp === item.parsed.no_ktp);
@@ -1425,8 +1425,8 @@ export async function getBlockedKtpList(limit: number = 50): Promise<BlockedKtpI
     const startOfMonth = getStartOfCurrentMonthUTC();
 
     // Auto-cleanup fire and forget
-    supabase.from('blocked_ktp').delete().lt('created_at', startOfMonth).then(({error}) => {
-        if(error && error.code !== '42P01') console.error('Auto-cleanup blocked KTP error:', error);
+    supabase.from('blocked_ktp').delete().lt('created_at', startOfMonth).then(({ error }) => {
+        if (error && error.code !== '42P01') console.error('Auto-cleanup blocked KTP error:', error);
     });
 
     const { data, error } = await supabase
