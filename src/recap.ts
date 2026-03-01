@@ -343,29 +343,77 @@ export async function getGlobalRecap(
         }
     }
 
-    // --- RINGKASAN TOTAL DATA PER LOKASI ---
-    const locationTotals = new Map<string, number>();
-    for (const row of (data as any[])) {
-        let locLabel = '';
-        if (row.lokasi && row.lokasi.startsWith('DHARMAJAYA')) {
-            locLabel = row.lokasi.replace(/^DHARMAJAYA\s*-\s*/i, '').trim();
-            if (!locLabel) locLabel = 'Duri Kosambi';
-        } else if (row.lokasi && row.lokasi.startsWith('PASARJAYA')) {
-            locLabel = row.lokasi.replace(/^PASARJAYA\s*-\s*/i, '').trim();
-            if (!locLabel) locLabel = 'PASARJAYA';
-        } else {
-            locLabel = 'Duri Kosambi';
+    const locationSummary = new Map<string, Map<string, { label: string; count: number }>>();
+    const parentOrder = ['DHARMAJAYA', 'PASARJAYA'];
+
+    const ensureParentBucket = (parent: string): Map<string, { label: string; count: number }> => {
+        if (!locationSummary.has(parent)) {
+            locationSummary.set(parent, new Map<string, { label: string; count: number }>());
         }
-        locationTotals.set(locLabel, (locationTotals.get(locLabel) || 0) + 1);
+        return locationSummary.get(parent)!;
+    };
+
+    const normalizeLocationMeta = (rawLokasi: unknown): { parent: 'DHARMAJAYA' | 'PASARJAYA'; subLabel: string; subKey: string } => {
+        const raw = typeof rawLokasi === 'string' ? rawLokasi.trim() : '';
+
+        if (!raw || /^DHARMAJAYA\b/i.test(raw)) {
+            const clean = raw.replace(/^DHARMAJAYA\s*-\s*/i, '').trim();
+            const subLabel = clean || 'Duri Kosambi';
+            return {
+                parent: 'DHARMAJAYA',
+                subLabel,
+                subKey: subLabel.toLocaleLowerCase('id-ID').replace(/\s+/g, ' ').trim(),
+            };
+        }
+
+        if (/^PASARJAYA\b/i.test(raw)) {
+            const clean = raw.replace(/^PASARJAYA\s*-\s*/i, '').trim();
+            const subLabel = clean || 'Tanpa Sub Lokasi';
+            return {
+                parent: 'PASARJAYA',
+                subLabel,
+                subKey: subLabel.toLocaleLowerCase('id-ID').replace(/\s+/g, ' ').trim(),
+            };
+        }
+
+        const subLabel = raw || 'Duri Kosambi';
+        return {
+            parent: 'DHARMAJAYA',
+            subLabel,
+            subKey: subLabel.toLocaleLowerCase('id-ID').replace(/\s+/g, ' ').trim(),
+        };
+    };
+
+    for (const row of (data as any[])) {
+        const locMeta = normalizeLocationMeta(row.lokasi);
+        const parentBucket = ensureParentBucket(locMeta.parent);
+        const existing = parentBucket.get(locMeta.subKey);
+        if (existing) {
+            existing.count += 1;
+        } else {
+            parentBucket.set(locMeta.subKey, { label: locMeta.subLabel, count: 1 });
+        }
     }
 
     const appendLocationTotals = (target: string[]) => {
-        target.push(`📍 *TOTAL DATA MASUK PER LOKASI:*`);
-        const sortedLocations = Array.from(locationTotals.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-        for (const [locName, count] of sortedLocations) {
-            target.push(`   • ${locName} : ${count} data`);
+        target.push('📍 *TOTAL DATA MASUK PER LOKASI:*');
+
+        for (const parent of parentOrder) {
+            const subMap = locationSummary.get(parent);
+            if (!subMap || subMap.size === 0) continue;
+
+            const subLocations = Array.from(subMap.values()).sort((a, b) =>
+                a.label.localeCompare(b.label, 'id-ID', { sensitivity: 'base' })
+            );
+            const parentCount = subLocations.reduce((acc, item) => acc + item.count, 0);
+
+            target.push(`   • ${parent} : ${parentCount} data`);
+            for (const item of subLocations) {
+                target.push(`      - ${item.label} : ${item.count} data`);
+            }
         }
-        target.push(`────────────────────────────────────`);
+
+        target.push('────────────────────────────────────');
     };
 
     const lines: string[] = [];
@@ -414,27 +462,31 @@ export async function getGlobalRecap(
         lines.push(`📥 Jumlah Data: ${items.length}`);
 
         // --- GROUPING PER LOKASI ---
-        // Dharmajaya: item yang lokasi-nya diawali "DHARMAJAYA" atau tidak ada lokasi (legacy)
-        const dharmajayaItems = items.filter((i: any) => !i.lokasi || i.lokasi.startsWith('DHARMAJAYA'));
-        const pasarjayaItems = items.filter((i: any) => i.lokasi && i.lokasi.startsWith('PASARJAYA'));
+        const dharmajayaItems = items.filter((i: any) => normalizeLocationMeta(i.lokasi).parent === 'DHARMAJAYA');
+        const pasarjayaItems = items.filter((i: any) => normalizeLocationMeta(i.lokasi).parent === 'PASARJAYA');
 
         let globalIndex = 1;
 
         // Tampilkan Dharmajaya - Dikelompokkan berdasarkan lokasi spesifik (seperti Pasarjaya)
         if (dharmajayaItems.length > 0) {
             // Group by specific location
-            const dharmajayaByLocation: Record<string, any[]> = {};
+            const dharmajayaByLocation = new Map<string, { label: string; items: any[] }>();
             for (const item of dharmajayaItems) {
-                // Legacy data tanpa lokasi -> default ke "DHARMAJAYA - Duri Kosambi"
-                const locKey = item.lokasi || 'DHARMAJAYA - Duri Kosambi';
-                if (!dharmajayaByLocation[locKey]) dharmajayaByLocation[locKey] = [];
-                dharmajayaByLocation[locKey].push(item);
+                const locMeta = normalizeLocationMeta(item.lokasi);
+                if (!dharmajayaByLocation.has(locMeta.subKey)) {
+                    dharmajayaByLocation.set(locMeta.subKey, { label: `DHARMAJAYA - ${locMeta.subLabel}`, items: [] });
+                }
+                dharmajayaByLocation.get(locMeta.subKey)!.items.push(item);
             }
 
             // Tampilkan per lokasi spesifik
-            for (const [locName, locItems] of Object.entries(dharmajayaByLocation)) {
-                lines.push(`*${locName}* : ${locItems.length}`);
-                locItems.forEach((item: any) => {
+            const sortedDharmajayaLocations = Array.from(dharmajayaByLocation.values()).sort((a, b) =>
+                a.label.localeCompare(b.label, 'id-ID', { sensitivity: 'base' })
+            );
+
+            for (const locGroup of sortedDharmajayaLocations) {
+                lines.push(`*${locGroup.label}* : ${locGroup.items.length}`);
+                locGroup.items.forEach((item: any) => {
                     const itemKey = endKey ? ` (${String(item.processing_day_key).split('-').reverse().join('-')})` : '';
                     const jenisKartu = resolveCardTypeLabel(item.no_kjp, item.jenis_kartu);
                     lines.push(`   ${globalIndex}. ${item.nama}${itemKey}`);
@@ -450,17 +502,23 @@ export async function getGlobalRecap(
         // Tampilkan Pasarjaya - Dikelompokkan berdasarkan lokasi spesifik
         if (pasarjayaItems.length > 0) {
             // Group by specific location
-            const pasarjayaByLocation: Record<string, any[]> = {};
+            const pasarjayaByLocation = new Map<string, { label: string; items: any[] }>();
             for (const item of pasarjayaItems) {
-                const locKey = item.lokasi || 'PASARJAYA';
-                if (!pasarjayaByLocation[locKey]) pasarjayaByLocation[locKey] = [];
-                pasarjayaByLocation[locKey].push(item);
+                const locMeta = normalizeLocationMeta(item.lokasi);
+                if (!pasarjayaByLocation.has(locMeta.subKey)) {
+                    pasarjayaByLocation.set(locMeta.subKey, { label: `PASARJAYA - ${locMeta.subLabel}`, items: [] });
+                }
+                pasarjayaByLocation.get(locMeta.subKey)!.items.push(item);
             }
 
             // Tampilkan per lokasi spesifik
-            for (const [locName, locItems] of Object.entries(pasarjayaByLocation)) {
-                lines.push(`*${locName}* : ${locItems.length}`);
-                locItems.forEach((item: any) => {
+            const sortedPasarjayaLocations = Array.from(pasarjayaByLocation.values()).sort((a, b) =>
+                a.label.localeCompare(b.label, 'id-ID', { sensitivity: 'base' })
+            );
+
+            for (const locGroup of sortedPasarjayaLocations) {
+                lines.push(`*${locGroup.label}* : ${locGroup.items.length}`);
+                locGroup.items.forEach((item: any) => {
                     const itemKey = endKey ? ` (${String(item.processing_day_key).split('-').reverse().join('-')})` : '';
                     const tglLahir = item.tanggal_lahir ? formatDateDMY(item.tanggal_lahir) : '';
                     const jenisKartu = resolveCardTypeLabel(item.no_kjp, item.jenis_kartu);
