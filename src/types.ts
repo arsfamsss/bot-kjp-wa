@@ -9,6 +9,10 @@ export interface ParsedFields {
     no_kk: string;
     jenis_kartu?: string;          // Jenis kartu (KJP, LANSIA, RUSUN, dll) — Dharmajaya only
     jenis_kartu_sumber?: 'prefix' | 'manual' | 'koreksi'; // Asal penentuan jenis kartu
+    jenis_kartu_manual_invalid?: boolean;
+    jenis_kartu_manual_input?: string;
+    jenis_kartu_manual?: string;
+    jenis_kartu_prefix?: string;
     tanggal_lahir?: string | null; // Format YYYY-MM-DD
     lokasi?: string; // Full location string: "PASARJAYA - Jakgrosir Kedoya" or "DHARMAJAYA"
 }
@@ -25,7 +29,9 @@ export interface ItemError {
     | "ktp_blocked"
     | "same_as_other"
     | "wrong_order"
-    | "unknown_card_type";  // Prefix tidak dikenal & tidak ada teks jenis kartu (Dharmajaya)
+    | "unknown_card_type"
+    | "invalid_card_type"
+    | "card_type_mismatch";  // Prefix tidak dikenal & tidak ada teks jenis kartu (Dharmajaya)
     detail: string;
 }
 

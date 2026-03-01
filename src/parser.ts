@@ -3,6 +3,8 @@
 import type { LogItem, ParsedFields, ItemError, LogJson, LogStats } from './types';
 import { checkBlockedKkBatch, checkBlockedKtpBatch, checkDuplicateForItem, checkDuplicatesBatch } from './supabase';
 import { parseFlexibleDate } from './utils/dateParser';
+import { normalizeCardTypeName, getCardTypeChoicesText } from './utils/cardTypeRules';
+import { getCardPrefixType } from './utils/cardPrefixConfig';
 
 // --- BAGIAN 1: PEMBERSIH INPUT ---
 
@@ -25,53 +27,6 @@ export function extractDigits(input: string): string {
     return (input.match(/\d+/g) || []).join('');
 }
 
-// --- ALIAS MAPPING JENIS KARTU (Dharmajaya only) ---
-
-const CARD_TYPE_ALIASES: Record<string, string> = {
-    // KJP
-    'kjp': 'KJP',
-    'kartu jakarta pintar': 'KJP',
-    // LANSIA
-    'lansia': 'LANSIA',
-    'lns': 'LANSIA',
-    'ls': 'LANSIA',
-    'lanjut usia': 'LANSIA',
-    // RUSUN
-    'rusun': 'RUSUN',
-    'rumah susun': 'RUSUN',
-    // DISABILITAS
-    'disabilitas': 'DISABILITAS',
-    'difabel': 'DISABILITAS',
-    'cacat': 'DISABILITAS',
-    // DASAWISMA
-    'dasawisma': 'DASAWISMA',
-    'dawis': 'DASAWISMA',
-    // PEKERJA
-    'pekerja': 'PEKERJA',
-    'pkja': 'PEKERJA',
-    // GURU HONORER
-    'guru honorer': 'GURU HONORER',
-    'guru': 'GURU HONORER',
-    'honorer': 'GURU HONORER',
-    // PJLP
-    'pjlp': 'PJLP',
-    // KAJ
-    'kaj': 'KAJ',
-};
-
-// Prefix 8 digit yang sudah dikenal (prefix MENANG atas teks manual)
-const DHARMAJAYA_PREFIX_MAP: Record<string, string> = {
-    '50494885': 'KJP',
-    '50494886': 'KJP',
-    '50494812': 'KJP',
-    '50494837': 'DASAWISMA',
-    '50494836': 'PEKERJA',
-    '50494835': 'LANSIA',
-    '50494827': 'KAJ',
-    '50494834': 'DISABILITAS',
-    '50494840': 'RUSUN',
-};
-
 /**
  * Ekstrak hanya huruf dan spasi dari teks campuran (hapus angka dan tanda baca).
  * Digunakan untuk membaca jenis kartu dari baris nomor kartu.
@@ -88,9 +43,7 @@ function extractCardText(raw: string): string {
  * Returns null jika tidak dikenal.
  */
 function normalizeCardType(text: string): string | null {
-    if (!text) return null;
-    const lower = text.toLowerCase().trim();
-    return CARD_TYPE_ALIASES[lower] ?? null;
+    return normalizeCardTypeName(text);
 }
 
 /**
@@ -101,23 +54,53 @@ function resolveJenisKartu(noKjp: string, textManual: string): {
     jenis_kartu: string | null;
     sumber: 'prefix' | 'manual' | 'koreksi' | null;
     koreksi: boolean; // true jika teks manual ada tapi berbeda dari prefix
+    has_manual_text: boolean;
+    manual_invalid: boolean;
+    manual_type: string | null;
+    prefix_type: string | null;
 } {
     const prefix8 = noKjp.length >= 8 ? noKjp.substring(0, 8) : null;
-    const fromPrefix = prefix8 ? DHARMAJAYA_PREFIX_MAP[prefix8] ?? null : null;
+    const fromPrefix = prefix8 ? getCardPrefixType(prefix8) : null;
     const fromText = normalizeCardType(textManual);
+    const hasManualText = textManual.trim().length > 0;
+    const manualInvalid = hasManualText && !fromText;
 
     if (fromPrefix) {
         // Prefix dikenali — selalu menang
         const koreksi = !!(fromText && fromText !== fromPrefix);
-        return { jenis_kartu: fromPrefix, sumber: koreksi ? 'koreksi' : 'prefix', koreksi };
+        return {
+            jenis_kartu: fromPrefix,
+            sumber: koreksi ? 'koreksi' : 'prefix',
+            koreksi,
+            has_manual_text: hasManualText,
+            manual_invalid: manualInvalid,
+            manual_type: fromText,
+            prefix_type: fromPrefix,
+        };
     }
 
     if (fromText) {
         // Teks manual dikenali
-        return { jenis_kartu: fromText, sumber: 'manual', koreksi: false };
+        return {
+            jenis_kartu: fromText,
+            sumber: 'manual',
+            koreksi: false,
+            has_manual_text: hasManualText,
+            manual_invalid: false,
+            manual_type: fromText,
+            prefix_type: null,
+        };
     }
 
-    return { jenis_kartu: null, sumber: null, koreksi: false };
+    return {
+        jenis_kartu: null,
+        sumber: null,
+        koreksi: false,
+        has_manual_text: hasManualText,
+        manual_invalid: manualInvalid,
+        manual_type: null,
+        prefix_type: null,
+    };
 }
 
 // --- BAGIAN 2: PARSING LOGIC ---
@@ -293,6 +276,10 @@ function buildParsedFields(block: string[], location: 'PASARJAYA' | 'DHARMAJAYA'
             no_kk: extractDigits(line4),
             jenis_kartu: resolved.jenis_kartu ?? undefined,
             jenis_kartu_sumber: resolved.sumber ?? undefined,
+            jenis_kartu_manual_invalid: resolved.manual_invalid,
+            jenis_kartu_manual_input: resolved.has_manual_text ? cardText : undefined,
+            jenis_kartu_manual: resolved.manual_type ?? undefined,
+            jenis_kartu_prefix: resolved.prefix_type ?? undefined,
             lokasi: location === 'DHARMAJAYA' ? 'DHARMAJAYA' : undefined
         };
     }
@@ -325,9 +312,27 @@ export function validateBlockToItem(block: string[], index: number, location: 'P
             type: 'invalid_prefix',
             detail: `Nomor Kartu tidak valid. Nomor Kartu harus diawali dengan 504948.`,
         });
+    } else if (location !== 'PASARJAYA' && parsed.jenis_kartu_manual_invalid) {
+        const kartuList = getCardTypeChoicesText();
+        const inputManual = (parsed.jenis_kartu_manual_input || '').trim() || '-';
+        errors.push({
+            field: 'no_kjp',
+            type: 'invalid_card_type',
+            detail: `Nama kartu "${inputManual}" tidak dikenali. Gunakan salah satu: ${kartuList}`,
+        });
+    } else if (
+        location !== 'PASARJAYA' &&
+        !parsed.jenis_kartu_prefix &&
+        parsed.jenis_kartu_manual === 'KJP'
+    ) {
+        errors.push({
+            field: 'no_kjp',
+            type: 'card_type_mismatch',
+            detail: `KJP hanya untuk prefix 50494885. Nomor ${parsed.no_kjp} bukan prefix KJP, mohon tulis jenis kartu yang sesuai.`,
+        });
     } else if (location !== 'PASARJAYA' && !parsed.jenis_kartu) {
         // Validasi JENIS KARTU (Dharmajaya only): prefix belum dikenal dan tidak ada teks manual
-        const kartuList = 'KJP · LANSIA · RUSUN · DISABILITAS · DASAWISMA\nPEKERJA · GURU HONORER · PJLP · KAJ';
+        const kartuList = getCardTypeChoicesText();
         errors.push({
             field: 'no_kjp',
             type: 'unknown_card_type',

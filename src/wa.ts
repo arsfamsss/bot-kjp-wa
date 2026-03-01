@@ -78,6 +78,8 @@ import { getProcessingDayKey, getWibIsoDate, shiftIsoDate, isSystemClosed, getWi
 import { getContactName } from './contacts_data';
 import { parseFlexibleDate, looksLikeDate } from './utils/dateParser';
 import { resolveCardTypeLabel } from './utils/cardType';
+import { deleteCardPrefix, getCardPrefixMap, upsertCardPrefix } from './utils/cardPrefixConfig';
+import { getCardTypeChoicesText, normalizeCardTypeName } from './utils/cardTypeRules';
 import {
     MENU_MESSAGE,
     FORMAT_DAFTAR_MESSAGE,
@@ -300,6 +302,18 @@ function buildBlockedPhoneMenuText(): string {
         '1️⃣ Tambah No HP ke blokir',
         '2️⃣ Lihat daftar No HP terblokir',
         '3️⃣ Buka blokir No HP',
+        '',
+        '0️⃣ Kembali ke Menu Admin',
+    ].join('\n');
+}
+
+function buildCardPrefixMenuText(): string {
+    return [
+        '🏷️ *KELOLA PREFIX KARTU*',
+        '',
+        '1️⃣ Lihat daftar prefix',
+        '2️⃣ Tambah/Ubah prefix',
+        '3️⃣ Hapus prefix',
         '',
         '0️⃣ Kembali ke Menu Admin',
     ].join('\n');
@@ -2482,6 +2496,9 @@ export async function connectToWhatsApp() {
                         } else if (normalized === '16') {
                             adminFlowByPhone.set(senderPhone, 'BLOCKED_KK_MENU');
                             replyText = buildBlockedKkMenuText();
+                        } else if (normalized === '17') {
+                            adminFlowByPhone.set(senderPhone, 'CARD_PREFIX_MENU');
+                            replyText = buildCardPrefixMenuText();
                         } else replyText = '⚠️ Pilihan tidak dikenali.';
                     } else if (currentAdminFlow === 'SETTING_OPERATION_MENU') {
                         if (normalized === '0') {
@@ -3164,6 +3181,80 @@ export async function connectToWhatsApp() {
                             }
                             replyText += '\n\n' + buildBlockedKkMenuText();
                             adminFlowByPhone.set(senderPhone, 'BLOCKED_KK_MENU');
+                        }
+                    } else if (currentAdminFlow === 'CARD_PREFIX_MENU') {
+                        if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'MENU');
+                            replyText = ADMIN_MENU_MESSAGE;
+                        } else if (normalized === '1') {
+                            const map = getCardPrefixMap();
+                            const entries = Object.entries(map).sort((a, b) => a[0].localeCompare(b[0]));
+                            if (entries.length === 0) {
+                                replyText = '📂 Belum ada prefix tersimpan.';
+                            } else {
+                                const lines = ['📋 *DAFTAR PREFIX KARTU*', ''];
+                                entries.forEach(([prefix, jenis], idx) => {
+                                    lines.push(`${idx + 1}. ${prefix} -> ${jenis}`);
+                                });
+                                replyText = lines.join('\n');
+                            }
+                            replyText += '\n\n' + buildCardPrefixMenuText();
+                            adminFlowByPhone.set(senderPhone, 'CARD_PREFIX_MENU');
+                        } else if (normalized === '2') {
+                            adminFlowByPhone.set(senderPhone, 'CARD_PREFIX_ADD');
+                            replyText = [
+                                '➕ *TAMBAH/UBAH PREFIX KARTU*',
+                                '',
+                                'Format: *PREFIX|JENIS*',
+                                'Contoh: *50494890|RUSUN*',
+                                '',
+                                `Jenis valid: ${getCardTypeChoicesText()}`,
+                                '',
+                                '_Ketik 0 untuk kembali._'
+                            ].join('\n');
+                        } else if (normalized === '3') {
+                            adminFlowByPhone.set(senderPhone, 'CARD_PREFIX_DELETE');
+                            replyText = [
+                                '🗑️ *HAPUS PREFIX KARTU*',
+                                '',
+                                'Ketik prefix 8 digit yang mau dihapus.',
+                                'Contoh: *50494890*',
+                                '',
+                                '_Prefix 50494885 tidak bisa dihapus._',
+                                '_Ketik 0 untuk kembali._'
+                            ].join('\n');
+                        } else {
+                            replyText = '⚠️ Pilihan tidak dikenali. Ketik 1, 2, 3, atau 0.';
+                        }
+                    } else if (currentAdminFlow === 'CARD_PREFIX_ADD') {
+                        if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'CARD_PREFIX_MENU');
+                            replyText = buildCardPrefixMenuText();
+                        } else {
+                            const [rawPrefix, rawJenis] = rawTrim.split('|').map((x: string) => (x || '').trim());
+                            if (!rawPrefix || !rawJenis) {
+                                replyText = '⚠️ Format salah. Gunakan *PREFIX|JENIS*. Contoh: 50494890|RUSUN';
+                            } else {
+                                const normalizedJenis = normalizeCardTypeName(rawJenis);
+                                if (!normalizedJenis) {
+                                    replyText = `❌ Jenis kartu tidak valid. Pilih salah satu: ${getCardTypeChoicesText()}`;
+                                } else {
+                                    const result = upsertCardPrefix(rawPrefix, normalizedJenis);
+                                    replyText = result.success ? `✅ ${result.message}` : `❌ ${result.message}`;
+                                    replyText += '\n\n' + buildCardPrefixMenuText();
+                                    adminFlowByPhone.set(senderPhone, 'CARD_PREFIX_MENU');
+                                }
+                            }
+                        }
+                    } else if (currentAdminFlow === 'CARD_PREFIX_DELETE') {
+                        if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'CARD_PREFIX_MENU');
+                            replyText = buildCardPrefixMenuText();
+                        } else {
+                            const result = deleteCardPrefix(rawTrim);
+                            replyText = result.success ? `✅ ${result.message}` : `❌ ${result.message}`;
+                            replyText += '\n\n' + buildCardPrefixMenuText();
+                            adminFlowByPhone.set(senderPhone, 'CARD_PREFIX_MENU');
                         }
                     } else if (currentAdminFlow === 'BLOCKED_PHONE_MENU') {
                         if (normalized === '0') {
