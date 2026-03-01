@@ -331,7 +331,7 @@ export function validateBlockToItem(block: string[], index: number, location: 'P
         errors.push({
             field: 'no_kjp',
             type: 'unknown_card_type',
-            detail: `Jenis kartu tidak dikenal. Tulis di samping nomor:\n${kartuList}\nContoh: ${parsed.no_kjp} LANSIA`,
+            detail: `Nama kartu belum kamu tulis. Silakan tulis nama kartu di samping nomornya ya Bu.\n\nPilihan kartu:\n${kartuList}\n\nContoh: ${parsed.no_kjp} LANSIA`,
         });
     }
 

@@ -502,7 +502,7 @@ export async function connectToWhatsApp() {
                 // Jika pesan adalah gambar/video tanpa caption, beritahu user
                 if (!rawInput && (mAny?.imageMessage || mAny?.videoMessage)) {
                     await sock.sendMessage(remoteJid, {
-                        text: `⚠️ Maaf, saya tidak bisa membaca gambar/foto\n\nFormat yang diterima seperti ini:\nKirim data dengan urutan 4 baris kebawah:\n\n1. Nama\n2. Nomor Kartu (+ jenis kartu jika prefix tidak dikenali)\n3. Nomor KTP (NIK)\n4. Nomor KK\n\n✅ Contoh 1 (prefix KJP dikenali otomatis):\nBudi\n5049488500001111\n3173444455556666\n3173555566667777\n\n✅ Contoh 2 (jenis kartu di samping nomor):\nBudi\n5049441234567890 LANSIA\n3173444455556666\n3173555566667777\n\nJenis kartu yang didukung:\nKJP · LANSIA · RUSUN · DISABILITAS · DASAWISMA\nPEKERJA · GURU HONORER · PJLP · KAJ\n\nSilakan ketik pesan teks atau kirim MENU untuk melihat pilihan.`
+                        text: `⚠️ Maaf, saya tidak bisa membaca gambar/foto\n\nFormat yang diterima seperti ini:\nKirim data dengan urutan 4 baris kebawah:\n\n1. Nama\n2. Nomor Kartu (tulis nama kartu di sampingnya jika bukan KJP)\n3. Nomor KTP (NIK)\n4. Nomor KK\n\n✅ Contoh 1 (Untuk Kartu KJP Biasa):\nBudi\n5049488500001111\n3173444455556666\n3173555566667777\n\n✅ Contoh 2 (Untuk selain KJP, misal LANSIA):\nBudi\n5049441234567890 LANSIA\n3173444455556666\n3173555566667777\n\nJenis kartu yang didukung:\nKJP · LANSIA · RUSUN · DISABILITAS · DASAWISMA\nPEKERJA · GURU HONORER · PJLP · KAJ\n\nSilakan ketik pesan teks atau kirim MENU untuk melihat pilihan.`
                     });
                     continue;
                 }
@@ -676,10 +676,10 @@ export async function connectToWhatsApp() {
                             await sock.sendMessage(remoteJid, {
                                 text: `✅ *Nomor kamu sudah dicatat: ${possiblePhoneVerify}*\nSilakan lanjut.\n\n` +
                                     `📋 *Selanjutnya silakan kirim data yang akan didaftarkan:*\n\n` +
-                                    `1. Nama\n2. Nomor Kartu (+ jenis kartu jika prefix tidak dikenali)\n3. Nomor KTP (NIK)\n4. Nomor KK\n\n` +
-                                    `*Contoh 1 (prefix KJP dikenali otomatis):*\n` +
+                                    `1. Nama\n2. Nomor Kartu (tulis nama kartu di sampingnya jika bukan KJP)\n3. Nomor KTP (NIK)\n4. Nomor KK\n\n` +
+                                    `*Contoh 1 (Untuk Kartu KJP Biasa):*\n` +
                                     `Budi\n5049488500001111\n3173444455556666\n3173555566667777\n\n` +
-                                    `*Contoh 2 (jenis kartu ditulis di samping nomor):*\n` +
+                                    `*Contoh 2 (Untuk selain KJP, misal LANSIA):*\n` +
                                     `Budi\n5049441234567890 LANSIA\n3173444455556666\n3173555566667777\n\n` +
                                     `Jenis kartu yang didukung:\nKJP · LANSIA · RUSUN · DISABILITAS · DASAWISMA · PEKERJA · GURU HONORER · PJLP · KAJ`
                             });
@@ -4422,13 +4422,13 @@ export async function connectToWhatsApp() {
 Kirim data dalam *4 BARIS* sekaligus:
 
 1. Nama
-2. Nomor Kartu
+2. Nomor Kartu (tulis nama kartu di sampingnya jika bukan KJP)
 3. Nomor KTP (NIK)
 4. Nomor KK
 
 Contoh:
 Budi
-5049488500001111
+5049488500001111 LANSIA (Khusus anak KJP, tulisan LANSIA-nya dihapus aja)
 3173444455556666
 3173555566667777
 
