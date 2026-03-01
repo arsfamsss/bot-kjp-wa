@@ -517,7 +517,7 @@ export async function connectToWhatsApp() {
                 // Jika pesan adalah gambar/video tanpa caption, beritahu user
                 if (!rawInput && (mAny?.imageMessage || mAny?.videoMessage)) {
                     await sock.sendMessage(remoteJid, {
-                        text: `⚠️ Maaf, saya tidak bisa membaca gambar/foto\n\nFormat yang diterima seperti ini:\nKirim data dengan urutan 4 baris kebawah:\n\n1. Nama\n2. Nomor Kartu (tulis nama kartu di sampingnya jika bukan KJP)\n3. Nomor KTP (NIK)\n4. Nomor KK\n\n✅ Contoh 1 (Untuk Kartu KJP Biasa):\nBudi\n5049488500001111\n3173444455556666\n3173555566667777\n\n✅ Contoh 2 (Untuk selain KJP, misal LANSIA):\nBudi\n5049441234567890 LANSIA\n3173444455556666\n3173555566667777\n\nJenis kartu yang didukung:\nKJP · LANSIA · RUSUN · DISABILITAS · DASAWISMA\nPEKERJA · GURU HONORER · PJLP · KAJ\n\nSilakan ketik pesan teks atau kirim MENU untuk melihat pilihan.`
+                        text: `⚠️ Maaf, saya tidak bisa membaca gambar/foto\n\nFormat yang diterima seperti ini:\nKirim data dengan urutan 4 baris ke bawah:\n\n1. Nama\n2. Jenis Kartu + Nomor Kartu\n3. KTP + Nomor KTP (NIK)\n4. KK + Nomor KK\n\n✅ Contoh 1 (KJP):\nBudi\nKJP 5049488500001111\nKTP 3173444455556666\nKK 3173555566667777\n\n✅ Contoh 2 (LANSIA):\nBudi\nLANSIA 5049441234567890\nKTP 3173444455556666\nKK 3173555566667777\n\nJenis kartu yang didukung:\nKJP · LANSIA · RUSUN · DISABILITAS · DASAWISMA\nPEKERJA · GURU HONORER · PJLP · KAJ\n\nSilakan ketik pesan teks atau kirim MENU untuk melihat pilihan.`
                     });
                     continue;
                 }
@@ -691,11 +691,11 @@ export async function connectToWhatsApp() {
                             await sock.sendMessage(remoteJid, {
                                 text: `✅ *Nomor kamu sudah dicatat: ${possiblePhoneVerify}*\nSilakan lanjut.\n\n` +
                                     `📋 *Selanjutnya silakan kirim data yang akan didaftarkan:*\n\n` +
-                                    `1. Nama\n2. Nomor Kartu (tulis nama kartu di sampingnya jika bukan KJP)\n3. Nomor KTP (NIK)\n4. Nomor KK\n\n` +
-                                    `*Contoh 1 (Untuk Kartu KJP Biasa):*\n` +
-                                    `Budi\n5049488500001111\n3173444455556666\n3173555566667777\n\n` +
-                                    `*Contoh 2 (Untuk selain KJP, misal LANSIA):*\n` +
-                                    `Budi\n5049441234567890 LANSIA\n3173444455556666\n3173555566667777\n\n` +
+                                    `1. Nama\n2. Jenis Kartu + Nomor Kartu\n3. KTP + Nomor KTP (NIK)\n4. KK + Nomor KK\n\n` +
+                                    `*Contoh 1 (KJP):*\n` +
+                                    `Budi\nKJP 5049488500001111\nKTP 3173444455556666\nKK 3173555566667777\n\n` +
+                                    `*Contoh 2 (LANSIA):*\n` +
+                                    `Budi\nLANSIA 5049441234567890\nKTP 3173444455556666\nKK 3173555566667777\n\n` +
                                     `Jenis kartu yang didukung:\nKJP · LANSIA · RUSUN · DISABILITAS · DASAWISMA · PEKERJA · GURU HONORER · PJLP · KAJ`
                             });
                             return; // Stop disini agar user baca panduan
