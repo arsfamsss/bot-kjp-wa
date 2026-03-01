@@ -7,6 +7,8 @@ export interface ParsedFields {
     no_kjp: string;
     no_ktp: string;
     no_kk: string;
+    jenis_kartu?: string;          // Jenis kartu (KJP, LANSIA, RUSUN, dll) — Dharmajaya only
+    jenis_kartu_sumber?: 'prefix' | 'manual' | 'koreksi'; // Asal penentuan jenis kartu
     tanggal_lahir?: string | null; // Format YYYY-MM-DD
     lokasi?: string; // Full location string: "PASARJAYA - Jakgrosir Kedoya" or "DHARMAJAYA"
 }
@@ -22,7 +24,8 @@ export interface ItemError {
     | "blocked_kk"
     | "ktp_blocked"
     | "same_as_other"
-    | "wrong_order";
+    | "wrong_order"
+    | "unknown_card_type";  // Prefix tidak dikenal & tidak ada teks jenis kartu (Dharmajaya)
     detail: string;
 }
 

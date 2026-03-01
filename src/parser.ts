@@ -25,6 +25,101 @@ export function extractDigits(input: string): string {
     return (input.match(/\d+/g) || []).join('');
 }
 
+// --- ALIAS MAPPING JENIS KARTU (Dharmajaya only) ---
+
+const CARD_TYPE_ALIASES: Record<string, string> = {
+    // KJP
+    'kjp': 'KJP',
+    'kartu jakarta pintar': 'KJP',
+    // LANSIA
+    'lansia': 'LANSIA',
+    'lns': 'LANSIA',
+    'ls': 'LANSIA',
+    'lanjut usia': 'LANSIA',
+    // RUSUN
+    'rusun': 'RUSUN',
+    'rumah susun': 'RUSUN',
+    // DISABILITAS
+    'disabilitas': 'DISABILITAS',
+    'difabel': 'DISABILITAS',
+    'cacat': 'DISABILITAS',
+    // DASAWISMA
+    'dasawisma': 'DASAWISMA',
+    'dawis': 'DASAWISMA',
+    // PEKERJA
+    'pekerja': 'PEKERJA',
+    'pkja': 'PEKERJA',
+    // GURU HONORER
+    'guru honorer': 'GURU HONORER',
+    'guru': 'GURU HONORER',
+    'honorer': 'GURU HONORER',
+    // PJLP
+    'pjlp': 'PJLP',
+    // KAJ
+    'kaj': 'KAJ',
+};
+
+// Prefix 8 digit yang sudah dikenal (prefix MENANG atas teks manual)
+const DHARMAJAYA_PREFIX_MAP: Record<string, string> = {
+    '50494885': 'KJP',
+    '50494886': 'KJP',
+    '50494812': 'KJP',
+    '50494837': 'DASAWISMA',
+    '50494836': 'PEKERJA',
+    '50494835': 'LANSIA',
+    '50494827': 'KAJ',
+    '50494834': 'DISABILITAS',
+    '50494840': 'RUSUN',
+};
+
+/**
+ * Ekstrak hanya huruf dan spasi dari teks campuran (hapus angka dan tanda baca).
+ * Digunakan untuk membaca jenis kartu dari baris nomor kartu.
+ */
+function extractCardText(raw: string): string {
+    if (!raw) return '';
+    // Hanya huruf dan spasi
+    const lettersOnly = raw.replace(/[^a-zA-Z\s]/g, '').replace(/\s+/g, ' ').trim();
+    return lettersOnly;
+}
+
+/**
+ * Normalisasi teks jenis kartu dengan alias mapping.
+ * Returns null jika tidak dikenal.
+ */
+function normalizeCardType(text: string): string | null {
+    if (!text) return null;
+    const lower = text.toLowerCase().trim();
+    return CARD_TYPE_ALIASES[lower] ?? null;
+}
+
+/**
+ * Deteksi jenis kartu dari nomor KJP dan teks manual.
+ * Prioritas: prefix map > teks manual (alias) > null
+ */
+function resolveJenisKartu(noKjp: string, textManual: string): {
+    jenis_kartu: string | null;
+    sumber: 'prefix' | 'manual' | 'koreksi' | null;
+    koreksi: boolean; // true jika teks manual ada tapi berbeda dari prefix
+} {
+    const prefix8 = noKjp.length >= 8 ? noKjp.substring(0, 8) : null;
+    const fromPrefix = prefix8 ? DHARMAJAYA_PREFIX_MAP[prefix8] ?? null : null;
+    const fromText = normalizeCardType(textManual);
+
+    if (fromPrefix) {
+        // Prefix dikenali — selalu menang
+        const koreksi = !!(fromText && fromText !== fromPrefix);
+        return { jenis_kartu: fromPrefix, sumber: koreksi ? 'koreksi' : 'prefix', koreksi };
+    }
+
+    if (fromText) {
+        // Teks manual dikenali
+        return { jenis_kartu: fromText, sumber: 'manual', koreksi: false };
+    }
+
+    return { jenis_kartu: null, sumber: null, koreksi: false };
+}
+
 // --- BAGIAN 2: PARSING LOGIC ---
 
 /// --- HELPER: CLEAN NAME ---
@@ -175,7 +270,7 @@ export function groupLinesToBlocks(lines: string[], linesPerBlock: number = 4): 
 function buildParsedFields(block: string[], location: 'PASARJAYA' | 'DHARMAJAYA' | 'DEFAULT' = 'DEFAULT'): ParsedFields {
     if (location === 'PASARJAYA') {
         // FORMAT 5 BARIS PASARJAYA: Nama, Kartu, KTP, KK, Tanggal Lahir
-        // Urutan sama seperti Dharmajaya + Tanggal Lahir di baris 5
+        // Pasarjaya: tidak perlu jenis kartu manual
         const [line1, line2, line3, line4, line5] = block;
         return {
             nama: cleanName(line1),
@@ -188,11 +283,16 @@ function buildParsedFields(block: string[], location: 'PASARJAYA' | 'DHARMAJAYA'
     } else {
         // DEFAULT / DHARMAJAYA (4 BARIS): Nama, Kartu, KTP, KK
         const [line1, line2, line3, line4] = block;
+        const noKjp = extractDigits(line2);
+        const cardText = extractCardText(line2); // Teks di samping nomor kartu
+        const resolved = resolveJenisKartu(noKjp, cardText);
         return {
             nama: cleanName(line1),
-            no_kjp: extractDigits(line2), // Line 2: Kartu
-            no_ktp: extractDigits(line3), // Line 3: KTP
-            no_kk: extractDigits(line4),  // Line 4: KK
+            no_kjp: noKjp,
+            no_ktp: extractDigits(line3),
+            no_kk: extractDigits(line4),
+            jenis_kartu: resolved.jenis_kartu ?? undefined,
+            jenis_kartu_sumber: resolved.sumber ?? undefined,
             lokasi: location === 'DHARMAJAYA' ? 'DHARMAJAYA' : undefined
         };
     }
@@ -224,6 +324,14 @@ export function validateBlockToItem(block: string[], index: number, location: 'P
             field: 'no_kjp',
             type: 'invalid_prefix',
             detail: `Nomor Kartu tidak valid. Nomor Kartu KJP harus diawali dengan 504948.`,
+        });
+    } else if (location !== 'PASARJAYA' && !parsed.jenis_kartu) {
+        // Validasi JENIS KARTU (Dharmajaya only): prefix belum dikenal dan tidak ada teks manual
+        const kartuList = 'KJP · LANSIA · RUSUN · DISABILITAS · DASAWISMA\nPEKERJA · GURU HONORER · PJLP · KAJ';
+        errors.push({
+            field: 'no_kjp',
+            type: 'unknown_card_type',
+            detail: `Jenis kartu tidak dikenal. Tulis di samping nomor:\n${kartuList}\nContoh: ${parsed.no_kjp} LANSIA`,
         });
     }
 
@@ -363,7 +471,7 @@ export async function processRawMessageToLogJson(params: {
             const it = items[itemIdx];
             if (it.status === 'OK') {
                 it.status = 'SKIP_FORMAT';
-                
+
                 let detailMsg = `Data ini duplikat (${field === 'no_kjp' ? 'No Kartu' : 'No KTP'} sama dengan data sebelumnya dalam pesan ini).`;
                 if ((field as any) === 'nama') {
                     detailMsg = `❌ Maaf, nama ${it.parsed.nama} double. silahkan edit salah satu nama yg duplikat`;

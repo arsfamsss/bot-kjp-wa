@@ -22,6 +22,7 @@ export type ValidItemDetail = {
     no_kjp: string;
     no_ktp: string;
     no_kk: string;
+    jenis_kartu?: string;  // Jenis kartu (KJP, LANSIA, RUSUN, dll)
     lokasi?: string;
     tanggal_lahir?: string;
 };
@@ -74,7 +75,7 @@ export async function getTodayRecapForSender(
     // 1. Ambil data VALID (semua detail termasuk lokasi dan tanggal lahir)
     const { data: validData, count: validCount, error: countError } = await supabase
         .from('data_harian')
-        .select('nama, no_kjp, no_ktp, no_kk, lokasi, tanggal_lahir', { count: 'exact' })
+        .select('nama, no_kjp, no_ktp, no_kk, jenis_kartu, lokasi, tanggal_lahir', { count: 'exact' })
         .eq('sender_phone', senderPhone)
         .eq('processing_day_key', processingDayKey)
         .order(sortBy, { ascending: true })
@@ -87,6 +88,7 @@ export async function getTodayRecapForSender(
         no_kjp: d.no_kjp,
         no_ktp: d.no_ktp,
         no_kk: d.no_kk,
+        jenis_kartu: d.jenis_kartu || undefined,
         lokasi: d.lokasi || undefined,
         tanggal_lahir: d.tanggal_lahir || undefined
     })) : [];
@@ -187,8 +189,9 @@ export function buildReplyForTodayRecap(
             }
 
             lines.push(`┌── ${i + 1}. *${extractChildName(item.nama)}*`);
-            lines.push(`│   📇 Kartu : ${item.no_kjp}`);
-            lines.push(`│   🪪 KTP   : ${item.no_ktp}`);
+            const jenisLabel = item.jenis_kartu ? ` (${item.jenis_kartu})` : '';
+            lines.push(`│   📇 Kartu : ${item.no_kjp}${jenisLabel}`);
+            lines.push(`│   🪖 KTP   : ${item.no_ktp}`);
             lines.push(`│   🏠 KK    : ${item.no_kk}`);
 
             // Tampilkan tanggal lahir jika ada (khusus Pasarjaya)
@@ -254,8 +257,9 @@ export function buildReplyForReregister(
             }
 
             lines.push(`┌── ${i + 1}. ${extractChildName(item.nama)}`);
-            lines.push(`│   📇 Kartu : ${item.no_kjp}`);
-            if (item.no_ktp) lines.push(`│   🪪 KTP   : ${item.no_ktp}`);
+            const jenisLabel = item.jenis_kartu ? ` (${item.jenis_kartu})` : '';
+            lines.push(`│   📇 Kartu : ${item.no_kjp}${jenisLabel}`);
+            if (item.no_ktp) lines.push(`│   🪖 KTP   : ${item.no_ktp}`);
             if (item.no_kk) lines.push(`│   🏠 KK    : ${item.no_kk}`);
 
             // Tampilkan tanggal lahir jika ada (khusus Pasarjaya)
@@ -610,8 +614,9 @@ export async function generateExportData(
                 // TIDAK ADA HEADER PENGIRIM, LANGSUNG ITEM
                 items.forEach((item: any) => {
                     txtRows.push(`${senderName} (${item.nama})`);
-                    txtRows.push(`   📇 KJP ${item.no_kjp}`);
-                    txtRows.push(`   🪪 KTP ${item.no_ktp}`);
+                    const jenisKartu = item.jenis_kartu ? ` ${item.jenis_kartu}` : '';
+                    txtRows.push(`   📇 Kartu ${item.no_kjp}${jenisKartu}`);
+                    txtRows.push(`   🪖 KTP ${item.no_ktp}`);
                     txtRows.push(`   🏠 KK  ${item.no_kk}`);
                     txtRows.push('');
                 });

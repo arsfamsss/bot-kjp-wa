@@ -33,9 +33,12 @@ export function buildReplyForNewData(
         if (log.items && log.items.length > 0) {
             log.items.forEach((item) => {
                 if (item.status === 'OK') {
-                    // Request format: "🟢 Siti Aminah (5049...)" -> Tambah bullet/emoji
+                    const jenis = item.parsed.jenis_kartu ? ` (${item.parsed.jenis_kartu})` : '';
+                    const koreksiNote = item.parsed.jenis_kartu_sumber === 'koreksi'
+                        ? ' ⚠️ _jenis disesuaikan otomatis_'
+                        : '';
                     lines.push(`✅ *${extractChildName(item.parsed.nama)}*`);
-                    lines.push(`     🆔 ${item.parsed.no_kjp}`); // Indent card
+                    lines.push(`     🆔 ${item.parsed.no_kjp}${jenis}${koreksiNote}`);
                 }
             });
         }
@@ -134,6 +137,8 @@ export function buildReplyForNewData(
                         friendlyMsg = 'Nomor ada yang sama';
                     } else if (err.type === 'blocked_kk') {
                         friendlyMsg = 'No KK terblokir. Silakan ganti data KK lain yang valid.';
+                    } else if (err.type === 'unknown_card_type') {
+                        friendlyMsg = err.detail;
                     } else {
                         friendlyMsg = err.detail;
                     }
