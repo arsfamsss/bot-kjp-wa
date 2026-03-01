@@ -175,7 +175,7 @@ export function buildReplyForNewData(
                 lines.push('15-08-1975');
             } else {
                 lines.push('Siti Aminah');
-                lines.push('5049488500001234');
+                lines.push('5049488500001234 (atau 504... LANSIA)');
                 lines.push('3171234567890123');
                 lines.push('3171098765432109');
             }
