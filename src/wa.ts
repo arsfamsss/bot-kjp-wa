@@ -4485,3 +4485,4 @@ async function executeBroadcast(sock: any, draft: BroadcastDraft, remoteJid: str
     }
     await sock.sendMessage(remoteJid, { text: `✅ Broadcast selesai.\nSukses kirim ke: ${successCount} dari ${count}.` });
 }
+
