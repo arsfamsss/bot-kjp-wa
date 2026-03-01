@@ -1,9 +1,10 @@
 import XLSX from 'xlsx-js-style';
+import { resolveCardTypeLabel } from '../utils/cardType';
 
 export const generateKJPExcel = (data: any[]): Buffer => {
     // 1. Prepare Header and Data
     // Header: No, Nama, No KJP, No KTP, No KK, Tgl Lahir, Lokasi
-    const headers = ["No", "Nama", "No KJP", "No KTP", "No KK", "Tgl Lahir", "Lokasi"];
+    const headers = ["No", "Nama", "Jenis/No Kartu", "No KTP", "No KK", "Tgl Lahir", "Lokasi"];
 
     // Map data to array of arrays
     const rows = data.map((item, index) => {
@@ -99,9 +100,8 @@ export const generateKJPExcel = (data: any[]): Buffer => {
 
     function formatCardCell(cardNumber: string | null, cardType: string | null): string {
         if (!cardNumber) return "";
-        const jenis = (cardType || '').trim();
-        if (!jenis) return cardNumber;
-        return `${cardNumber} (${jenis})`;
+        const jenis = resolveCardTypeLabel(cardNumber, cardType);
+        return `${jenis} ${cardNumber}`;
     }
 
     // 2. Create Worksheet

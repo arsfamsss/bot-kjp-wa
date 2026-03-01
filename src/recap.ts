@@ -3,6 +3,7 @@
 import { supabase } from './supabase';
 import type { ItemStatus, LogItem, LogJson } from './types';
 import { getContactName } from './contacts_data';
+import { resolveCardTypeLabel } from './utils/cardType';
 
 // Utility: Tampilkan nama apa adanya sesuai input user
 // Contoh: "Hamzah (bude)" → "Hamzah (bude)" (tanpa ekstraksi)
@@ -189,8 +190,8 @@ export function buildReplyForTodayRecap(
             }
 
             lines.push(`┌── ${i + 1}. *${extractChildName(item.nama)}*`);
-            const jenisLabel = item.jenis_kartu ? ` (${item.jenis_kartu})` : '';
-            lines.push(`│   📇 Kartu : ${item.no_kjp}${jenisLabel}`);
+            const jenisLabel = resolveCardTypeLabel(item.no_kjp, item.jenis_kartu);
+            lines.push(`│   📇 ${jenisLabel} : ${item.no_kjp}`);
             lines.push(`│   🪖 KTP   : ${item.no_ktp}`);
             lines.push(`│   🏠 KK    : ${item.no_kk}`);
 
@@ -257,8 +258,8 @@ export function buildReplyForReregister(
             }
 
             lines.push(`┌── ${i + 1}. ${extractChildName(item.nama)}`);
-            const jenisLabel = item.jenis_kartu ? ` (${item.jenis_kartu})` : '';
-            lines.push(`│   📇 Kartu : ${item.no_kjp}${jenisLabel}`);
+            const jenisLabel = resolveCardTypeLabel(item.no_kjp, item.jenis_kartu);
+            lines.push(`│   📇 ${jenisLabel} : ${item.no_kjp}`);
             if (item.no_ktp) lines.push(`│   🪖 KTP   : ${item.no_ktp}`);
             if (item.no_kk) lines.push(`│   🏠 KK    : ${item.no_kk}`);
 
@@ -614,8 +615,8 @@ export async function generateExportData(
                 // TIDAK ADA HEADER PENGIRIM, LANGSUNG ITEM
                 items.forEach((item: any) => {
                     txtRows.push(`${senderName} (${item.nama})`);
-                    const jenisKartu = item.jenis_kartu ? ` ${item.jenis_kartu}` : '';
-                    txtRows.push(`   📇 Kartu ${item.no_kjp}${jenisKartu}`);
+                    const jenisKartu = resolveCardTypeLabel(item.no_kjp, item.jenis_kartu);
+                    txtRows.push(`   📇 ${jenisKartu} ${item.no_kjp}`);
                     txtRows.push(`   🪖 KTP ${item.no_ktp}`);
                     txtRows.push(`   🏠 KK  ${item.no_kk}`);
                     txtRows.push('');
@@ -642,9 +643,9 @@ export async function generateExportData(
 
             items.forEach((item: any) => {
                 const tglLahir = item.tanggal_lahir ? formatDateDMY(item.tanggal_lahir) : '';
-                const jenisKartu = item.jenis_kartu || 'KJP';
+                const jenisKartu = resolveCardTypeLabel(item.no_kjp, item.jenis_kartu);
                 txtRows.push(`${senderName} (${item.nama})`);
-                txtRows.push(`Kartu ${item.no_kjp} ${jenisKartu}`);
+                txtRows.push(`${jenisKartu} ${item.no_kjp}`);
                 txtRows.push(`KTP ${item.no_ktp}`);
                 txtRows.push(`KK ${item.no_kk}`);
                 if (tglLahir) txtRows.push(`${tglLahir}`);
