@@ -12,6 +12,10 @@
   "exclude": [
     "test",
     "node_modules",
-    "debug_admin_delete.ts"
+    "debug_admin_delete.ts",
+    "tmp_repos"
+  ],
+  "include": [
+    "src/**/*.ts"
   ]
 }

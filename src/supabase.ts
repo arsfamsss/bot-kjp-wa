@@ -535,6 +535,7 @@ export async function saveLogAndOkItems(log: LogJson, rawText: string): Promise<
             sender_name: log.sender_name || null,
             nama: it.parsed.nama,
             no_kjp: it.parsed.no_kjp,
+            jenis_kartu: it.parsed.jenis_kartu || null,
             no_ktp: it.parsed.no_ktp,
             no_kk: it.parsed.no_kk,
             tanggal_lahir: it.parsed.tanggal_lahir || null,

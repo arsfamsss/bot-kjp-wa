@@ -40,7 +40,7 @@ export const generateKJPExcel = (data: any[]): Buffer => {
             item.sender_name && item.sender_name !== item.nama
                 ? `${item.sender_name} (${item.nama})`
                 : (item.nama || ""),
-            item.no_kjp || "",
+            formatCardCell(item.no_kjp, item.jenis_kartu),
             item.no_ktp || "",
             item.no_kk || "",
             formatDateCell(item.tanggal_lahir, item.no_ktp), // Format Date
@@ -95,6 +95,13 @@ export const generateKJPExcel = (data: any[]): Buffer => {
         }
 
         return dbDate || "-";
+    }
+
+    function formatCardCell(cardNumber: string | null, cardType: string | null): string {
+        if (!cardNumber) return "";
+        const jenis = (cardType || '').trim();
+        if (!jenis) return cardNumber;
+        return `${cardNumber} (${jenis})`;
     }
 
     // 2. Create Worksheet

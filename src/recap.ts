@@ -642,8 +642,9 @@ export async function generateExportData(
 
             items.forEach((item: any) => {
                 const tglLahir = item.tanggal_lahir ? formatDateDMY(item.tanggal_lahir) : '';
+                const jenisKartu = item.jenis_kartu || 'KJP';
                 txtRows.push(`${senderName} (${item.nama})`);
-                txtRows.push(`KJP ${item.no_kjp}`);
+                txtRows.push(`Kartu ${item.no_kjp} ${jenisKartu}`);
                 txtRows.push(`KTP ${item.no_ktp}`);
                 txtRows.push(`KK ${item.no_kk}`);
                 if (tglLahir) txtRows.push(`${tglLahir}`);
