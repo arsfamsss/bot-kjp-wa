@@ -343,11 +343,37 @@ export async function getGlobalRecap(
         }
     }
 
+    // --- RINGKASAN TOTAL DATA PER LOKASI ---
+    const locationTotals = new Map<string, number>();
+    for (const row of (data as any[])) {
+        let locLabel = '';
+        if (row.lokasi && row.lokasi.startsWith('DHARMAJAYA')) {
+            locLabel = row.lokasi.replace(/^DHARMAJAYA\s*-\s*/i, '').trim();
+            if (!locLabel) locLabel = 'Duri Kosambi';
+        } else if (row.lokasi && row.lokasi.startsWith('PASARJAYA')) {
+            locLabel = row.lokasi.replace(/^PASARJAYA\s*-\s*/i, '').trim();
+            if (!locLabel) locLabel = 'PASARJAYA';
+        } else {
+            locLabel = 'Duri Kosambi';
+        }
+        locationTotals.set(locLabel, (locationTotals.get(locLabel) || 0) + 1);
+    }
+
+    const appendLocationTotals = (target: string[]) => {
+        target.push(`📍 *TOTAL DATA MASUK PER LOKASI:*`);
+        const sortedLocations = Array.from(locationTotals.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+        for (const [locName, count] of sortedLocations) {
+            target.push(`   • ${locName} : ${count} data`);
+        }
+        target.push(`────────────────────────────────────`);
+    };
+
     const lines: string[] = [];
     lines.push(`👑 *LAPORAN DETAIL DATA*`);
     lines.push(`📅 Periode: ${dateLabel} (06.01–23.59 WIB)`);
     lines.push(`📊 Total Keseluruhan: *${data.length}* Data`);
     lines.push('');
+    appendLocationTotals(lines);
     lines.push('👇 *RINCIAN DATA MASUK:*');
 
     // Sort pengirim berdasarkan nama A-Z
@@ -450,29 +476,7 @@ export async function getGlobalRecap(
         }
     });
 
-    // --- RINGKASAN TOTAL DATA PER LOKASI ---
-    const locationTotals = new Map<string, number>();
-    for (const row of (data as any[])) {
-        let locLabel = '';
-        if (row.lokasi && row.lokasi.startsWith('DHARMAJAYA')) {
-            locLabel = row.lokasi.replace(/^DHARMAJAYA\s*-\s*/i, '').trim();
-            if (!locLabel) locLabel = 'Duri Kosambi';
-        } else if (row.lokasi && row.lokasi.startsWith('PASARJAYA')) {
-            locLabel = row.lokasi.replace(/^PASARJAYA\s*-\s*/i, '').trim();
-            if (!locLabel) locLabel = 'PASARJAYA';
-        } else {
-            locLabel = 'Duri Kosambi';
-        }
-        locationTotals.set(locLabel, (locationTotals.get(locLabel) || 0) + 1);
-    }
-
-    lines.push(`────────────────────────────────────`);
-    lines.push(`📍 *TOTAL DATA MASUK PER LOKASI:*`);
-    const sortedLocations = Array.from(locationTotals.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-    for (const [locName, count] of sortedLocations) {
-        lines.push(`   • ${locName} : ${count} data`);
-    }
-    lines.push(`────────────────────────────────────`);
+    appendLocationTotals(lines);
 
     lines.push(`_Akhir laporan (${data.length} data)_`);
     return lines.join('\n');
