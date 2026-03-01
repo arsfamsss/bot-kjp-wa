@@ -410,8 +410,9 @@ export async function getGlobalRecap(
                 lines.push(`*${locName}* : ${locItems.length}`);
                 locItems.forEach((item: any) => {
                     const itemKey = endKey ? ` (${String(item.processing_day_key).split('-').reverse().join('-')})` : '';
+                    const jenisKartu = resolveCardTypeLabel(item.no_kjp, item.jenis_kartu);
                     lines.push(`   ${globalIndex}. ${item.nama}${itemKey}`);
-                    lines.push(`   KJP ${item.no_kjp}`);
+                    lines.push(`   ${jenisKartu} ${item.no_kjp}`);
                     lines.push(`   KTP ${item.no_ktp}`);
                     lines.push(`   KK  ${item.no_kk}`);
                     lines.push('');
@@ -436,10 +437,11 @@ export async function getGlobalRecap(
                 locItems.forEach((item: any) => {
                     const itemKey = endKey ? ` (${String(item.processing_day_key).split('-').reverse().join('-')})` : '';
                     const tglLahir = item.tanggal_lahir ? formatDateDMY(item.tanggal_lahir) : '';
+                    const jenisKartu = resolveCardTypeLabel(item.no_kjp, item.jenis_kartu);
                     lines.push(`   ${globalIndex}. ${item.nama}${itemKey}`);
                     lines.push(`   KK  ${item.no_kk}`);
                     lines.push(`   KTP ${item.no_ktp}`);
-                    lines.push(`   KJP ${item.no_kjp}`);
+                    lines.push(`   ${jenisKartu} ${item.no_kjp}`);
                     if (tglLahir) lines.push(`   ${tglLahir}`);
                     lines.push('');
                     globalIndex++;

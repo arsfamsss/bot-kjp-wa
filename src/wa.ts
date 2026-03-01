@@ -77,6 +77,7 @@ import {
 import { getProcessingDayKey, getWibIsoDate, shiftIsoDate, isSystemClosed, getWibParts } from './time';
 import { getContactName } from './contacts_data';
 import { parseFlexibleDate, looksLikeDate } from './utils/dateParser';
+import { resolveCardTypeLabel } from './utils/cardType';
 import {
     MENU_MESSAGE,
     FORMAT_DAFTAR_MESSAGE,
@@ -2710,8 +2711,9 @@ export async function connectToWhatsApp() {
                                 (data as any[]).forEach((row, i) => {
                                     const dateDisplay = String(row.processing_day_key).split('-').reverse().join('-');
                                     const senderName = getContactName(row.sender_phone) || getRegisteredUserNameSync(row.sender_phone) || row.sender_phone;
+                                    const jenisKartu = resolveCardTypeLabel(row.no_kjp, row.jenis_kartu);
                                     lines.push(`${i + 1}. *${row.nama}* (${dateDisplay})`);
-                                    lines.push(`   💳 Kartu: ${row.no_kjp}`);
+                                    lines.push(`   💳 ${jenisKartu}: ${row.no_kjp}`);
                                     lines.push(`   📱 Pengirim: ${senderName}`);
                                     lines.push('');
                                 });
@@ -3403,7 +3405,7 @@ export async function connectToWhatsApp() {
                             console.log(`[ADMIN DELETE] Querying data for user: phone=${selectedUser.phone}, name=${selectedUser.name}, processingDayKey=${processingDayKey}`);
                             const { data: userData, error: userDataError } = await supabase
                                 .from('data_harian')
-                                .select('id, nama, no_kjp, no_ktp, no_kk, lokasi') // Fix: Remove specific_location (missing in DB)
+                                .select('id, nama, no_kjp, jenis_kartu, no_ktp, no_kk, lokasi')
                                 .eq('processing_day_key', processingDayKey)
                                 .eq('sender_phone', selectedUser.phone)
                                 .order('nama', { ascending: true })  // Urutan A-Z konsisten
@@ -3427,8 +3429,9 @@ export async function connectToWhatsApp() {
                                 let msg = `🗑️ *DATA MILIK: ${selectedUser.name}*\n`;
                                 msg += `📅 Tanggal: ${dmyExample}\n\n`;
                                 userData.forEach((d: any, i: number) => {
+                                    const jenisKartu = resolveCardTypeLabel(d.no_kjp, d.jenis_kartu);
                                     msg += `┌── ${i + 1}. *${d.nama}*\n`;
-                                    msg += `│   💳 Kartu: ${d.no_kjp}\n`;
+                                    msg += `│   💳 ${jenisKartu}: ${d.no_kjp}\n`;
                                     msg += `│   🪪 KTP  : ${d.no_ktp}\n`;
                                     msg += `│   🏠 KK   : ${d.no_kk}\n`;
                                     msg += `└── 📍 Loc  : ${d.specific_location || d.lokasi || '-'}\n\n`;
