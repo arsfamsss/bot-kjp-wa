@@ -264,9 +264,8 @@ export function parseRawMessageToLines(text: string): string[] {
         const current = rawLines[i];
         const next = rawLines[i + 1];
 
-        const isLabelOnly = /\b(NO|NOMOR|NOMER|KARTU|KJP|KTP|NIK|KK|KARTU\s*KELUARGA)\b/i.test(current)
-            && !/\d/.test(current)
-            && /:?\s*$/.test(current);
+        const isLabelOnly = /^(?:(?:NO|NOMOR|NOMER)\s+)?(?:KARTU(?:\s+KELUARGA)?|KJP|KTP|NIK|KK)\s*:?\s*$/i.test(current)
+            && !/\d/.test(current);
         const nextLooksLikeNumber = !!next && (extractDigits(next).length >= 8);
 
         if (isLabelOnly && nextLooksLikeNumber) {
