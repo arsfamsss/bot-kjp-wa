@@ -135,6 +135,7 @@ export const generateKJPExcel = (data: any[]): Buffer => {
         }
     };
 
+
     // Apply styles
     for (let R = range.s.r; R <= range.e.r; ++R) {
         for (let C = range.s.c; C <= range.e.c; ++C) {

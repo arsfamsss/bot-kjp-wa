@@ -81,6 +81,13 @@ import { resolveCardTypeLabel } from './utils/cardType';
 import { deleteCardPrefix, getCardPrefixMap, upsertCardPrefix } from './utils/cardPrefixConfig';
 import { getCardTypeChoicesText, normalizeCardTypeName } from './utils/cardTypeRules';
 import {
+    buildDharmajayaMenuWithStatus,
+    closeSpecificLocation,
+    isSpecificLocationClosed,
+    listClosedLocationsByProvider,
+    openSpecificLocation,
+} from './services/locationGate';
+import {
     MENU_MESSAGE,
     FORMAT_DAFTAR_MESSAGE,
     FORMAT_DAFTAR_PASARJAYA,
@@ -92,7 +99,6 @@ import {
     CLOSE_MESSAGE_TEMPLATE_UNIFIED,
     MENU_PASARJAYA_LOCATIONS, // NEW
     PASARJAYA_MAPPING, // NEW
-    MENU_DHARMAJAYA_LOCATIONS,
     DHARMAJAYA_MAPPING,
 } from './config/messages';
 import {
@@ -314,6 +320,18 @@ function buildCardPrefixMenuText(): string {
         '1️⃣ Lihat daftar prefix',
         '2️⃣ Tambah/Ubah prefix',
         '3️⃣ Hapus prefix',
+        '',
+        '0️⃣ Kembali ke Menu Admin',
+    ].join('\n');
+}
+
+function buildBlockedLocationMenuText(): string {
+    return [
+        '📍 *KELOLA LOKASI PENUH (DHARMAJAYA)*',
+        '',
+        '1️⃣ Tandai Lokasi Penuh',
+        '2️⃣ Lihat Daftar Lokasi Penuh',
+        '3️⃣ Buka Kembali Lokasi',
         '',
         '0️⃣ Kembali ke Menu Admin',
     ].join('\n');
@@ -1824,7 +1842,7 @@ export async function connectToWhatsApp() {
 
                         if (!rejectDharmajaya) {
                             // MENU SUB-LOKASI DHARMAJAYA (BARU - sama seperti Pasarjaya)
-                            replyText = MENU_DHARMAJAYA_LOCATIONS;
+                            replyText = await buildDharmajayaMenuWithStatus();
                             userFlowByPhone.set(senderPhone, 'SELECT_DHARMAJAYA_SUB');
                         }
                     } else if (normalized === '0') {
@@ -1999,6 +2017,15 @@ export async function connectToWhatsApp() {
                     } else if (DHARMAJAYA_MAPPING[normalized]) {
                         // PILIHAN 1-4 (VALID)
                         const lokasiName = DHARMAJAYA_MAPPING[normalized];
+                        const closeStatus = await isSpecificLocationClosed('DHARMAJAYA', lokasiName);
+                        if (closeStatus.closed) {
+                            const reasonSuffix = closeStatus.reason ? `\nAlasan: ${closeStatus.reason}` : '';
+                            const statusMenuText = await buildDharmajayaMenuWithStatus();
+                            replyText = `⚠️ Lokasi *${lokasiName}* sedang penuh dan ditutup sementara.${reasonSuffix}\nSilakan pilih lokasi lain yang tersedia.\n\n${statusMenuText}`;
+                            if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
+                            continue;
+                        }
+
                         userLocationChoice.set(senderPhone, 'DHARMAJAYA');
                         userSpecificLocationChoice.set(senderPhone, `DHARMAJAYA - ${lokasiName}`);
                         console.log(`[DEBUG] SET Specific Location for ${senderPhone}: DHARMAJAYA - ${lokasiName}`);
@@ -2046,19 +2073,14 @@ export async function connectToWhatsApp() {
                         const inputLines = parseRawMessageToLines(messageText);
                         if (inputLines.length >= 4 && inputLines.length % 4 === 0) {
                             pendingRegistrationData.set(senderPhone, messageText);
+                            const statusMenuText = await buildDharmajayaMenuWithStatus();
                             replyText = [
                                 '📍 *PILIH LOKASI PENGAMBILAN DULU*',
                                 '',
                                 '✅ Data Anda sudah tersimpan sementara.',
                                 'Silakan pilih lokasi pengambilannya:',
                                 '',
-                                '*1.* Duri Kosambi',
-                                '*2.* Kapuk Jagal',
-                                '*3.* Pulogadung',
-                                '*4.* Cakung',
-                                '',
-                                '_Ketik angka pilihanmu! (1-4)_',
-                                '_(Ketik 0 untuk batal)_'
+                                statusMenuText,
                             ].join('\n');
                         } else {
                             replyText = '⚠️ Pilihan salah. Ketik 1-4, atau 0 batal.';
@@ -2192,7 +2214,7 @@ export async function connectToWhatsApp() {
                 }
 
                 if (isAdmin && currentAdminFlow !== 'NONE') {
-                    if ((normalized === '0' && !currentAdminFlow.startsWith('CONTACT_') && !currentAdminFlow.startsWith('BLOCKED_KK_') && !currentAdminFlow.startsWith('BLOCKED_PHONE_') && !currentAdminFlow.startsWith('SETTING_')) || isGreetingOrMenu(normalized)) {
+                    if ((normalized === '0' && !currentAdminFlow.startsWith('CONTACT_') && !currentAdminFlow.startsWith('BLOCKED_KK_') && !currentAdminFlow.startsWith('BLOCKED_PHONE_') && !currentAdminFlow.startsWith('BLOCKED_LOCATION_') && !currentAdminFlow.startsWith('SETTING_')) || isGreetingOrMenu(normalized)) {
                         adminFlowByPhone.set(senderPhone, 'NONE');
                         await sendMainMenu(sock, remoteJid, isAdmin);
                         continue;
@@ -2499,6 +2521,9 @@ export async function connectToWhatsApp() {
                         } else if (normalized === '17') {
                             adminFlowByPhone.set(senderPhone, 'CARD_PREFIX_MENU');
                             replyText = buildCardPrefixMenuText();
+                        } else if (normalized === '18') {
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_LOCATION_MENU');
+                            replyText = buildBlockedLocationMenuText();
                         } else replyText = '⚠️ Pilihan tidak dikenali.';
                     } else if (currentAdminFlow === 'SETTING_OPERATION_MENU') {
                         if (normalized === '0') {
@@ -3318,6 +3343,90 @@ export async function connectToWhatsApp() {
                             replyText = result.success ? `✅ ${result.message}` : `❌ ${result.message}`;
                             replyText += '\n\n' + buildBlockedPhoneMenuText();
                             adminFlowByPhone.set(senderPhone, 'BLOCKED_PHONE_MENU');
+                        }
+                    } else if (currentAdminFlow === 'BLOCKED_LOCATION_MENU') {
+                        if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'MENU');
+                            replyText = ADMIN_MENU_MESSAGE;
+                        } else if (normalized === '1') {
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_LOCATION_ADD');
+                            replyText = [
+                                '🚫 *TANDAI LOKASI PENUH*',
+                                '',
+                                'Pilih nomor lokasi Dharmajaya, lalu opsional alasan.',
+                                'Format: nomor | alasan',
+                                'Contoh: 2 | Kuota hari ini sudah habis',
+                                '',
+                                '1. Duri Kosambi',
+                                '2. Kapuk Jagal',
+                                '3. Pulogadung',
+                                '4. Cakung',
+                                '',
+                                '_Ketik 0 untuk kembali._'
+                            ].join('\n');
+                        } else if (normalized === '2') {
+                            const list = await listClosedLocationsByProvider('DHARMAJAYA');
+                            if (list.length === 0) {
+                                replyText = '📂 Tidak ada lokasi Dharmajaya yang ditutup.';
+                            } else {
+                                const lines = ['📋 *DAFTAR LOKASI PENUH (DHARMAJAYA)*', ''];
+                                list.forEach((loc, idx) => {
+                                    lines.push(`${idx + 1}. ${loc.replace('DHARMAJAYA - ', '')}`);
+                                });
+                                lines.push('');
+                                lines.push('_Ketik 3 untuk buka kembali lokasi._');
+                                replyText = lines.join('\n');
+                            }
+                        } else if (normalized === '3') {
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_LOCATION_DELETE');
+                            replyText = [
+                                '♻️ *BUKA KEMBALI LOKASI*',
+                                '',
+                                'Ketik nomor lokasi Dharmajaya yang ingin dibuka.',
+                                '',
+                                '1. Duri Kosambi',
+                                '2. Kapuk Jagal',
+                                '3. Pulogadung',
+                                '4. Cakung',
+                                '',
+                                '_Ketik 0 untuk kembali._'
+                            ].join('\n');
+                        } else {
+                            replyText = '⚠️ Pilihan tidak dikenali. Ketik 1, 2, 3, atau 0.';
+                        }
+                    } else if (currentAdminFlow === 'BLOCKED_LOCATION_ADD') {
+                        if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_LOCATION_MENU');
+                            replyText = buildBlockedLocationMenuText();
+                        } else {
+                            const [rawChoice, ...reasonParts] = rawTrim.split('|');
+                            const choice = (rawChoice || '').trim();
+                            const reason = reasonParts.join('|').trim();
+                            const locationName = DHARMAJAYA_MAPPING[choice];
+
+                            if (!locationName) {
+                                replyText = '⚠️ Nomor lokasi tidak valid. Pilih 1-4.\n\n' + buildBlockedLocationMenuText();
+                            } else {
+                                const result = await closeSpecificLocation('DHARMAJAYA', locationName, reason);
+                                replyText = result.success ? `✅ ${result.message}` : `❌ ${result.message}`;
+                                replyText += '\n\n' + buildBlockedLocationMenuText();
+                            }
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_LOCATION_MENU');
+                        }
+                    } else if (currentAdminFlow === 'BLOCKED_LOCATION_DELETE') {
+                        if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_LOCATION_MENU');
+                            replyText = buildBlockedLocationMenuText();
+                        } else {
+                            const locationName = DHARMAJAYA_MAPPING[normalized];
+                            if (!locationName) {
+                                replyText = '⚠️ Nomor lokasi tidak valid. Pilih 1-4.\n\n' + buildBlockedLocationMenuText();
+                            } else {
+                                const result = await openSpecificLocation('DHARMAJAYA', locationName);
+                                replyText = result.success ? `✅ ${result.message}` : `❌ ${result.message}`;
+                                replyText += '\n\n' + buildBlockedLocationMenuText();
+                            }
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_LOCATION_MENU');
                         }
                     } else if (currentAdminFlow === 'BROADCAST_SELECT') {
                         if (normalized === '1') {
@@ -4370,6 +4479,21 @@ export async function connectToWhatsApp() {
                                 ].join('\n')
                             });
                             continue;
+                        }
+
+                        if (storedSpecificLocation && storedSpecificLocation.startsWith('DHARMAJAYA - ')) {
+                            const subLocation = storedSpecificLocation.replace('DHARMAJAYA - ', '').trim();
+                            const closeStatus = await isSpecificLocationClosed('DHARMAJAYA', subLocation);
+                            if (closeStatus.closed) {
+                                pendingRegistrationData.set(senderPhone, messageText);
+                                userFlowByPhone.set(senderPhone, 'SELECT_DHARMAJAYA_SUB');
+                                const reasonSuffix = closeStatus.reason ? `\nAlasan: ${closeStatus.reason}` : '';
+                                const statusMenuText = await buildDharmajayaMenuWithStatus();
+                                await sock.sendMessage(remoteJid, {
+                                    text: `⚠️ Lokasi *${subLocation}* sedang penuh dan ditutup sementara.${reasonSuffix}\nSilakan pilih lokasi lain yang tersedia.\n\n${statusMenuText}`
+                                });
+                                continue;
+                            }
                         }
 
                         const logJson = await processRawMessageToLogJson({

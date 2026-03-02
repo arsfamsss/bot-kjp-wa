@@ -251,6 +251,14 @@ export type BlockedPhoneItem = {
     created_at?: string | null;
 };
 
+export type BlockedLocationItem = {
+    location_key: string;
+    reason?: string | null;
+    is_active?: boolean;
+    created_at?: string | null;
+    updated_at?: string | null;
+};
+
 function normalizeKk(raw: string): string {
     return (raw || '').replace(/\D/g, '');
 }
@@ -260,6 +268,24 @@ function normalizePhoneNumber(raw: string): string {
     if (digits.startsWith('0')) digits = `62${digits.slice(1)}`;
     if (digits.startsWith('8')) digits = `62${digits}`;
     return digits;
+}
+
+function normalizeLocationKey(raw: string): string {
+    return (raw || '').trim().replace(/\s+/g, ' ');
+}
+
+function isMissingTableError(error: unknown, tableName: string): boolean {
+    if (!error || typeof error !== 'object') return false;
+
+    const err = error as { code?: string; message?: string };
+    const msg = (err.message || '').toLowerCase();
+    const table = tableName.toLowerCase();
+
+    return (
+        err.code === '42P01' ||
+        err.code === 'PGRST205' ||
+        (msg.includes('could not find the table') && msg.includes(table))
+    );
 }
 
 function buildPhoneCandidates(raw: string): string[] {
@@ -405,6 +431,65 @@ export async function checkBlockedKkBatch(items: LogItem[]): Promise<LogItem[]> 
     });
 }
 
+export async function checkBlockedLocationBatch(items: LogItem[]): Promise<LogItem[]> {
+    const activeItems = items.filter((it) => it.status === 'OK' && it.parsed.lokasi);
+    if (activeItems.length === 0) return items;
+
+    const locationKeys = Array.from(
+        new Set(activeItems.map((it) => (it.parsed.lokasi || '').trim()).filter((v) => v.length > 0))
+    );
+
+    if (locationKeys.length === 0) return items;
+
+    const { data, error } = await supabase
+        .from('blocked_locations')
+        .select('location_key, reason')
+        .eq('is_active', true)
+        .in('location_key', locationKeys);
+
+    if (error) {
+        if (!isMissingTableError(error, 'blocked_locations')) {
+            console.error('Error checkBlockedLocationBatch:', error);
+        }
+        return items;
+    }
+
+    const blockedMap = new Map<string, string | null>();
+    (data || []).forEach((row: { location_key: string; reason?: string | null }) => {
+        blockedMap.set(row.location_key, row.reason || null);
+    });
+
+    if (blockedMap.size === 0) return items;
+
+    return items.map((item) => {
+        if (item.status !== 'OK') return item;
+
+        const locationKey = (item.parsed.lokasi || '').trim();
+        if (!locationKey) return item;
+
+        const reason = blockedMap.get(locationKey);
+        if (reason === undefined) return item;
+
+        const locationName = locationKey.includes(' - ') ? locationKey.split(' - ').slice(1).join(' - ') : locationKey;
+        const detail = reason
+            ? `Lokasi ${locationName} sedang penuh/ditutup (${reason}). Silakan pilih lokasi lain.`
+            : `Lokasi ${locationName} sedang penuh/ditutup. Silakan pilih lokasi lain.`;
+
+        return {
+            ...item,
+            status: 'SKIP_FORMAT',
+            errors: [
+                ...item.errors,
+                {
+                    field: 'lokasi',
+                    type: 'blocked_location',
+                    detail,
+                },
+            ],
+        };
+    });
+}
+
 export async function getBlockedPhoneList(limit: number = 200): Promise<BlockedPhoneItem[]> {
     const { data, error } = await supabase
         .from('blocked_phones')
@@ -494,6 +579,104 @@ export async function isPhoneBlocked(phoneRaw: string): Promise<{ blocked: boole
 
     if (!data) return { blocked: false };
     return { blocked: true, reason: (data as any).reason || null };
+}
+
+export async function getBlockedLocationList(limit: number = 200): Promise<BlockedLocationItem[]> {
+    const { data, error } = await supabase
+        .from('blocked_locations')
+        .select('location_key, reason, is_active, created_at, updated_at')
+        .eq('is_active', true)
+        .order('location_key', { ascending: true })
+        .limit(limit);
+
+    if (error) {
+        if (!isMissingTableError(error, 'blocked_locations')) {
+            console.error('Error getBlockedLocationList:', error);
+        }
+        return [];
+    }
+
+    return (data || []) as BlockedLocationItem[];
+}
+
+export async function closeLocation(
+    locationRaw: string,
+    reason?: string
+): Promise<{ success: boolean; message: string }> {
+    const locationKey = normalizeLocationKey(locationRaw);
+    if (!locationKey) {
+        return { success: false, message: 'Nama lokasi wajib diisi.' };
+    }
+
+    const payload = {
+        location_key: locationKey,
+        reason: (reason || '').trim() || null,
+        is_active: true,
+        updated_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase
+        .from('blocked_locations')
+        .upsert(payload, { onConflict: 'location_key' });
+
+    if (error) {
+        if (isMissingTableError(error, 'blocked_locations')) {
+            return { success: false, message: 'Tabel blocked_locations belum dibuat di database.' };
+        }
+        console.error('Error closeLocation:', error);
+        return { success: false, message: `Gagal menutup lokasi (${(error as { message?: string }).message || 'unknown error'}).` };
+    }
+
+    return { success: true, message: `Lokasi ${locationKey} ditandai penuh.` };
+}
+
+export async function openLocation(locationRaw: string): Promise<{ success: boolean; message: string }> {
+    const locationKey = normalizeLocationKey(locationRaw);
+    if (!locationKey) {
+        return { success: false, message: 'Nama lokasi wajib diisi.' };
+    }
+
+    const { count, error } = await supabase
+        .from('blocked_locations')
+        .delete({ count: 'exact' })
+        .eq('location_key', locationKey);
+
+    if (error) {
+        if (isMissingTableError(error, 'blocked_locations')) {
+            return { success: false, message: 'Tabel blocked_locations belum dibuat di database.' };
+        }
+        console.error('Error openLocation:', error);
+        return { success: false, message: `Gagal membuka lokasi (${(error as { message?: string }).message || 'unknown error'}).` };
+    }
+
+    if ((count || 0) === 0) {
+        return { success: false, message: `Lokasi ${locationKey} tidak ada di daftar penuh.` };
+    }
+
+    return { success: true, message: `Lokasi ${locationKey} dibuka kembali.` };
+}
+
+export async function isLocationBlocked(locationRaw: string): Promise<{ blocked: boolean; reason?: string | null }> {
+    const locationKey = normalizeLocationKey(locationRaw);
+    if (!locationKey) return { blocked: false };
+
+    const { data, error } = await supabase
+        .from('blocked_locations')
+        .select('location_key, reason')
+        .eq('location_key', locationKey)
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle();
+
+    if (error) {
+        if (!isMissingTableError(error, 'blocked_locations')) {
+            console.error('Error isLocationBlocked:', error);
+        }
+        return { blocked: false };
+    }
+
+    if (!data) return { blocked: false };
+    return { blocked: true, reason: (data as { reason?: string | null }).reason || null };
 }
 
 export async function saveLogAndOkItems(log: LogJson, rawText: string): Promise<{ success: boolean; dataError?: any; logError?: any }> {

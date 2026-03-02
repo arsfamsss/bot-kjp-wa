@@ -73,6 +73,9 @@ export type AdminFlowState =
     | 'BLOCKED_PHONE_MENU'
     | 'BLOCKED_PHONE_ADD'
     | 'BLOCKED_PHONE_DELETE'
+    | 'BLOCKED_LOCATION_MENU'
+    | 'BLOCKED_LOCATION_ADD'
+    | 'BLOCKED_LOCATION_DELETE'
     // NEW CONTACT MANAGEMENT FLOW
     | 'CONTACT_MENU'        // Menu Utama Kelola Kontak
     | 'CONTACT_SEARCH'      // Input keyword pencarian

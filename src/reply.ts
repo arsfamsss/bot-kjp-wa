@@ -138,6 +138,19 @@ export function buildReplyForNewData(
                         friendlyMsg = 'Nomor ada yang sama';
                     } else if (err.type === 'blocked_kk') {
                         friendlyMsg = 'No KK terblokir. Silakan ganti data KK lain yang valid.';
+                    } else if (err.type === 'blocked_location') {
+                        const locationLabel = item.parsed.lokasi
+                            ? item.parsed.lokasi.replace(/^(PASARJAYA|DHARMAJAYA)\s*-\s*/i, '').trim()
+                            : '';
+                        if (isPasarjaya) {
+                            friendlyMsg = locationLabel
+                                ? `Data belum bisa diproses karena lokasi *${locationLabel}* sedang penuh. Silakan pilih lokasi lain lalu kirim ulang data yang sama.`
+                                : 'Data belum bisa diproses karena lokasi Pasarjaya sedang penuh. Silakan pilih lokasi lain lalu kirim ulang data yang sama.';
+                        } else {
+                            friendlyMsg = locationLabel
+                                ? `Data belum bisa diproses karena lokasi *${locationLabel}* sedang penuh. Silakan pilih lokasi lain lalu kirim ulang data yang sama.`
+                                : 'Data belum bisa diproses karena lokasi Dharmajaya sedang penuh. Silakan pilih lokasi lain lalu kirim ulang data yang sama.';
+                        }
                     } else if (err.type === 'unknown_card_type') {
                         friendlyMsg = err.detail;
                     } else {

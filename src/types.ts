@@ -18,7 +18,7 @@ export interface ParsedFields {
 }
 
 export interface ItemError {
-    field: "nama" | "no_kjp" | "no_ktp" | "no_kk" | "tanggal_lahir";
+    field: "nama" | "no_kjp" | "no_ktp" | "no_kk" | "tanggal_lahir" | "lokasi";
     type:
     | "required"
     | "invalid_length"
@@ -31,6 +31,7 @@ export interface ItemError {
     | "wrong_order"
     | "unknown_card_type"
     | "invalid_card_type"
+    | "blocked_location"
     | "card_type_mismatch";  // Prefix tidak dikenal & tidak ada teks jenis kartu (Dharmajaya)
     detail: string;
 }
