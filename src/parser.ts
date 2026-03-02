@@ -4,7 +4,7 @@ import type { LogItem, ParsedFields, ItemError, LogJson, LogStats } from './type
 import { checkBlockedKkBatch, checkBlockedKtpBatch, checkBlockedLocationBatch, checkDuplicateForItem, checkDuplicatesBatch } from './supabase';
 import { parseFlexibleDate } from './utils/dateParser';
 import { normalizeCardTypeName, getCardTypeChoicesText } from './utils/cardTypeRules';
-import { getCardPrefixMap, getCardPrefixType } from './utils/cardPrefixConfig';
+import { getCardPrefixType } from './utils/cardPrefixConfig';
 
 // --- BAGIAN 1: PEMBERSIH INPUT ---
 
@@ -70,17 +70,6 @@ function normalizeCardType(text: string): string | null {
     return normalizeCardTypeName(text);
 }
 
-function isAdminConfiguredPrefix(prefix8: string | null): boolean {
-    if (!prefix8) return false;
-    if (prefix8 === '50494885' || prefix8 === '50494812') return false;
-    const map = getCardPrefixMap();
-    return !!map[prefix8];
-}
-
-/**
- * Deteksi jenis kartu dari nomor KJP dan teks manual.
- * Prioritas: prefix map > teks manual (alias) > null
- */
 function resolveJenisKartu(noKjp: string, textManual: string): {
     jenis_kartu: string | null;
     sumber: 'prefix' | 'manual' | 'koreksi' | null;
@@ -91,56 +80,23 @@ function resolveJenisKartu(noKjp: string, textManual: string): {
     prefix_type: string | null;
 } {
     const prefix8 = noKjp.length >= 8 ? noKjp.substring(0, 8) : null;
-    let fromPrefix = prefix8 ? getCardPrefixType(prefix8) : null;
+    const fromPrefix = prefix8 ? getCardPrefixType(prefix8) : null;
     const fromText = normalizeCardType(textManual);
     const hasManualText = textManual.trim().length > 0;
     const manualInvalid = hasManualText && !fromText;
     const isMainAutoKjpPrefix = prefix8 === '50494885';
-    const adminConfigured = isAdminConfiguredPrefix(prefix8);
 
-    if (fromPrefix) {
-        if (adminConfigured) {
-            const koreksi = !!(fromText && fromText !== fromPrefix);
-            return {
-                jenis_kartu: fromPrefix,
-                sumber: koreksi ? 'koreksi' : 'prefix',
-                koreksi,
-                has_manual_text: hasManualText,
-                manual_invalid: manualInvalid,
-                manual_type: fromText,
-                prefix_type: fromPrefix,
-            };
-        }
-
-        const shouldFollowManual = !isMainAutoKjpPrefix && !!fromText;
-        if (shouldFollowManual) {
-            return {
-                jenis_kartu: fromText,
-                sumber: 'manual',
-                koreksi: false,
-                has_manual_text: hasManualText,
-                manual_invalid: false,
-                manual_type: fromText,
-                prefix_type: fromPrefix,
-            };
-        }
-
-        const isNonMainAutoKjpPrefix = fromPrefix === 'KJP' && !isMainAutoKjpPrefix;
-        if (isNonMainAutoKjpPrefix) {
-            fromPrefix = null;
-        }
-    }
-
-    if (fromPrefix) {
-        const koreksi = !!(fromText && fromText !== fromPrefix);
+    if (isMainAutoKjpPrefix) {
+        const forcedType = fromPrefix || 'KJP';
+        const koreksi = !!(fromText && fromText !== forcedType);
         return {
-            jenis_kartu: fromPrefix,
+            jenis_kartu: forcedType,
             sumber: koreksi ? 'koreksi' : 'prefix',
             koreksi,
             has_manual_text: hasManualText,
-            manual_invalid: manualInvalid,
+            manual_invalid: false,
             manual_type: fromText,
-            prefix_type: fromPrefix,
+            prefix_type: forcedType,
         };
     }
 
@@ -397,7 +353,7 @@ export function validateBlockToItem(block: string[], index: number, location: 'P
     } else if (
         location !== 'PASARJAYA' &&
         parsed.jenis_kartu_manual_invalid &&
-        !(parsed.no_kjp.startsWith('50494885') || isAdminConfiguredPrefix(parsed.no_kjp.substring(0, 8)))
+        !parsed.no_kjp.startsWith('50494885')
     ) {
         const kartuList = getCardTypeChoicesText();
         const inputManual = (parsed.jenis_kartu_manual_input || '').trim() || '-';
