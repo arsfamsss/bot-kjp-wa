@@ -2039,7 +2039,7 @@ export async function connectToWhatsApp() {
                             }
                         } else {
                             userFlowByPhone.set(senderPhone, 'NONE');
-                            replyText = FORMAT_DAFTAR_DHARMAJAYA;
+                            replyText = FORMAT_DAFTAR_DHARMAJAYA.replace('✅ *LOKASI TERPILIH: DHARMAJAYA*', '✅ *LOKASI TERPILIH: DHARMAJAYA ' + lokasiName.toUpperCase() + '*');
                         }
                     } else {
                         // Cek apakah user kirim data langsung (4+ baris)
