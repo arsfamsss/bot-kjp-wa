@@ -234,12 +234,20 @@ export const ADMIN_MENU_MESSAGE = [
     '1️⃣6️⃣ Kelola Blokir No KK',
     '1️⃣7️⃣ Kelola Prefix Kartu',
     '1️⃣8️⃣ Kelola Lokasi Penuh',
+    '1️⃣9️⃣ Kelola Kuota Harian Data',
     '',
     '💡 _Ketik *#TEMPLATE* untuk edit pesan tutup_',
     '💡 _Ketik *#TEMPLATE RESET* untuk kembali ke default_',
     '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
     '',
     '0️⃣ _Kembali ke Menu Utama_',
+].join('\n');
+
+export const QUOTA_LIMIT_REACHED_MESSAGE = [
+    '⛔ *KUOTA HARIAN SUDAH PENUH*',
+    '',
+    'Batas maksimal pengiriman data hari ini sudah tercapai.',
+    'Silakan kirim lagi esok hari. Terima kasih.',
 ].join('\n');
 
 // --- DAFTAR NOMOR ADMIN ---
