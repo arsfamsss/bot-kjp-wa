@@ -36,7 +36,35 @@ export const CARD_TYPE_CHOICES = [
 export function normalizeCardTypeName(text: string): string | null {
     if (!text) return null;
     const lower = text.toLowerCase().trim().replace(/\s+/g, ' ');
-    return CARD_TYPE_ALIASES[lower] ?? null;
+    const exact = CARD_TYPE_ALIASES[lower];
+    if (exact) return exact;
+
+    const escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    let bestAlias: string | null = null;
+    let bestIndex = -1;
+    let bestLength = -1;
+
+    for (const alias of Object.keys(CARD_TYPE_ALIASES)) {
+        const re = new RegExp(`\\b${escapeRegex(alias)}\\b`, 'g');
+
+        for (;;) {
+            const match = re.exec(lower);
+            if (!match) break;
+            const currentIndex = match.index;
+            const currentLength = alias.length;
+            const isBetter =
+                currentIndex > bestIndex ||
+                (currentIndex === bestIndex && currentLength > bestLength);
+
+            if (isBetter) {
+                bestAlias = alias;
+                bestIndex = currentIndex;
+                bestLength = currentLength;
+            }
+        }
+    }
+
+    return bestAlias ? CARD_TYPE_ALIASES[bestAlias] : null;
 }
 
 export function getCardTypeChoicesText(): string {

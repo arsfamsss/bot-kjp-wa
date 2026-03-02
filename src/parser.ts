@@ -1,7 +1,7 @@
 // src/parser.ts
 
 import type { LogItem, ParsedFields, ItemError, LogJson, LogStats } from './types';
-import { checkBlockedKkBatch, checkBlockedKtpBatch, checkDuplicateForItem, checkDuplicatesBatch } from './supabase';
+import { checkBlockedKkBatch, checkBlockedKtpBatch, checkBlockedLocationBatch, checkDuplicateForItem, checkDuplicatesBatch } from './supabase';
 import { parseFlexibleDate } from './utils/dateParser';
 import { normalizeCardTypeName, getCardTypeChoicesText } from './utils/cardTypeRules';
 import { getCardPrefixMap, getCardPrefixType } from './utils/cardPrefixConfig';
@@ -27,14 +27,38 @@ export function extractDigits(input: string): string {
     return (input.match(/\d+/g) || []).join('');
 }
 
+function extractCardNumber(input: string): string {
+    if (!input) return '';
+
+    const segments = input.match(/(?:\d[\s.\-]*){6,30}/g) || [];
+
+    for (const segment of segments) {
+        const digits = extractDigits(segment);
+        const prefixIndex = digits.indexOf('504948');
+        if (prefixIndex < 0) continue;
+
+        const fromPrefix = digits.slice(prefixIndex);
+        if (fromPrefix.length >= 16) {
+            return fromPrefix.slice(0, 18);
+        }
+    }
+
+    const allDigits = extractDigits(input);
+    const prefixIndex = allDigits.indexOf('504948');
+    if (prefixIndex >= 0) {
+        return allDigits.slice(prefixIndex, prefixIndex + 18);
+    }
+
+    return allDigits;
+}
+
 /**
  * Ekstrak hanya huruf dan spasi dari teks campuran (hapus angka dan tanda baca).
  * Digunakan untuk membaca jenis kartu dari baris nomor kartu.
  */
 function extractCardText(raw: string): string {
     if (!raw) return '';
-    // Hanya huruf dan spasi
-    const lettersOnly = raw.replace(/[^a-zA-Z\s]/g, '').replace(/\s+/g, ' ').trim();
+    const lettersOnly = raw.replace(/[^a-zA-Z]+/g, ' ').replace(/\s+/g, ' ').trim();
     return lettersOnly;
 }
 
@@ -235,6 +259,25 @@ export function parseRawMessageToLines(text: string): string[] {
         .map((line) => line.trim())
         .filter((line) => line.length > 0);
 
+    const mergedLabelLines: string[] = [];
+    for (let i = 0; i < rawLines.length; i++) {
+        const current = rawLines[i];
+        const next = rawLines[i + 1];
+
+        const isLabelOnly = /\b(NO|NOMOR|NOMER|KARTU|KJP|KTP|NIK|KK|KARTU\s*KELUARGA)\b/i.test(current)
+            && !/\d/.test(current)
+            && /:?\s*$/.test(current);
+        const nextLooksLikeNumber = !!next && (extractDigits(next).length >= 8);
+
+        if (isLabelOnly && nextLooksLikeNumber) {
+            mergedLabelLines.push(`${current.replace(/\s*:\s*$/, '').trim()} : ${next.trim()}`);
+            i += 1;
+            continue;
+        }
+
+        mergedLabelLines.push(current);
+    }
+
     const finalLines: string[] = [];
 
     // Auto-Split Logic: Deteksi baris yang berisi Nama + Angka 16 digit tergabung
@@ -244,7 +287,7 @@ export function parseRawMessageToLines(text: string): string[] {
     // (\d{16,})$      -> Angka 16 digit atau lebih di akhir
     const mergedRegex = /^(.*?)[\s\t]+(\d{16,})$/;
 
-    for (const line of rawLines) {
+    for (const line of mergedLabelLines) {
         // Cek apakah baris ini "Name + KJP" yang nempel?
         // Contoh: "Agus Dalimin 5049488500001111"
         const match = line.match(mergedRegex);
@@ -298,7 +341,7 @@ function buildParsedFields(block: string[], location: 'PASARJAYA' | 'DHARMAJAYA'
         const [line1, line2, line3, line4, line5] = block;
         return {
             nama: cleanName(line1),
-            no_kjp: extractDigits(line2),  // Line 2: Kartu
+            no_kjp: extractCardNumber(line2),  // Line 2: Kartu
             no_ktp: extractDigits(line3),  // Line 3: KTP
             no_kk: extractDigits(line4),   // Line 4: KK
             tanggal_lahir: parseFlexibleDate(line5), // Line 5: Date
@@ -307,7 +350,7 @@ function buildParsedFields(block: string[], location: 'PASARJAYA' | 'DHARMAJAYA'
     } else {
         // DEFAULT / DHARMAJAYA (4 BARIS): Nama, Kartu, KTP, KK
         const [line1, line2, line3, line4] = block;
-        const noKjp = extractDigits(line2);
+        const noKjp = extractCardNumber(line2);
         const cardText = extractCardText(line2); // Teks di samping nomor kartu
         const resolved = resolveJenisKartu(noKjp, cardText);
         return {
@@ -347,17 +390,11 @@ export function validateBlockToItem(block: string[], index: number, location: 'P
             detail: `Panjang Nomor Kartu salah (${parsed.no_kjp.length} digit). Harusnya 16-18 digit.`,
         });
     } else if (!parsed.no_kjp.startsWith('504948')) {
-        const allowManualKjpAnyPrefix =
-            location !== 'PASARJAYA' &&
-            parsed.jenis_kartu_manual === 'KJP';
-
-        if (!allowManualKjpAnyPrefix) {
-            errors.push({
-                field: 'no_kjp',
-                type: 'invalid_prefix',
-                detail: `Nomor Kartu tidak valid. Nomor Kartu harus diawali dengan 504948, atau tulis jenis kartu KJP di baris kartu.`,
-            });
-        }
+        errors.push({
+            field: 'no_kjp',
+            type: 'invalid_prefix',
+            detail: '6 digit awal Nomor Kartu wajib 504948 untuk semua jenis kartu.',
+        });
     } else if (
         location !== 'PASARJAYA' &&
         parsed.jenis_kartu_manual_invalid &&
@@ -533,6 +570,7 @@ export async function processRawMessageToLogJson(params: {
 
     items = await checkBlockedKkBatch(items);
     items = await checkBlockedKtpBatch(items);
+    items = await checkBlockedLocationBatch(items);
 
     const updatedItems = await checkDuplicatesBatch(items, {
         processingDayKey,
