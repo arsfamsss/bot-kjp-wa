@@ -2,6 +2,7 @@ const CARD_TYPE_ALIASES: Record<string, string> = {
     kjp: 'KJP',
     'kartu jakarta pintar': 'KJP',
     lansia: 'LANSIA',
+    klj: 'LANSIA',
     lns: 'LANSIA',
     ls: 'LANSIA',
     'lanjut usia': 'LANSIA',
