@@ -41,26 +41,14 @@ if "%commit_msg%"=="" (
 echo [GIT] Menambahkan semua perubahan...
 git add . || goto :fail
 
-git diff --cached --quiet
-if errorlevel 2 (
-    echo [ERROR] Gagal memeriksa perubahan yang sudah di-stage.
-    goto :fail
-)
-
-if not errorlevel 1 (
-    echo [GIT] Tidak ada perubahan baru untuk di-commit. Lanjut ke proses push/deploy...
-    goto :push
-)
-
 echo [GIT] Melakukan commit...
 git commit -m "%commit_msg%"
 if errorlevel 1 (
-    echo [ERROR] Commit gagal. Periksa pesan git di atas.
+    echo [ERROR] Commit gagal atau tidak ada perubahan untuk di-commit.
     git status --short
     goto :fail
 )
 
-:push
 echo [GIT] Mengirim ke GitHub...
 git push origin main || goto :fail
 
