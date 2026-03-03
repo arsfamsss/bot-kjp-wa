@@ -3515,37 +3515,22 @@ export async function connectToWhatsApp() {
                             } else {
                                 const lines = ['📋 *DAFTAR TARGET KUOTA PERSONAL*', ''];
                                 targets.forEach((row, idx) => {
-                                    const rawName = getRegisteredUserNameSync(row.phone_number) || '';
-                                    const displayName = rawName.trim() || 'Tanpa nama';
                                     const reasonText = row.reason ? ` - ${row.reason}` : '';
-                                    lines.push(`${idx + 1}. ${row.phone_number} (${displayName})${reasonText}`);
+                                    lines.push(`${idx + 1}. ${row.phone_number}${reasonText}`);
                                 });
                                 replyText = lines.join('\n');
                             }
                             replyText += '\n\n' + buildQuotaTargetMenuText();
                             adminFlowByPhone.set(senderPhone, 'QUOTA_TARGET_MENU');
                         } else if (normalized === '3') {
-                            const targets = await getDailyQuotaTargetPhones(500);
-                            if (!targets.length) {
-                                replyText = '📂 Belum ada nomor target kuota personal.';
-                                replyText += '\n\n' + buildQuotaTargetMenuText();
-                                adminFlowByPhone.set(senderPhone, 'QUOTA_TARGET_MENU');
-                            } else {
-                                const lines = ['🗑️ *HAPUS TARGET KUOTA PERSONAL*', ''];
-                                targets.forEach((row, idx) => {
-                                    const rawName = getRegisteredUserNameSync(row.phone_number) || '';
-                                    const displayName = rawName.trim() || 'Tanpa nama';
-                                    const reasonText = row.reason ? ` - ${row.reason}` : '';
-                                    lines.push(`${idx + 1}. ${row.phone_number} (${displayName})${reasonText}`);
-                                });
-                                lines.push('');
-                                lines.push('Ketik *nomor urut daftar* yang ingin dihapus.');
-                                lines.push('Contoh: 2');
-                                lines.push('');
-                                lines.push('_Ketik 0 untuk kembali._');
-                                replyText = lines.join('\n');
-                                adminFlowByPhone.set(senderPhone, 'QUOTA_TARGET_DELETE');
-                            }
+                            adminFlowByPhone.set(senderPhone, 'QUOTA_TARGET_DELETE');
+                            replyText = [
+                                '🗑️ *HAPUS TARGET KUOTA PERSONAL*',
+                                '',
+                                'Ketik No HP yang ingin dihapus dari target kuota.',
+                                '',
+                                '_Ketik 0 untuk kembali._'
+                            ].join('\n');
                         } else {
                             replyText = '⚠️ Pilihan tidak dikenali. Ketik 1, 2, 3, atau 0.';
                         }
@@ -3566,29 +3551,10 @@ export async function connectToWhatsApp() {
                             adminFlowByPhone.set(senderPhone, 'QUOTA_TARGET_MENU');
                             replyText = buildQuotaTargetMenuText();
                         } else {
-                            const selectedIndex = Number(normalized);
-                            if (!Number.isInteger(selectedIndex) || selectedIndex < 1) {
-                                replyText = '⚠️ Input tidak valid. Ketik nomor urut daftar (mis. 1, 2, 3) atau 0 untuk kembali.';
-                                replyText += '\n\n' + buildQuotaTargetMenuText();
-                                adminFlowByPhone.set(senderPhone, 'QUOTA_TARGET_MENU');
-                            } else {
-                                const targets = await getDailyQuotaTargetPhones(500);
-                                if (!targets.length) {
-                                    replyText = '📂 Belum ada nomor target kuota personal.';
-                                    replyText += '\n\n' + buildQuotaTargetMenuText();
-                                    adminFlowByPhone.set(senderPhone, 'QUOTA_TARGET_MENU');
-                                } else if (selectedIndex > targets.length) {
-                                    replyText = `⚠️ Nomor urut tidak tersedia. Pilih 1 sampai ${targets.length}.`;
-                                    replyText += '\n\n' + buildQuotaTargetMenuText();
-                                    adminFlowByPhone.set(senderPhone, 'QUOTA_TARGET_MENU');
-                                } else {
-                                    const selectedTarget = targets[selectedIndex - 1];
-                                    const result = await removeDailyQuotaTargetPhone(selectedTarget.phone_number);
-                                    replyText = result.success ? `✅ ${result.message}` : `❌ ${result.message}`;
-                                    replyText += '\n\n' + buildQuotaTargetMenuText();
-                                    adminFlowByPhone.set(senderPhone, 'QUOTA_TARGET_MENU');
-                                }
-                            }
+                            const result = await removeDailyQuotaTargetPhone(rawTrim);
+                            replyText = result.success ? `✅ ${result.message}` : `❌ ${result.message}`;
+                            replyText += '\n\n' + buildQuotaTargetMenuText();
+                            adminFlowByPhone.set(senderPhone, 'QUOTA_TARGET_MENU');
                         }
                     } else if (currentAdminFlow === 'BLOCKED_LOCATION_MENU') {
                         if (normalized === '0') {
