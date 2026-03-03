@@ -67,11 +67,6 @@ import {
     addBlockedPhone,
     removeBlockedPhone,
     isPhoneBlocked,
-    getDailyQuotaTargetPhones,
-    addDailyQuotaTargetPhone,
-    removeDailyQuotaTargetPhone,
-    getDailyQuotaUsage,
-    releaseDailyQuotaAtomic,
     // --- FITUR DAFTAR ULANG ---
     isFeatureDaftarUlangEnabled,
     getFailedRegistrations,
@@ -92,7 +87,6 @@ import {
     listClosedLocationsByProvider,
     openSpecificLocation,
 } from './services/locationGate';
-import { checkAndReserveDailyQuota } from './services/quotaGate';
 import {
     MENU_MESSAGE,
     FORMAT_DAFTAR_MESSAGE,
@@ -103,7 +97,6 @@ import {
     ADMIN_MENU_MESSAGE,
     ADMIN_PHONES_RAW,
     CLOSE_MESSAGE_TEMPLATE_UNIFIED,
-    QUOTA_LIMIT_REACHED_MESSAGE,
     MENU_PASARJAYA_LOCATIONS, // NEW
     PASARJAYA_MAPPING, // NEW
     DHARMAJAYA_MAPPING,
@@ -339,51 +332,6 @@ function buildBlockedLocationMenuText(): string {
         '1️⃣ Tandai Lokasi Penuh',
         '2️⃣ Lihat Daftar Lokasi Penuh',
         '3️⃣ Buka Kembali Lokasi',
-        '',
-        '0️⃣ Kembali ke Menu Admin',
-    ].join('\n');
-}
-
-function buildQuotaTargetMenuText(): string {
-    return [
-        '🎯 *TARGET KUOTA PERSONAL*',
-        '',
-        '1️⃣ Tambah nomor target',
-        '2️⃣ Lihat daftar nomor target',
-        '3️⃣ Hapus nomor target',
-        '',
-        '0️⃣ Kembali ke menu kuota',
-    ].join('\n');
-}
-
-async function buildQuotaMenuText(processingDayKey?: string): Promise<string> {
-    const settings = await getBotSettings();
-    const targets = await getDailyQuotaTargetPhones(500);
-    const mode = settings.quota_mode === 'PERSONAL' ? 'PERSONAL' : 'GLOBAL';
-    const isOn = settings.quota_enabled === true;
-    const limit = typeof settings.quota_daily_limit === 'number' ? settings.quota_daily_limit : 30;
-
-    const dayKey = processingDayKey || getProcessingDayKey(new Date());
-    const scopeType = mode === 'PERSONAL' ? 'PERSONAL' : 'GLOBAL';
-    const scopeKey = mode === 'PERSONAL' ? 'SUMMARY' : 'GLOBAL';
-    const usage = mode === 'GLOBAL'
-        ? await getDailyQuotaUsage('GLOBAL', 'GLOBAL', dayKey)
-        : 0;
-
-    return [
-        '📊 *KELOLA KUOTA HARIAN DATA*',
-        '',
-        `Status: *${isOn ? 'AKTIF' : 'NONAKTIF'}*`,
-        `Mode: *${mode}*`,
-        `Batas harian: *${limit} data*`,
-        mode === 'GLOBAL'
-            ? `Pemakaian hari ini (${dayKey}): *${usage} / ${limit}*`
-            : `Target nomor personal: *${targets.length} nomor*`,
-        '',
-        '1️⃣ ON/OFF Kuota',
-        '2️⃣ Set Batas Harian',
-        '3️⃣ Set Mode (GLOBAL/PERSONAL)',
-        '4️⃣ Kelola Nomor Target Personal',
         '',
         '0️⃣ Kembali ke Menu Admin',
     ].join('\n');
@@ -2266,7 +2214,7 @@ export async function connectToWhatsApp() {
                 }
 
                 if (isAdmin && currentAdminFlow !== 'NONE') {
-                    if ((normalized === '0' && !currentAdminFlow.startsWith('CONTACT_') && !currentAdminFlow.startsWith('BLOCKED_KK_') && !currentAdminFlow.startsWith('BLOCKED_PHONE_') && !currentAdminFlow.startsWith('BLOCKED_LOCATION_') && !currentAdminFlow.startsWith('SETTING_') && !currentAdminFlow.startsWith('QUOTA_')) || isGreetingOrMenu(normalized)) {
+                    if ((normalized === '0' && !currentAdminFlow.startsWith('CONTACT_') && !currentAdminFlow.startsWith('BLOCKED_KK_') && !currentAdminFlow.startsWith('BLOCKED_PHONE_') && !currentAdminFlow.startsWith('BLOCKED_LOCATION_') && !currentAdminFlow.startsWith('SETTING_')) || isGreetingOrMenu(normalized)) {
                         adminFlowByPhone.set(senderPhone, 'NONE');
                         await sendMainMenu(sock, remoteJid, isAdmin);
                         continue;
@@ -2576,9 +2524,6 @@ export async function connectToWhatsApp() {
                         } else if (normalized === '18') {
                             adminFlowByPhone.set(senderPhone, 'BLOCKED_LOCATION_MENU');
                             replyText = buildBlockedLocationMenuText();
-                        } else if (normalized === '19') {
-                            adminFlowByPhone.set(senderPhone, 'QUOTA_MENU');
-                            replyText = await buildQuotaMenuText(processingDayKey);
                         } else replyText = '⚠️ Pilihan tidak dikenali.';
                     } else if (currentAdminFlow === 'SETTING_OPERATION_MENU') {
                         if (normalized === '0') {
@@ -3398,163 +3343,6 @@ export async function connectToWhatsApp() {
                             replyText = result.success ? `✅ ${result.message}` : `❌ ${result.message}`;
                             replyText += '\n\n' + buildBlockedPhoneMenuText();
                             adminFlowByPhone.set(senderPhone, 'BLOCKED_PHONE_MENU');
-                        }
-                    } else if (currentAdminFlow === 'QUOTA_MENU') {
-                        if (normalized === '0') {
-                            adminFlowByPhone.set(senderPhone, 'MENU');
-                            replyText = ADMIN_MENU_MESSAGE;
-                        } else if (normalized === '1') {
-                            const settings = await getBotSettings();
-                            const nextEnabled = !(settings.quota_enabled === true);
-                            const ok = await updateBotSettings({
-                                ...settings,
-                                quota_enabled: nextEnabled,
-                            });
-                            clearBotSettingsCache();
-
-                            if (!ok) {
-                                replyText = '❌ Gagal mengubah status kuota harian.';
-                            } else {
-                                const menu = await buildQuotaMenuText(processingDayKey);
-                                replyText = `${nextEnabled ? '✅ Kuota harian diaktifkan.' : '✅ Kuota harian dinonaktifkan.'}\n\n${menu}`;
-                            }
-                            adminFlowByPhone.set(senderPhone, 'QUOTA_MENU');
-                        } else if (normalized === '2') {
-                            adminFlowByPhone.set(senderPhone, 'QUOTA_SET_LIMIT');
-                            replyText = [
-                                '✏️ *SET BATAS KUOTA HARIAN*',
-                                '',
-                                'Masukkan jumlah maksimal data per hari.',
-                                'Contoh: 30',
-                                '',
-                                '_Ketik 0 untuk kembali._'
-                            ].join('\n');
-                        } else if (normalized === '3') {
-                            adminFlowByPhone.set(senderPhone, 'QUOTA_SET_MODE');
-                            replyText = [
-                                '⚙️ *SET MODE KUOTA*',
-                                '',
-                                '1️⃣ GLOBAL (semua user berbagi kuota)',
-                                '2️⃣ PERSONAL (hanya nomor target yang dibatasi)',
-                                '',
-                                '_Ketik 0 untuk kembali._'
-                            ].join('\n');
-                        } else if (normalized === '4') {
-                            adminFlowByPhone.set(senderPhone, 'QUOTA_TARGET_MENU');
-                            replyText = buildQuotaTargetMenuText();
-                        } else {
-                            replyText = '⚠️ Pilihan tidak dikenali. Ketik 1, 2, 3, 4, atau 0.';
-                        }
-                    } else if (currentAdminFlow === 'QUOTA_SET_LIMIT') {
-                        if (normalized === '0') {
-                            adminFlowByPhone.set(senderPhone, 'QUOTA_MENU');
-                            replyText = await buildQuotaMenuText(processingDayKey);
-                        } else {
-                            const parsed = Number(rawTrim.replace(/[^\d]/g, ''));
-                            if (!Number.isFinite(parsed) || parsed < 1 || parsed > 10000) {
-                                replyText = '⚠️ Batas harian tidak valid. Masukkan angka 1 - 10000.';
-                            } else {
-                                const settings = await getBotSettings();
-                                const ok = await updateBotSettings({
-                                    ...settings,
-                                    quota_daily_limit: Math.floor(parsed),
-                                });
-                                clearBotSettingsCache();
-                                if (!ok) {
-                                    replyText = '❌ Gagal menyimpan batas kuota harian.';
-                                } else {
-                                    replyText = `✅ Batas kuota harian diset ke *${Math.floor(parsed)}* data.`;
-                                    replyText += '\n\n' + await buildQuotaMenuText(processingDayKey);
-                                }
-                                adminFlowByPhone.set(senderPhone, 'QUOTA_MENU');
-                            }
-                        }
-                    } else if (currentAdminFlow === 'QUOTA_SET_MODE') {
-                        if (normalized === '0') {
-                            adminFlowByPhone.set(senderPhone, 'QUOTA_MENU');
-                            replyText = await buildQuotaMenuText(processingDayKey);
-                        } else {
-                            const nextMode = normalized === '1' ? 'GLOBAL' : normalized === '2' ? 'PERSONAL' : '';
-                            if (!nextMode) {
-                                replyText = '⚠️ Pilihan tidak dikenali. Ketik 1, 2, atau 0.';
-                            } else {
-                                const settings = await getBotSettings();
-                                const ok = await updateBotSettings({
-                                    ...settings,
-                                    quota_mode: nextMode,
-                                });
-                                clearBotSettingsCache();
-                                if (!ok) {
-                                    replyText = '❌ Gagal menyimpan mode kuota.';
-                                } else {
-                                    replyText = `✅ Mode kuota diset ke *${nextMode}*.`;
-                                    replyText += '\n\n' + await buildQuotaMenuText(processingDayKey);
-                                }
-                                adminFlowByPhone.set(senderPhone, 'QUOTA_MENU');
-                            }
-                        }
-                    } else if (currentAdminFlow === 'QUOTA_TARGET_MENU') {
-                        if (normalized === '0') {
-                            adminFlowByPhone.set(senderPhone, 'QUOTA_MENU');
-                            replyText = await buildQuotaMenuText(processingDayKey);
-                        } else if (normalized === '1') {
-                            adminFlowByPhone.set(senderPhone, 'QUOTA_TARGET_ADD');
-                            replyText = [
-                                '➕ *TAMBAH TARGET KUOTA PERSONAL*',
-                                '',
-                                'Ketik No HP yang ingin dibatasi kuota.',
-                                'Anda bisa tambah alasan setelah tanda |',
-                                'Contoh: 08123456789 | Prioritas pembatasan',
-                                '',
-                                '_Ketik 0 untuk kembali._'
-                            ].join('\n');
-                        } else if (normalized === '2') {
-                            const targets = await getDailyQuotaTargetPhones(500);
-                            if (!targets.length) {
-                                replyText = '📂 Belum ada nomor target kuota personal.';
-                            } else {
-                                const lines = ['📋 *DAFTAR TARGET KUOTA PERSONAL*', ''];
-                                targets.forEach((row, idx) => {
-                                    const reasonText = row.reason ? ` - ${row.reason}` : '';
-                                    lines.push(`${idx + 1}. ${row.phone_number}${reasonText}`);
-                                });
-                                replyText = lines.join('\n');
-                            }
-                            replyText += '\n\n' + buildQuotaTargetMenuText();
-                            adminFlowByPhone.set(senderPhone, 'QUOTA_TARGET_MENU');
-                        } else if (normalized === '3') {
-                            adminFlowByPhone.set(senderPhone, 'QUOTA_TARGET_DELETE');
-                            replyText = [
-                                '🗑️ *HAPUS TARGET KUOTA PERSONAL*',
-                                '',
-                                'Ketik No HP yang ingin dihapus dari target kuota.',
-                                '',
-                                '_Ketik 0 untuk kembali._'
-                            ].join('\n');
-                        } else {
-                            replyText = '⚠️ Pilihan tidak dikenali. Ketik 1, 2, 3, atau 0.';
-                        }
-                    } else if (currentAdminFlow === 'QUOTA_TARGET_ADD') {
-                        if (normalized === '0') {
-                            adminFlowByPhone.set(senderPhone, 'QUOTA_TARGET_MENU');
-                            replyText = buildQuotaTargetMenuText();
-                        } else {
-                            const [rawPhone, ...reasonParts] = rawTrim.split('|');
-                            const reason = reasonParts.join('|').trim();
-                            const result = await addDailyQuotaTargetPhone(rawPhone, reason);
-                            replyText = result.success ? `✅ ${result.message}` : `❌ ${result.message}`;
-                            replyText += '\n\n' + buildQuotaTargetMenuText();
-                            adminFlowByPhone.set(senderPhone, 'QUOTA_TARGET_MENU');
-                        }
-                    } else if (currentAdminFlow === 'QUOTA_TARGET_DELETE') {
-                        if (normalized === '0') {
-                            adminFlowByPhone.set(senderPhone, 'QUOTA_TARGET_MENU');
-                            replyText = buildQuotaTargetMenuText();
-                        } else {
-                            const result = await removeDailyQuotaTargetPhone(rawTrim);
-                            replyText = result.success ? `✅ ${result.message}` : `❌ ${result.message}`;
-                            replyText += '\n\n' + buildQuotaTargetMenuText();
-                            adminFlowByPhone.set(senderPhone, 'QUOTA_TARGET_MENU');
                         }
                     } else if (currentAdminFlow === 'BLOCKED_LOCATION_MENU') {
                         if (normalized === '0') {
@@ -4755,46 +4543,17 @@ export async function connectToWhatsApp() {
                                     'Mohon kirim ulang ya Bu/Pak 🙏'
                                 ].join('\n');
                             } else {
-                                const okCount = Number(logJson.stats.ok_count || 0);
-                                if (okCount > 0) {
-                                    const quotaCheck = await checkAndReserveDailyQuota({
-                                        senderPhone,
-                                        processingDayKey,
-                                        incrementCount: okCount,
-                                    });
+                                // DATA BERSIH (Valid Blocks Only & No Remainder) -> PROSES SIMPAN
+                                const saveResult = await saveLogAndOkItems(logJson, messageText);
 
-                                    if (!quotaCheck.allowed) {
-                                        replyText = QUOTA_LIMIT_REACHED_MESSAGE;
-                                    } else {
-                                        // DATA BERSIH (Valid Blocks Only & No Remainder) -> PROSES SIMPAN
-                                        const saveResult = await saveLogAndOkItems(logJson, messageText);
-
-                                        if (!saveResult.success) {
-                                            console.error('❌ Gagal simpan ke database (AUTO-DETECT):', saveResult.dataError);
-
-                                            if (quotaCheck.scope_type && quotaCheck.scope_key) {
-                                                const rollback = await releaseDailyQuotaAtomic({
-                                                    scopeType: quotaCheck.scope_type,
-                                                    scopeKey: quotaCheck.scope_key,
-                                                    processingDayKey,
-                                                    decrementCount: okCount,
-                                                });
-
-                                                if (!rollback.success) {
-                                                    console.warn('⚠️ Rollback kuota gagal:', rollback.reason);
-                                                }
-                                            }
-
-                                            replyText = buildDatabaseErrorMessage(saveResult.dataError, logJson);
-                                        } else {
-                                            // Refresh total after saving
-                                            // FIX: Sort by received_at (Kronologis)
-                                            const { validCount: finalTotalCount, validItems: finalItems } = await getTodayRecapForSender(senderPhone, processingDayKey, 'received_at');
-                                            replyText = buildReplyForNewData(logJson, finalTotalCount, finalContext, finalItems);
-                                        }
-                                    }
+                                if (!saveResult.success) {
+                                    console.error('❌ Gagal simpan ke database (AUTO-DETECT):', saveResult.dataError);
+                                    replyText = buildDatabaseErrorMessage(saveResult.dataError, logJson);
                                 } else {
-                                    replyText = '⚠️ Tidak ada data valid yang bisa diproses. Mohon cek format input dan kirim ulang.';
+                                    // Refresh total after saving
+                                    // FIX: Sort by received_at (Kronologis)
+                                    const { validCount: finalTotalCount, validItems: finalItems } = await getTodayRecapForSender(senderPhone, processingDayKey, 'received_at');
+                                    replyText = buildReplyForNewData(logJson, finalTotalCount, finalContext, finalItems);
                                 }
                             }
                         } else {
