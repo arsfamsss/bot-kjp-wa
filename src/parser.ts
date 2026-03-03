@@ -324,6 +324,48 @@ function buildParsedFields(block: string[], location: 'PASARJAYA' | 'DHARMAJAYA'
     }
 }
 
+function formatShortItemData(item: LogItem): string {
+    const nama = item.parsed.nama || '-';
+    const kartu = item.parsed.no_kjp || '-';
+    const nik = item.parsed.no_ktp || '-';
+    const kk = item.parsed.no_kk || '-';
+    return `Nama: ${nama} | Kartu: ${kartu} | NIK: ${nik} | KK: ${kk}`;
+}
+
+function buildDuplicateInMessageDetail(params: {
+    currentItem: LogItem;
+    previousItem: LogItem;
+    triggerField: 'no_kjp' | 'no_ktp' | 'nama';
+}): string {
+    const { currentItem, previousItem, triggerField } = params;
+
+    const duplicatedFields: string[] = [];
+    if (currentItem.parsed.nama && previousItem.parsed.nama && currentItem.parsed.nama === previousItem.parsed.nama) {
+        duplicatedFields.push('Nama');
+    }
+    if (currentItem.parsed.no_kjp && previousItem.parsed.no_kjp && currentItem.parsed.no_kjp === previousItem.parsed.no_kjp) {
+        duplicatedFields.push('No Kartu');
+    }
+    if (currentItem.parsed.no_ktp && previousItem.parsed.no_ktp && currentItem.parsed.no_ktp === previousItem.parsed.no_ktp) {
+        duplicatedFields.push('NIK/KTP');
+    }
+    if (currentItem.parsed.no_kk && previousItem.parsed.no_kk && currentItem.parsed.no_kk === previousItem.parsed.no_kk) {
+        duplicatedFields.push('KK');
+    }
+
+    const triggerLabel = triggerField === 'no_kjp' ? 'No Kartu' : triggerField === 'no_ktp' ? 'NIK/KTP' : 'Nama';
+    const sameFieldsText = duplicatedFields.length > 0 ? duplicatedFields.join(', ') : triggerLabel;
+
+    const lines = [
+        `Data ini sama dengan data ke-${previousItem.index} di pesan ini.`,
+        `Yang sama: ${sameFieldsText}.`,
+        `Data Ibu/Bapak (ke-${currentItem.index}): ${formatShortItemData(currentItem)}`,
+        `Data yang sudah ada (ke-${previousItem.index}): ${formatShortItemData(previousItem)}`,
+    ];
+
+    return lines.join('\n');
+}
+
 export function validateBlockToItem(block: string[], index: number, location: 'PASARJAYA' | 'DHARMAJAYA' | 'DEFAULT' = 'DEFAULT'): LogItem {
     const parsed = buildParsedFields(block, location);
     const errors: ItemError[] = [];
@@ -499,24 +541,27 @@ export async function processRawMessageToLogJson(params: {
         });
     });
 
-    for (const [key, occs] of occurrences.entries()) {
+    for (const occs of occurrences.values()) {
         if (occs.length <= 1) continue;
 
         // SMART DUPLICATE: Pertahankan yang PERTAMA, tandai sisanya sebagai duplikat
         // Skip index 0 (occurrence pertama), hanya proses index 1 ke atas
         occs.slice(1).forEach(({ itemIdx, field }) => {
             const it = items[itemIdx];
+            const firstOcc = occs[0];
+            const previousItem = items[firstOcc.itemIdx];
             if (it.status === 'OK') {
                 it.status = 'SKIP_FORMAT';
 
-                let detailMsg = `Data ini duplikat (${field === 'no_kjp' ? 'No Kartu' : 'No KTP'} sama dengan data sebelumnya dalam pesan ini).`;
-                if ((field as any) === 'nama') {
-                    detailMsg = `❌ Maaf, nama ${it.parsed.nama} double. silahkan edit salah satu nama yg duplikat`;
-                }
+                const detailMsg = buildDuplicateInMessageDetail({
+                    currentItem: it,
+                    previousItem,
+                    triggerField: field,
+                });
 
                 it.errors.push({
                     field,
-                    type: 'duplicate_in_message' as any,
+                    type: 'duplicate_in_message',
                     detail: detailMsg,
                 });
             }

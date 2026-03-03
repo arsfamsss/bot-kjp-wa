@@ -239,28 +239,41 @@ function parseAdminWibDateTimeToIso(input: string): { iso: string; display: stri
 function buildDatabaseErrorMessage(dataError: any, logJson?: any): string {
     // Handle constraint violation (duplicate key)
     if (dataError?.code === '23505') {
-        // Extract info from error details
-        const details = dataError?.details || '';
-        const noKartuMatch = details.match(/no_kjp\)=\([^,]+,\s*(\d+)\)/);
-        const noKartu = noKartuMatch ? noKartuMatch[1] : null;
+        const details = (dataError?.details || '').toString();
+        const fields: string[] = [];
+        if (details.includes('no_kjp')) fields.push('No Kartu');
+        if (details.includes('no_ktp')) fields.push('NIK/KTP');
+        if (details.includes('nama')) fields.push('Nama');
 
-        // Build informative message
+        const conflicted = Array.isArray(logJson?.items)
+            ? logJson.items.filter((it: any) => it?.status === 'OK')
+            : [];
+
         const lines = [
-            '⚠️ *DATA SUDAH TERDAFTAR!*',
+            '⚠️ *DATA SAMA TERDETEKSI*',
             '',
-            '❌ Data yang Anda kirim sudah pernah terdaftar hari ini.',
+            `❌ Maaf, ada data yang sudah masuk hari ini${fields.length ? ` (yang sama: ${fields.join(', ')})` : ''}.`,
         ];
 
-        if (noKartu) {
-            lines.push(`📇 No Kartu: ${noKartu}`);
+        if (conflicted.length > 0) {
+            lines.push('');
+            lines.push('📝 *Cek lagi data berikut:*');
+            conflicted.slice(0, 5).forEach((it: any) => {
+                const nama = it?.parsed?.nama || '-';
+                const kartu = it?.parsed?.no_kjp || '-';
+                const nik = it?.parsed?.no_ktp || '-';
+                const kk = it?.parsed?.no_kk || '-';
+                lines.push(`• ${nama}`);
+                lines.push(`  Kartu: ${kartu} | NIK: ${nik} | KK: ${kk}`);
+            });
+            if (conflicted.length > 5) {
+                lines.push(`• ...dan ${conflicted.length - 5} data lainnya`);
+            }
         }
 
         lines.push('');
-        lines.push('💡 *Kemungkinan Penyebab:*');
-        lines.push('• Anda sudah mengirim data ini sebelumnya');
-        lines.push('• Data ini sudah dikirim oleh orang lain');
-        lines.push('');
-        lines.push('Ketik *CEK* untuk lihat data Anda yang terdaftar.');
+        lines.push('💡 Silakan hapus data yang sama, lalu kirim ulang yang belum masuk.');
+        lines.push('Ketik *CEK* untuk lihat data yang sudah masuk ya.');
 
         return lines.join('\n');
     }

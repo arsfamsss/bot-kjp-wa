@@ -153,10 +153,21 @@ export function buildReplyForNewData(
                         }
                     } else if (err.type === 'unknown_card_type') {
                         friendlyMsg = err.detail;
+                    } else if (err.type === 'duplicate_in_message') {
+                        friendlyMsg = err.detail;
                     } else {
                         friendlyMsg = err.detail;
                     }
-                    lines.push(`   → ${friendlyMsg}`);
+
+                    const detailLines = (friendlyMsg || '').split('\n').map((s) => s.trim()).filter(Boolean);
+                    if (detailLines.length === 0) {
+                        lines.push('   → Data tidak valid');
+                    } else {
+                        lines.push(`   → ${detailLines[0]}`);
+                        for (let i = 1; i < detailLines.length; i++) {
+                            lines.push(`     ${detailLines[i]}`);
+                        }
+                    }
                 });
             }
         });

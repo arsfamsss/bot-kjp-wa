@@ -173,11 +173,19 @@ export async function checkDuplicatesBatch(
         }
     }
 
+    const formatDataRingkas = (data: { nama?: string; no_kjp?: string; no_ktp?: string; no_kk?: string } | null | undefined): string => {
+        const nama = (data?.nama || '-').toString().toUpperCase();
+        const noKjp = (data?.no_kjp || '-').toString();
+        const noKtp = (data?.no_ktp || '-').toString();
+        const noKk = (data?.no_kk || '-').toString();
+        return `Nama: ${nama} | Kartu: ${noKjp} | NIK: ${noKtp} | KK: ${noKk}`;
+    };
+
     // PROCESS CHECKING IN-MEMORY
     return items.map(item => {
         if (item.status !== 'OK') return item;
 
-        const errorMessages: string[] = [];
+        const duplicatedFields: string[] = [];
         let conflictFound = false;
         let firstKind: DuplicateKind | null = null;
         let firstDupData: any = null;
@@ -193,8 +201,7 @@ export async function checkDuplicatesBatch(
             conflictFound = true;
             firstKind = firstKind || 'NO_KJP';
             firstDupData = firstDupData || kjpMatch;
-            const owner = getOwnerName(kjpMatch);
-            errorMessages.push(`• 💳 No Kartu sudah terdaftar atas nama *${owner}*`);
+            duplicatedFields.push('No Kartu');
         }
 
         const ktpMatch = globalDupes.find(d => d.no_ktp === item.parsed.no_ktp);
@@ -202,12 +209,20 @@ export async function checkDuplicatesBatch(
             conflictFound = true;
             firstKind = firstKind || 'NO_KTP';
             firstDupData = firstDupData || ktpMatch;
-            const owner = getOwnerName(ktpMatch);
-            errorMessages.push(`• 🪪 No KTP sudah terdaftar atas nama *${owner}*`);
+            duplicatedFields.push('NIK/KTP');
         }
 
         if (conflictFound) {
-            const finalMsg = errorMessages.join('\n');
+            const matchSource = firstDupData || kjpMatch || ktpMatch;
+            const owner = matchSource ? getOwnerName(matchSource) : 'ORANG LAIN';
+            const fieldText = duplicatedFields.length > 0 ? duplicatedFields.join(', ') : 'No Kartu/NIK';
+            const finalMsg = [
+                'Maaf, data ini sudah pernah masuk hari ini.',
+                `Yang sama: ${fieldText}.`,
+                `Data Ibu/Bapak: ${formatDataRingkas(item.parsed)}`,
+                `Data yang sudah ada (atas nama ${owner}): ${formatDataRingkas(matchSource)}`,
+                'Silakan kirim data lain yang belum terdaftar ya.',
+            ].join('\n');
             const info: DuplicateInfo = {
                 kind: firstKind || 'NO_KJP',
                 processing_day_key: processingDayKey,
