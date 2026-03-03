@@ -54,9 +54,9 @@ export async function checkAndReserveDailyQuota(input: QuotaGateInput): Promise<
     const matchedPhone = await findDailyQuotaTargetPhoneForSender(input.senderPhone);
     if (!matchedPhone) {
         return {
-            allowed: true,
+            allowed: false,
             mode: 'PERSONAL',
-            scope_type: '',
+            scope_type: 'PERSONAL',
             scope_key: '',
             reason: 'sender_not_in_personal_target',
         };
@@ -69,6 +69,16 @@ export async function checkAndReserveDailyQuota(input: QuotaGateInput): Promise<
         incrementCount,
         quotaLimit,
     });
+
+    if (!reservation.success) {
+        return {
+            allowed: false,
+            mode: 'PERSONAL',
+            scope_type: 'PERSONAL',
+            scope_key: matchedPhone,
+            reason: reservation.reason,
+        };
+    }
 
     return {
         allowed: reservation.allowed,

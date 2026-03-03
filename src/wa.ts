@@ -4798,7 +4798,11 @@ export async function connectToWhatsApp() {
                                     });
 
                                     if (!quotaCheck.allowed) {
-                                        replyText = QUOTA_LIMIT_REACHED_MESSAGE;
+                                        if (quotaCheck.reason === 'sender_not_in_personal_target') {
+                                            replyText = '⛔ *AKSES DITOLAK*\n\nNomor Anda belum terdaftar di daftar target kuota personal. Hubungi Admin untuk ditambahkan ke target.';
+                                        } else {
+                                            replyText = QUOTA_LIMIT_REACHED_MESSAGE;
+                                        }
                                     } else {
                                         // DATA BERSIH (Valid Blocks Only & No Remainder) -> PROSES SIMPAN
                                         const saveResult = await saveLogAndOkItems(logJson, messageText);
