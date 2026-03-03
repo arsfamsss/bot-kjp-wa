@@ -2,6 +2,13 @@
 setlocal EnableExtensions
 cd /d "%~dp0"
 
+set "STB_USER=root"
+set "STB_HOST=192.168.100.104"
+set "STB_DIR=/root/bot-kjp"
+set "SSH_KEY=%USERPROFILE%\.ssh\id_ed25519"
+if not exist "%SSH_KEY%" set "SSH_KEY=%USERPROFILE%\.ssh\id_rsa"
+set "SSH_OPTS=-o BatchMode=yes -o ConnectTimeout=8 -o StrictHostKeyChecking=accept-new"
+
 title Deploy ke STB (192.168.100.104)
 color 0A
 
@@ -22,6 +29,21 @@ where scp >nul 2>nul || (
 
 where ssh >nul 2>nul || (
     echo [ERROR] SSH tidak ditemukan. Install OpenSSH Client dulu.
+    goto :fail
+)
+
+if not exist "%SSH_KEY%" (
+    echo [ERROR] SSH key tidak ditemukan di:
+    echo         %USERPROFILE%\.ssh\id_ed25519
+    echo         %USERPROFILE%\.ssh\id_rsa
+    echo.
+    echo Jalankan SETUP_SSH_KEY_STB.bat sekali untuk setup passwordless login.
+    goto :fail
+)
+
+ssh -i "%SSH_KEY%" %SSH_OPTS% %STB_USER%@%STB_HOST% "echo SSH key ok" >nul 2>nul || (
+    echo [ERROR] Login passwordless belum aktif untuk %STB_USER%@%STB_HOST%.
+    echo Jalankan SETUP_SSH_KEY_STB.bat sekali, lalu coba deploy lagi.
     goto :fail
 )
 
@@ -68,13 +90,11 @@ echo ----------------------------------------
 echo.
 
 echo [1/3] Mengirim file terbaru ke STB...
-echo (Masukkan password: openwifi jika diminta)
-scp -r src package.json tsconfig.json root@192.168.100.104:/root/bot-kjp/ || goto :fail
+scp -i "%SSH_KEY%" %SSH_OPTS% -r src package.json tsconfig.json %STB_USER%@%STB_HOST%:%STB_DIR%/ || goto :fail
 
 echo.
 echo [2/3] Install ^& Build di STB...
-echo (Masukkan password lagi jika diminta)
-ssh -t root@192.168.100.104 "cd /root/bot-kjp && echo [STB] Installing dependencies... && npm install && echo [STB] Building project... && npm run build && echo [STB] Restarting Bot... && pm2 restart bot-kjp && pm2 save" || goto :fail
+ssh -i "%SSH_KEY%" %SSH_OPTS% -t %STB_USER%@%STB_HOST% "cd %STB_DIR% && echo [STB] Installing dependencies... && npm install && echo [STB] Building project... && npm run build && echo [STB] Restarting Bot... && pm2 restart bot-kjp && pm2 save" || goto :fail
 
 echo.
 echo ========================================
