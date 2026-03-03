@@ -6,7 +6,7 @@ import { getWibTimeHHmm } from './time';
 
 const url = process.env.SUPABASE_URL!;
 const anonKey = process.env.SUPABASE_ANON_KEY!;
-const serviceKey = process.env.SUPABASE_SERVICE_KEY || anonKey;
+const serviceKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || anonKey;
 
 // Gunakan Service Key jika ada (untuk Admin Delete bypass RLS), jika tidak fallback ke Anon Key
 export const supabase = createClient(url, serviceKey);
@@ -1327,9 +1327,10 @@ function sanitizeQuotaLimit(value: unknown): number {
 // Cache untuk settings (agar tidak query terus)
 let botSettingsCache: BotSettings | null = null;
 
-export async function getBotSettings(): Promise<BotSettings> {
+export async function getBotSettings(options?: { forceRefresh?: boolean }): Promise<BotSettings> {
+    const forceRefresh = options?.forceRefresh === true;
     // Return cache jika ada
-    if (botSettingsCache) return botSettingsCache;
+    if (!forceRefresh && botSettingsCache) return botSettingsCache;
 
     try {
         const { data, error } = await supabase

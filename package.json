@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "npm run test:quota",
+    "test:quota": "ts-node src/tests/quotaGate.personal-limit.test.ts",
     "dev": "ts-node src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js"
