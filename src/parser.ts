@@ -220,7 +220,7 @@ export function parseRawMessageToLines(text: string): string[] {
         const current = rawLines[i];
         const next = rawLines[i + 1];
 
-        const isLabelOnly = /^(?:(?:NO|NOMOR|NOMER)\s+)?(?:KARTU(?:\s+KELUARGA)?|KJP|KTP|NIK|KK)\s*:?\s*$/i.test(current)
+        const isLabelOnly = /^(?:(?:NO|NOMOR|NOMER)\s+)?(?:KARTU(?:\s+KELUARGA)?|KJP|KPJ|KTP|NIK|KK)\s*:?\s*$/i.test(current)
             && !/\d/.test(current);
         const nextLooksLikeNumber = !!next && (extractDigits(next).length >= 8);
 
@@ -256,7 +256,7 @@ export function parseRawMessageToLines(text: string): string[] {
             const candidateName = match[1].trim();
             // Cek apakah candidateName MENGANDUNG kata kunci label umum (lebih fleksibel)
             // Termasuk: ATM, KTP, NIK, KK, KJP, KAJ, KPDJ, KJMU, LANSIA, PJLP, RUSUN, DISABILITAS, DASAWISMA, DAWIS, GURU, HONORER, PEKERJA, dsb
-            const isLabel = /\b(NIK|KTP|KK|KJP|KAJ|KPDJ|KJMU|LANSIA|PJLP|RUSUN|DISABILITAS|DASAWISMA|DAWIS|GURU|HONORER|PEKERJA|KARTU|KELUARGA|ATM|NO|NOMOR|NOMER)\b/i.test(candidateName);
+            const isLabel = /\b(NIK|KTP|KK|KJP|KPJ|KAJ|KPDJ|KJMU|LANSIA|PJLP|RUSUN|DISABILITAS|DASAWISMA|DAWIS|GURU|HONORER|PEKERJA|KARTU|KELUARGA|ATM|NO|NOMOR|NOMER)\b/i.test(candidateName);
 
             if (isLabel) {
                 // Ini kemungkinan format "NIK 123456...", jangan displit
