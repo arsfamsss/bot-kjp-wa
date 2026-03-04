@@ -88,6 +88,11 @@ import {
     openSpecificLocation,
 } from './services/locationGate';
 import {
+    buildFailedDataCopyMessage,
+    buildStatusSummaryMessage,
+    checkRegistrationStatuses,
+} from './services/statusCheckService';
+import {
     MENU_MESSAGE,
     FORMAT_DAFTAR_MESSAGE,
     FORMAT_DAFTAR_PASARJAYA,
@@ -127,6 +132,8 @@ import {
     closeWindowDraftByPhone,
     reregisterDataCache, // FITUR DAFTAR ULANG
     reregisterOfferedToday, // FITUR DAFTAR ULANG
+    statusCheckSelectionByPhone,
+    statusCheckInProgressByPhone,
 } from './state';
 
 const AUTH_FOLDER = 'auth_info_baileys';
@@ -355,6 +362,8 @@ function normalizeIncomingCommand(raw: string): string {
     if (up === 'MENU_DAFTAR') return '1';
     if (up === 'MENU_CEK') return '2';
     if (up === 'MENU_HAPUS') return '3';
+    if (up === 'MENU_STATUS') return '5';
+    if (up === 'MENU_BANTUAN') return '6';
     if (up === 'HAPUS') return '3'; // Support keyword "HAPUS" langsung
     return up;
 }
@@ -822,6 +831,58 @@ export async function connectToWhatsApp() {
                         console.error(err);
                         return '❌ Gagal mengambil data.';
                     }
+                };
+
+                const formatLongIndonesianDate = (isoDate: string): string => {
+                    const dt = new Date(`${isoDate}T12:00:00+07:00`);
+                    return dt.toLocaleDateString('id-ID', {
+                        weekday: 'long',
+                        day: '2-digit',
+                        month: 'long',
+                        year: 'numeric',
+                        timeZone: 'Asia/Jakarta',
+                    });
+                };
+
+                const parseStatusSelectionIndices = (input: string, max: number): { indices: number[]; error?: string } => {
+                    const cleaned = (input || '').trim().toUpperCase();
+                    if (!cleaned) return { indices: [], error: 'empty' };
+                    if (cleaned === 'CEK SEMUA' || cleaned === 'SEMUA' || cleaned === 'ALL') {
+                        return { indices: Array.from({ length: max }, (_, i) => i + 1) };
+                    }
+
+                    const parts = cleaned
+                        .split(/[\s,]+/)
+                        .map((x) => x.trim())
+                        .filter((x) => x.length > 0);
+
+                    if (parts.length === 0) return { indices: [], error: 'empty' };
+
+                    const unique = new Set<number>();
+                    for (const part of parts) {
+                        if (!/^\d+$/.test(part)) {
+                            return { indices: [], error: 'invalid' };
+                        }
+                        const value = Number(part);
+                        if (value < 1 || value > max) {
+                            return { indices: [], error: 'out_of_range' };
+                        }
+                        unique.add(value);
+                    }
+
+                    return { indices: Array.from(unique).sort((a, b) => a - b) };
+                };
+
+                const resolveStatusSourceItems = async (sourceDate: string) => {
+                    const { validItems } = await getTodayRecapForSender(senderPhone, sourceDate, 'received_at');
+                    const items = validItems.map((item) => ({
+                        nama: item.nama,
+                        no_kjp: item.no_kjp,
+                        no_ktp: item.no_ktp || '-',
+                        no_kk: item.no_kk || '-',
+                        jenis_kartu: item.jenis_kartu || null,
+                    }));
+                    return { sourceDate, items };
                 };
 
                 const currentUserFlow = userFlowByPhone.get(senderPhone) || 'NONE';
@@ -1670,6 +1731,10 @@ export async function connectToWhatsApp() {
                     if ((currentUserFlow as string) === 'REREGISTER_OFFER' || (currentUserFlow as string) === 'REREGISTER_SELECT') {
                         reregisterDataCache.delete(senderPhone);
                     }
+                    if ((currentUserFlow as string) === 'CHECK_STATUS_PICK_ITEMS') {
+                        statusCheckSelectionByPhone.delete(senderPhone);
+                        statusCheckInProgressByPhone.delete(senderPhone);
+                    }
                     userFlowByPhone.set(senderPhone, 'NONE');
                     // Lanjut ke handler menu utama di bawah
                 }
@@ -1766,6 +1831,68 @@ export async function connectToWhatsApp() {
                         userFlowByPhone.set(senderPhone, 'NONE');
                     }
                     await sock.sendMessage(remoteJid, { text: replyText });
+                    continue;
+                }
+                else if (currentUserFlow === 'CHECK_STATUS_PICK_ITEMS') {
+                    const selectionSession = statusCheckSelectionByPhone.get(senderPhone);
+                    if (!selectionSession) {
+                        userFlowByPhone.set(senderPhone, 'NONE');
+                        replyText = '⚠️ Sesi cek status sudah kedaluwarsa. Silakan ulangi dari menu.';
+                        await sock.sendMessage(remoteJid, { text: replyText });
+                        continue;
+                    }
+
+                    if (normalized === '0' || normalized === 'BATAL') {
+                        statusCheckSelectionByPhone.delete(senderPhone);
+                        statusCheckInProgressByPhone.delete(senderPhone);
+                        userFlowByPhone.set(senderPhone, 'NONE');
+                        replyText = '✅ Cek status pendaftaran dibatalkan.';
+                        await sock.sendMessage(remoteJid, { text: replyText });
+                        continue;
+                    }
+
+                    if (statusCheckInProgressByPhone.get(senderPhone)) {
+                        await sock.sendMessage(remoteJid, {
+                            text: '⏳ Permintaan cek status sebelumnya masih diproses. Mohon tunggu sampai selesai.'
+                        });
+                        continue;
+                    }
+
+                    const parsedSelection = parseStatusSelectionIndices(rawTrim, selectionSession.items.length);
+                    if (parsedSelection.error || parsedSelection.indices.length === 0) {
+                        await sock.sendMessage(remoteJid, {
+                            text: '⚠️ Format pilihan tidak valid. Balas *1*, *1,2,3*, *CEK SEMUA*, atau *0* untuk batal.'
+                        });
+                        continue;
+                    }
+
+                    const selectedItems = parsedSelection.indices.map((idx) => selectionSession.items[idx - 1]).filter(Boolean);
+                    if (selectedItems.length === 0) {
+                        await sock.sendMessage(remoteJid, { text: '⚠️ Data yang dipilih tidak ditemukan. Silakan ulangi pilihan.' });
+                        continue;
+                    }
+
+                    statusCheckInProgressByPhone.set(senderPhone, true);
+                    try {
+                        const dateDisplayLong = formatLongIndonesianDate(selectionSession.targetDate);
+                        await sock.sendMessage(remoteJid, {
+                            text: `⏳ Sedang cek status pendaftaran (${selectedItems.length} data) untuk pengambilan ${selectionSession.targetDate} (${dateDisplayLong}). Mohon tunggu...`
+                        });
+
+                        const results = await checkRegistrationStatuses(selectedItems, selectionSession.targetDate);
+                        const summary = buildStatusSummaryMessage(results, selectionSession.targetDate);
+                        const failedCopyText = buildFailedDataCopyMessage(results);
+                        const finalText = failedCopyText ? `${summary}\n\n${failedCopyText}` : summary;
+
+                        await sock.sendMessage(remoteJid, { text: finalText });
+                    } catch (error) {
+                        console.error('status check flow error:', error);
+                        await sock.sendMessage(remoteJid, { text: '❌ Gagal cek status pendaftaran. Silakan coba lagi.' });
+                    } finally {
+                        statusCheckSelectionByPhone.delete(senderPhone);
+                        statusCheckInProgressByPhone.delete(senderPhone);
+                        userFlowByPhone.set(senderPhone, 'NONE');
+                    }
                     continue;
                 }
                 else if (currentUserFlow === 'DELETE_DATA') {
@@ -2109,6 +2236,9 @@ export async function connectToWhatsApp() {
                         normalized === '1' ||
                         normalized === '2' ||
                         normalized === '3' ||
+                        normalized === '4' ||
+                        normalized === '5' ||
+                        normalized === '6' ||
                         normalized.startsWith('ADMIN') ||
                         isGreetingOrMenu(normalized);
 
@@ -4355,8 +4485,53 @@ export async function connectToWhatsApp() {
                             '_Ketik 0 untuk batal._'
                         ].join('\n');
                     }
-                } else if (normalized === '5' || normalized === 'BANTUAN') {
-                    // FAQ hanya muncul jika ketik '5' atau 'BANTUAN' (exact match, tanpa embel-embel)
+                } else if (
+                    normalized === '5' ||
+                    normalized === 'STATUS' ||
+                    normalized === 'CEK STATUS' ||
+                    normalized === 'STATUS PENDAFTARAN' ||
+                    normalized === 'CEK STATUS PENDAFTARAN'
+                ) {
+                    if (statusCheckInProgressByPhone.get(senderPhone)) {
+                        replyText = '⏳ Permintaan cek status sebelumnya masih diproses. Mohon tunggu sampai selesai.';
+                    } else {
+                        const sourceDateDefault = shiftIsoDate(processingDayKey, -1);
+                        const targetDate = shiftIsoDate(processingDayKey, 1);
+                        const { sourceDate, items } = await resolveStatusSourceItems(sourceDateDefault);
+
+                        if (!items.length) {
+                            const { validCount: todayCount } = await getTodayRecapForSender(senderPhone, processingDayKey, 'received_at');
+                            if (todayCount > 0) {
+                                replyText = [
+                                    '⚠️ Data hari ini belum bisa dicek statusnya sekarang.',
+                                    '✅ Data hari ini baru bisa dicek besok lewat menu CEK STATUS PENDAFTARAN.',
+                                    `📌 Sumber cek status saat ini: data kemarin (${sourceDateDefault}).`,
+                                ].join('\n');
+                            } else {
+                                replyText = '⚠️ Data kemarin belum ditemukan. Silakan kirim data dulu lalu cek status besok.';
+                            }
+                        } else {
+                            statusCheckSelectionByPhone.set(senderPhone, { targetDate, sourceDate, items });
+                            userFlowByPhone.set(senderPhone, 'CHECK_STATUS_PICK_ITEMS');
+
+                            const dateLabel = formatLongIndonesianDate(targetDate);
+                            const listRows = items.map((item, idx) => `${idx + 1}. ${extractChildName(item.nama)} (${item.no_kjp})`);
+                            replyText = [
+                                '📊 *CEK STATUS PENDAFTARAN*',
+                                `Default tanggal pengambilan: *BESOK (${dateLabel})*`,
+                                `Data sumber: *${sourceDate}*`,
+                                '',
+                                ...listRows,
+                                '',
+                                'Balas dengan:',
+                                '• *1* (cek satu data)',
+                                '• *1,2,5* (cek beberapa data)',
+                                '• *CEK SEMUA* (cek semua data)',
+                                '• *0* untuk batal',
+                            ].join('\n');
+                        }
+                    }
+                } else if (normalized === '6' || normalized === 'BANTUAN') {
                     replyText = FAQ_MESSAGE;
                 } else {
 
