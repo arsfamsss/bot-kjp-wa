@@ -8,6 +8,7 @@ export type UserFlowState =
     | 'NONE'
     | 'CHECK_DATA_MENU'
     | 'CHECK_DATA_SPECIFIC_DATE'
+    | 'CHECK_STATUS_PICK_ITEMS'
     | 'DELETE_DATA'
     | 'SELECT_LOCATION'
     | 'SELECT_PASARJAYA_SUB'
@@ -29,6 +30,20 @@ export interface EditSession {
     selectedType?: 'DHARMAJAYA' | 'PASARJAYA';
     selectedFieldKey?: string;
     newValue?: string; // PATCH 2
+}
+
+export interface StatusCheckSelectionItem {
+    nama: string;
+    no_kjp: string;
+    no_ktp: string;
+    no_kk: string;
+    jenis_kartu?: string | null;
+}
+
+export interface StatusCheckSelectionSession {
+    targetDate: string;
+    sourceDate: string;
+    items: StatusCheckSelectionItem[];
 }
 
 // State alur menu admin
@@ -124,6 +139,9 @@ export const pendingRegistrationData = new Map<string, string>();
 
 // Sesi Edit Data
 export const editSessionByPhone = new Map<string, EditSession>();
+
+export const statusCheckSelectionByPhone = new Map<string, StatusCheckSelectionSession>();
+export const statusCheckInProgressByPhone = new Map<string, boolean>();
 
 // --- NEW: Sesi Kelola Kontak Admin ---
 export type ContactSession = {

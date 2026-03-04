@@ -13,9 +13,10 @@ export const MENU_MESSAGE = [
     '2️⃣ *CEK* → Lihat data saya',
     '3️⃣ *HAPUS* → Hapus data',
     '4️⃣ *EDIT* → Ganti Data Salah',
-    '5️⃣ *BANTUAN* → Tanya-tanya',
+    '5️⃣ *CEK STATUS PENDAFTARAN* → Cek hasil daftar',
+    '6️⃣ *BANTUAN* → Tanya-tanya',
     '',
-    'Ketik angkanya ya~ (1-5) 😊',
+    'Ketik angkanya ya~ (1-6) 😊',
 ].join('\n');
 
 // --- FORMAT DAFTAR (Dipanggil saat user ketik 1) ---
@@ -183,6 +184,7 @@ export const FAQ_MESSAGE = [
     '🛠️ *PERINTAH PENTING*',
     '━━━━━━━━━━━━━━━━━━━━',
     '• *CEK*   = lihat data hari ini',
+    '• *CEK STATUS PENDAFTARAN* = cek status daftar',
     '• *EDIT*  = perbaiki data',
     '• *HAPUS* / *HAPUS 1,2,3* = hapus data',
     '• *BATAL* = batal input (maks 30 menit)',
