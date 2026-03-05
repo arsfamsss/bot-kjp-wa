@@ -162,7 +162,7 @@ export const FAQ_MESSAGE = [
     '━━━━━━━━━━━━━━━━━━━━',
     '📝 *FORMAT DATA*',
     '━━━━━━━━━━━━━━━━━━━━',
-    '• DHARMAJAYA: *4 baris* (Nama, Jenis Kartu+Nomor, KTP+NIK, KK+Nomor KK)',
+    '• DHARMAJAYA: *4 baris* (Nama, Jenis Kartu+Nomor, KTP+Nomor, KK+Nomor KK)',
     '• Boleh kirim banyak orang, pisahkan 1 baris kosong',
     '',
     '━━━━━━━━━━━━━━━━━━━━',

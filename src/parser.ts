@@ -327,9 +327,9 @@ function buildParsedFields(block: string[], location: 'PASARJAYA' | 'DHARMAJAYA'
 function formatShortItemData(item: LogItem): string {
     const nama = item.parsed.nama || '-';
     const kartu = item.parsed.no_kjp || '-';
-    const nik = item.parsed.no_ktp || '-';
+    const ktp = item.parsed.no_ktp || '-';
     const kk = item.parsed.no_kk || '-';
-    return `Nama: ${nama} | Kartu: ${kartu} | NIK: ${nik} | KK: ${kk}`;
+    return `Nama: ${nama} | Kartu: ${kartu} | KTP: ${ktp} | KK: ${kk}`;
 }
 
 function buildDuplicateInMessageDetail(params: {
@@ -347,13 +347,13 @@ function buildDuplicateInMessageDetail(params: {
         duplicatedFields.push('No Kartu');
     }
     if (currentItem.parsed.no_ktp && previousItem.parsed.no_ktp && currentItem.parsed.no_ktp === previousItem.parsed.no_ktp) {
-        duplicatedFields.push('NIK/KTP');
+        duplicatedFields.push('KTP');
     }
     if (currentItem.parsed.no_kk && previousItem.parsed.no_kk && currentItem.parsed.no_kk === previousItem.parsed.no_kk) {
         duplicatedFields.push('KK');
     }
 
-    const triggerLabel = triggerField === 'no_kjp' ? 'No Kartu' : triggerField === 'no_ktp' ? 'NIK/KTP' : 'Nama';
+    const triggerLabel = triggerField === 'no_kjp' ? 'No Kartu' : triggerField === 'no_ktp' ? 'KTP' : 'Nama';
     const sameFieldsText = duplicatedFields.length > 0 ? duplicatedFields.join(', ') : triggerLabel;
 
     const lines = [

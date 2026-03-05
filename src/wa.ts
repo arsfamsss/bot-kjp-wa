@@ -252,7 +252,7 @@ function buildDatabaseErrorMessage(dataError: any, logJson?: any): string {
         const details = (dataError?.details || '').toString();
         const fields: string[] = [];
         if (details.includes('no_kjp')) fields.push('No Kartu');
-        if (details.includes('no_ktp')) fields.push('NIK/KTP');
+        if (details.includes('no_ktp')) fields.push('KTP');
         if (details.includes('nama')) fields.push('Nama');
 
         const conflicted = Array.isArray(logJson?.items)
@@ -271,10 +271,10 @@ function buildDatabaseErrorMessage(dataError: any, logJson?: any): string {
             conflicted.slice(0, 5).forEach((it: any) => {
                 const nama = it?.parsed?.nama || '-';
                 const kartu = it?.parsed?.no_kjp || '-';
-                const nik = it?.parsed?.no_ktp || '-';
+                const ktp = it?.parsed?.no_ktp || '-';
                 const kk = it?.parsed?.no_kk || '-';
                 lines.push(`• ${nama}`);
-                lines.push(`  Kartu: ${kartu} | NIK: ${nik} | KK: ${kk}`);
+                lines.push(`  Kartu: ${kartu} | KTP: ${ktp} | KK: ${kk}`);
             });
             if (conflicted.length > 5) {
                 lines.push(`• ...dan ${conflicted.length - 5} data lainnya`);

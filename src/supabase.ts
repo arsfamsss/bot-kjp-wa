@@ -178,7 +178,7 @@ export async function checkDuplicatesBatch(
         const noKjp = (data?.no_kjp || '-').toString();
         const noKtp = (data?.no_ktp || '-').toString();
         const noKk = (data?.no_kk || '-').toString();
-        return `Nama: ${nama} | Kartu: ${noKjp} | NIK: ${noKtp} | KK: ${noKk}`;
+        return `Nama: ${nama} | Kartu: ${noKjp} | KTP: ${noKtp} | KK: ${noKk}`;
     };
 
     // PROCESS CHECKING IN-MEMORY
@@ -209,29 +209,27 @@ export async function checkDuplicatesBatch(
             conflictFound = true;
             firstKind = firstKind || 'NO_KTP';
             firstDupData = firstDupData || ktpMatch;
-            duplicatedFields.push('NIK/KTP');
+            duplicatedFields.push('KTP');
         }
 
         if (conflictFound) {
             const matchSource = firstDupData || kjpMatch || ktpMatch;
             const isSameSender = matchSource && matchSource.sender_phone === ctx.senderPhone;
             const owner = matchSource ? getOwnerName(matchSource) : 'ORANG LAIN';
-            const fieldText = duplicatedFields.length > 0 ? duplicatedFields.join(', ') : 'No Kartu/NIK';
+            const fieldText = duplicatedFields.length > 0 ? duplicatedFields.join(', ') : 'No Kartu/KTP';
             
             let finalMsg = '';
             const namaTerkirim = item.parsed.nama || 'Tidak diketahui';
             if (isSameSender) {
                 finalMsg = [
-                    `❌ Data belum bisa diproses`,
                     `Data ini sudah pernah Ibu/Bapak kirim hari ini.`,
                     `Yang sama: ${fieldText}`,
                     `Nama terkirim: ${namaTerkirim}`,
                     `Nama sebelumnya: ${owner}`,
-                    `Silakan kirim data lain yang belum terdaftar 🙏`
+                    `Silakan kirim data lain yang belum terdaftar.`
                 ].join('\n');
             } else {
                 finalMsg = [
-                    `❌ Data belum bisa diproses`,
                     `Data ini sudah terdaftar hari ini oleh nomor WA lain.`,
                     `Yang sama: ${fieldText}`,
                     `Nama terkirim: ${namaTerkirim}`,

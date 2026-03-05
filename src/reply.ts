@@ -102,9 +102,7 @@ export function buildReplyForNewData(
             lines.push(`   ${idx + 1}. ${extractChildName(item.parsed.nama)}`);
         });
     } else {
-        lines.push(`❌ *Waduh, data belum bisa masuk~*`);
-        lines.push('');
-        lines.push('Coba kirim ulang ya Bu/Pak 🙏');
+        lines.push(`❌ *Data belum bisa diproses*`);
     }
 
     if (failed > 0 || hasRemainder) {
