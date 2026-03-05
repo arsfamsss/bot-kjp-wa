@@ -319,7 +319,7 @@ export async function getTotalDataTodayForSenderByLocation(
 
     if (error) {
         console.error(`Error getTotalDataTodayForSenderByLocation for ${senderPhone}:`, error.message);
-        return 0;
+        return -1;
     }
 
     return count || 0;

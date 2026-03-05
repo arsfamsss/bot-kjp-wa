@@ -427,6 +427,12 @@ async function checkLocationQuotaBeforeSave(logJson: any, senderPhone: string): 
         if (limit === null) continue;
 
         const used = await getTotalDataTodayForSenderByLocation(senderPhone, processingDayKey, locationKey);
+        if (used < 0) {
+            return {
+                allowed: false,
+                message: '⚠️ Sistem kuota sedang bermasalah. Silakan coba lagi beberapa saat.',
+            };
+        }
         const after = used + pendingCount;
 
         if (after > limit) {
