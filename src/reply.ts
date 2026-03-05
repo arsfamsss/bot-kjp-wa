@@ -122,11 +122,32 @@ export function buildReplyForNewData(
                 item.errors.forEach((err) => {
                     let friendlyMsg = '';
                     if (err.field === 'no_kjp' && err.type === 'invalid_length') {
-                        friendlyMsg = `Kartu ${item.parsed.no_kjp?.length || 0} digit (harus 16-18)`;
+                        const length = item.parsed.no_kjp?.length || 0;
+                        if (length < 16) {
+                            friendlyMsg = `Kartu kurang ${16 - length} angka, minimal 16 angka.`;
+                        } else if (length > 18) {
+                            friendlyMsg = `Kartu lebih ${length - 18} angka, maksimal 18 angka.`;
+                        } else {
+                            friendlyMsg = 'Kartu harus 16-18 angka.';
+                        }
                     } else if (err.field === 'no_ktp' && err.type === 'invalid_length') {
-                        friendlyMsg = `KTP ${item.parsed.no_ktp?.length || 0} digit (harus 16)`;
+                        const length = item.parsed.no_ktp?.length || 0;
+                        if (length < 16) {
+                            friendlyMsg = `KTP kurang ${16 - length} angka, harus 16 angka.`;
+                        } else if (length > 16) {
+                            friendlyMsg = `KTP lebih ${length - 16} angka, harus 16 angka.`;
+                        } else {
+                            friendlyMsg = 'KTP harus 16 angka.';
+                        }
                     } else if (err.field === 'no_kk' && err.type === 'invalid_length') {
-                        friendlyMsg = `KK ${item.parsed.no_kk?.length || 0} digit (harus 16)`;
+                        const length = item.parsed.no_kk?.length || 0;
+                        if (length < 16) {
+                            friendlyMsg = `KK kurang ${16 - length} angka, harus 16 angka.`;
+                        } else if (length > 16) {
+                            friendlyMsg = `KK lebih ${length - 16} angka, harus 16 angka.`;
+                        } else {
+                            friendlyMsg = 'KK harus 16 angka.';
+                        }
                     } else if (err.type === 'required') {
                         const fieldName = err.field === 'nama' ? 'Nama' : err.field === 'no_kjp' ? 'Kartu' : err.field === 'no_ktp' ? 'KTP' : 'KK';
                         friendlyMsg = `${fieldName} kosong`;
@@ -178,32 +199,6 @@ export function buildReplyForNewData(
             lines.push(`   → Kurang baris (harus ${expectedLines} baris/orang)`);
         }
 
-        // CONTOH FORMAT YANG BENAR:
-        // HANYA TAMPILKAN JIKA:
-        // 1. Ada error FORMAT (bukan cuma duplikat)
-        // 2. ATAU ada Data tidak lengkap (remainder)
-        const hasFormatError = log.items.some(i => i.status === 'SKIP_FORMAT');
-        const showExample = hasFormatError || hasRemainder;
-
-        if (showExample) {
-            lines.push('');
-            lines.push('━━━━━━━━━━━━━━━━━━━━');
-            lines.push('💡 *Contoh yang bener:*');
-
-            if (isPasarjaya) {
-                lines.push('Siti Aminah');
-                lines.push('KJP 5049488500001234');
-                lines.push('KTP 3171234567890123');
-                lines.push('KK 3171098765432109');
-                lines.push('15-08-1975');
-            } else {
-                lines.push('Siti Aminah');
-                lines.push('LANSIA 504948350000123');
-                lines.push('KTP 3171234567890123');
-                lines.push('KK 3171098765432109');
-            }
-            lines.push('━━━━━━━━━━━━━━━━━━━━');
-        }
     }
 
     lines.push('');
