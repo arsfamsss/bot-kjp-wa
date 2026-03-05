@@ -152,10 +152,10 @@ export function buildStatusSummaryMessage(results: StatusCheckResult[], dateIso:
     return lines.join('\n');
 }
 
-export function buildFailedDataCopyMessage(results: StatusCheckResult[]): string {
+export function buildFailedDataCopyMessage(results: StatusCheckResult[]): { header: string; body: string } | null {
     const failedResults = results.filter((x) => x.state !== 'BERHASIL');
     if (failedResults.length === 0) {
-        return '';
+        return null;
     }
 
     const header = [
@@ -180,5 +180,5 @@ export function buildFailedDataCopyMessage(results: StatusCheckResult[]): string
         })
         .join('\n\n');
 
-    return `${header}\n${body}`;
+    return { header, body };
 }

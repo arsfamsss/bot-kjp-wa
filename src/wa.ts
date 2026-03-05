@@ -436,13 +436,16 @@ async function checkLocationQuotaBeforeSave(logJson: any, senderPhone: string): 
         const after = used + pendingCount;
 
         if (after > limit) {
+            const locationLabel = locationKey.replace(/^DHARMAJAYA\s*-\s*/i, '').trim() || locationKey;
+            const mustReduce = after - limit;
             return {
                 allowed: false,
                 message: [
-                    '⛔ *Batas kirim lokasi tercapai*',
-                    `Lokasi: *${locationKey}*`,
-                    `Batas Anda hari ini: *${limit} data*`,
+                    '⛔ *Limit kirim data lokasi tercapai*',
+                    `Limit Kirim Data ${locationLabel}: *${limit}*`,
                     `Sudah terpakai: *${used} data*`,
+                    `Data yang Anda kirim sekarang: *${pendingCount} data*`,
+                    `Kurangi *${mustReduce} data* agar bisa diproses.`,
                     '',
                     'Silakan kirim lagi besok atau pilih lokasi lain.',
                 ].join('\n'),
@@ -1984,10 +1987,13 @@ export async function connectToWhatsApp() {
 
                         const results = await checkRegistrationStatuses(selectedItems, selectionSession.targetDate);
                         const summary = buildStatusSummaryMessage(results, selectionSession.targetDate);
-                        const failedCopyText = buildFailedDataCopyMessage(results);
-                        const finalText = failedCopyText ? `${summary}\n\n${failedCopyText}` : summary;
+                        const failedData = buildFailedDataCopyMessage(results);
 
-                        await sock.sendMessage(remoteJid, { text: finalText });
+                        await sock.sendMessage(remoteJid, { text: summary });
+                        if (failedData) {
+                            await sock.sendMessage(remoteJid, { text: failedData.header });
+                            await sock.sendMessage(remoteJid, { text: failedData.body });
+                        }
                     } catch (error) {
                         console.error('status check flow error:', error);
                         await sock.sendMessage(remoteJid, { text: '❌ Gagal cek status pendaftaran. Silakan coba lagi.' });
@@ -4753,24 +4759,30 @@ export async function connectToWhatsApp() {
                                 replyText = '⚠️ Data kemarin belum ditemukan. Silakan kirim data dulu lalu cek status besok.';
                             }
                         } else {
-                            statusCheckSelectionByPhone.set(senderPhone, { targetDate, sourceDate, items });
-                            userFlowByPhone.set(senderPhone, 'CHECK_STATUS_PICK_ITEMS');
+                            statusCheckInProgressByPhone.set(senderPhone, true);
+                            try {
+                                const dateDisplayLong = formatLongIndonesianDate(targetDate);
+                                await sock.sendMessage(remoteJid, {
+                                    text: `⏳ Sedang cek status pendaftaran (${items.length} data) untuk pengambilan ${targetDate} (${dateDisplayLong}). Mohon tunggu...`
+                                });
 
-                            const dateLabel = formatLongIndonesianDate(targetDate);
-                            const listRows = items.map((item, idx) => `${idx + 1}. ${extractChildName(item.nama)} (${item.no_kjp})`);
-                            replyText = [
-                                '📊 *CEK STATUS PENDAFTARAN*',
-                                `Default tanggal pengambilan: *BESOK (${dateLabel})*`,
-                                `Data sumber: *${sourceDate}*`,
-                                '',
-                                ...listRows,
-                                '',
-                                'Balas dengan:',
-                                '• *1* (cek satu data)',
-                                '• *1,2,5* (cek beberapa data)',
-                                '• *CEK SEMUA* (cek semua data)',
-                                '• *0* untuk batal',
-                            ].join('\n');
+                                const results = await checkRegistrationStatuses(items, targetDate);
+                                const summary = buildStatusSummaryMessage(results, targetDate);
+                                const failedData = buildFailedDataCopyMessage(results);
+
+                                await sock.sendMessage(remoteJid, { text: summary });
+
+                                if (failedData) {
+                                    await sock.sendMessage(remoteJid, { text: failedData.header });
+                                    await sock.sendMessage(remoteJid, { text: failedData.body });
+                                }
+                            } catch (error) {
+                                console.error('status check flow error:', error);
+                                await sock.sendMessage(remoteJid, { text: '❌ Gagal cek status pendaftaran. Silakan coba lagi.' });
+                            } finally {
+                                statusCheckInProgressByPhone.delete(senderPhone);
+                            }
+                            continue;
                         }
                     }
                 } else if (normalized === '6' || normalized === 'BANTUAN') {
