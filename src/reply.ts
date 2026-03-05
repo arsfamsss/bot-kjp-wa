@@ -211,18 +211,17 @@ export function buildReplyForNewData(
     lines.push('');
     lines.push('');
 
-    // Cek apakah ada duplikat dengan ORANG LAIN (pesan tidak mengandung 'Anda sendiri')
+    // Cek apakah ada duplikat dengan ORANG LAIN (pesan mengandung 'nomor WA lain')
     const hasConflictWithOther = log.items.some(i =>
         i.status === 'SKIP_DUPLICATE' &&
         i.duplicate_info?.safe_message &&
-        !i.duplicate_info.safe_message.includes('Anda sendiri')
+        i.duplicate_info.safe_message.includes('nomor WA lain')
     );
 
     if (hasConflictWithOther) {
-        lines.push('Silahkan Hub Admin 📞 08568511113');
-    } else {
-        lines.push('Ketik *CEK* buat lihat data 👀');
+        lines.push('Silakan hubungi Admin 📞 08568511113');
     }
+    lines.push('Ketik CEK untuk lihat data 👀');
 
     return lines.join('\n');
 }

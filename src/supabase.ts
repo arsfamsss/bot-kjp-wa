@@ -214,15 +214,31 @@ export async function checkDuplicatesBatch(
 
         if (conflictFound) {
             const matchSource = firstDupData || kjpMatch || ktpMatch;
+            const isSameSender = matchSource && matchSource.sender_phone === ctx.senderPhone;
             const owner = matchSource ? getOwnerName(matchSource) : 'ORANG LAIN';
             const fieldText = duplicatedFields.length > 0 ? duplicatedFields.join(', ') : 'No Kartu/NIK';
-            const finalMsg = [
-                'Maaf, data ini sudah pernah masuk hari ini.',
-                `Yang sama: ${fieldText}.`,
-                `Data Ibu/Bapak: ${formatDataRingkas(item.parsed)}`,
-                `Data yang sudah ada (atas nama ${owner}): ${formatDataRingkas(matchSource)}`,
-                'Silakan kirim data lain yang belum terdaftar ya.',
-            ].join('\n');
+            
+            let finalMsg = '';
+            const namaTerkirim = item.parsed.nama || 'Tidak diketahui';
+            if (isSameSender) {
+                finalMsg = [
+                    `❌ Data belum bisa diproses`,
+                    `Data ini sudah pernah Ibu/Bapak kirim hari ini.`,
+                    `Yang sama: ${fieldText}`,
+                    `Nama terkirim: ${namaTerkirim}`,
+                    `Nama sebelumnya: ${owner}`,
+                    `Silakan kirim data lain yang belum terdaftar 🙏`
+                ].join('\n');
+            } else {
+                finalMsg = [
+                    `❌ Data belum bisa diproses`,
+                    `Data ini sudah terdaftar hari ini oleh nomor WA lain.`,
+                    `Yang sama: ${fieldText}`,
+                    `Nama terkirim: ${namaTerkirim}`,
+                    `Nama terdaftar: ${owner}`
+                ].join('\n');
+            }
+            
             const info: DuplicateInfo = {
                 kind: firstKind || 'NO_KJP',
                 processing_day_key: processingDayKey,
