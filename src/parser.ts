@@ -324,14 +324,6 @@ function buildParsedFields(block: string[], location: 'PASARJAYA' | 'DHARMAJAYA'
     }
 }
 
-function formatShortItemData(item: LogItem): string {
-    const nama = item.parsed.nama || '-';
-    const kartu = item.parsed.no_kjp || '-';
-    const ktp = item.parsed.no_ktp || '-';
-    const kk = item.parsed.no_kk || '-';
-    return `Nama: ${nama} | Kartu: ${kartu} | KTP: ${ktp} | KK: ${kk}`;
-}
-
 function buildDuplicateInMessageDetail(params: {
     currentItem: LogItem;
     previousItem: LogItem;
@@ -339,29 +331,51 @@ function buildDuplicateInMessageDetail(params: {
 }): string {
     const { currentItem, previousItem, triggerField } = params;
 
-    const duplicatedFields: string[] = [];
-    if (currentItem.parsed.nama && previousItem.parsed.nama && currentItem.parsed.nama === previousItem.parsed.nama) {
-        duplicatedFields.push('Nama');
-    }
-    if (currentItem.parsed.no_kjp && previousItem.parsed.no_kjp && currentItem.parsed.no_kjp === previousItem.parsed.no_kjp) {
-        duplicatedFields.push('No Kartu');
-    }
-    if (currentItem.parsed.no_ktp && previousItem.parsed.no_ktp && currentItem.parsed.no_ktp === previousItem.parsed.no_ktp) {
-        duplicatedFields.push('KTP');
-    }
-    if (currentItem.parsed.no_kk && previousItem.parsed.no_kk && currentItem.parsed.no_kk === previousItem.parsed.no_kk) {
-        duplicatedFields.push('KK');
+    const fieldPairs = [
+        { key: 'nama', label: 'Nama', current: currentItem.parsed.nama || '-', previous: previousItem.parsed.nama || '-' },
+        { key: 'no_kjp', label: 'Kartu', current: currentItem.parsed.no_kjp || '-', previous: previousItem.parsed.no_kjp || '-' },
+        { key: 'no_ktp', label: 'KTP', current: currentItem.parsed.no_ktp || '-', previous: previousItem.parsed.no_ktp || '-' },
+        { key: 'no_kk', label: 'KK', current: currentItem.parsed.no_kk || '-', previous: previousItem.parsed.no_kk || '-' },
+    ] as const;
+
+    const duplicatedEntries = fieldPairs.filter((entry) => entry.current !== '-' && entry.current === entry.previous);
+    const duplicatedLabels = duplicatedEntries.map((entry) => entry.label);
+    const triggerLabel = triggerField === 'no_kjp' ? 'Kartu' : triggerField === 'no_ktp' ? 'KTP' : 'Nama';
+    const sameFieldsText = duplicatedLabels.length > 0 ? duplicatedLabels.join(', ') : triggerLabel;
+    const previousName = previousItem.parsed.nama || `Data ke-${previousItem.index}`;
+
+    const lines: string[] = [];
+    if (duplicatedEntries.length === fieldPairs.length) {
+        lines.push(`⚠️ Semua data sama dengan *${previousName}* (no. ${previousItem.index})`);
+    } else {
+        lines.push(`⚠️ ${sameFieldsText} sama dengan *${previousName}* (no. ${previousItem.index})`);
     }
 
-    const triggerLabel = triggerField === 'no_kjp' ? 'No Kartu' : triggerField === 'no_ktp' ? 'KTP' : 'Nama';
-    const sameFieldsText = duplicatedFields.length > 0 ? duplicatedFields.join(', ') : triggerLabel;
+    lines.push('');
+    lines.push('📌 Data duplikat:');
+    duplicatedEntries.forEach((entry) => {
+        lines.push(`${entry.label}: ${entry.current}`);
+    });
 
-    const lines = [
-        `Data ini sama dengan data ke-${previousItem.index} di pesan ini.`,
-        `Yang sama: ${sameFieldsText}.`,
-        `Data Ibu/Bapak (ke-${currentItem.index}): ${formatShortItemData(currentItem)}`,
-        `Data yang sudah ada (ke-${previousItem.index}): ${formatShortItemData(previousItem)}`,
-    ];
+    const differentEntries = fieldPairs.filter((entry) => !duplicatedEntries.some((dup) => dup.key === entry.key));
+    if (differentEntries.length > 0 && duplicatedEntries.length !== fieldPairs.length) {
+        lines.push('');
+        lines.push('🆕 Data baru:');
+        differentEntries.forEach((entry) => {
+            lines.push(`${entry.label}: ${entry.current}`);
+        });
+
+        lines.push('');
+        lines.push('📂 Data lama:');
+        differentEntries.forEach((entry) => {
+            lines.push(`${entry.label}: ${entry.previous}`);
+        });
+    }
+
+    if (duplicatedEntries.length === fieldPairs.length) {
+        lines.push('');
+        lines.push('⚠️ Kemungkinan data ganda / dobel input.');
+    }
 
     return lines.join('\n');
 }
