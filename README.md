@@ -41,8 +41,13 @@ Bot ini dirancang untuk mempermudah pendaftaran data KJP/Sembako secara otomatis
    ```env
    SUPABASE_URL=https://your-project.supabase.co
    SUPABASE_ANON_KEY=your-anon-key-here
+   PASARJAYA_DISABLED=true
    PORT=3000
    ```
+
+   Keterangan `PASARJAYA_DISABLED`:
+   - `true`  -> opsi PasarJaya disembunyikan dan ditolak di flow user.
+   - `false` -> opsi PasarJaya ditampilkan kembali.
 
 3. **Database Schema**
    Pastikan tabel `data_harian`, `lid_phone_map`, `log_pesan_wa`, dan `bot_settings` sudah dibuat di Supabase.

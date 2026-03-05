@@ -25,13 +25,10 @@ export const FORMAT_DAFTAR_MESSAGE = [
     '',
     'Mau ambil sembako dimana?',
     '',
-    '1️⃣ *PASARJAYA*',
-    '(Jakgrosir Kedoya, Rusun Pesakih, Mini DC Cengkareng, Bambu Larangan)',
-    '',
     '2️⃣ *DHARMAJAYA*',
     '(Kosambi,Kapuk Jagal,Pulogadung,Cakung)',
     '',
-    'Silakan ketik *1* atau *2* untuk pilih lokasi.',
+    'Silakan ketik *2* untuk pilih lokasi.',
     'Ketik 0 kalau batal 😊'
 ].join('\n');
 
@@ -152,7 +149,7 @@ export const FAQ_MESSAGE = [
     '📌 *ALUR CEPAT*',
     '━━━━━━━━━━━━━━━━━━━━',
     '1) Ketik *1* untuk DAFTAR',
-    '2) Pilih lokasi: *PASARJAYA* / *DHARMAJAYA*',
+    '2) Pilih lokasi yang tersedia: *DHARMAJAYA*',
     '3) Kirim data sesuai format',
     '4) Ketik *CEK* untuk lihat data masuk',
     '',
@@ -165,7 +162,6 @@ export const FAQ_MESSAGE = [
     '━━━━━━━━━━━━━━━━━━━━',
     '📝 *FORMAT DATA*',
     '━━━━━━━━━━━━━━━━━━━━',
-    '• PASARJAYA: *5 baris* (Nama, Kartu, KTP, KK, Tgl Lahir)',
     '• DHARMAJAYA: *4 baris* (Nama, Jenis Kartu+Nomor, KTP+NIK, KK+Nomor KK)',
     '• Boleh kirim banyak orang, pisahkan 1 baris kosong',
     '',

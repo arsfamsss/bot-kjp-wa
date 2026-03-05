@@ -189,6 +189,9 @@ const DEFAULT_CLOSE_START_HOUR = 0;
 const DEFAULT_CLOSE_START_MINUTE = 0;
 const DEFAULT_CLOSE_END_HOUR = 6;
 const DEFAULT_CLOSE_END_MINUTE = 0;
+const PASARJAYA_DISABLED = ['1', 'true', 'yes', 'on'].includes(
+    (process.env.PASARJAYA_DISABLED ?? 'true').trim().toLowerCase()
+);
 
 function formatOperationStatus(settings: {
     close_hour_start: number;
@@ -1559,7 +1562,7 @@ export async function connectToWhatsApp() {
 
                         // Minta pilih lokasi (Format Lama) tapi nanti 1 akan trigger menu baru
                         await sock.sendMessage(remoteJid, {
-                            text: `⚠️ *Mohon Pilih Lokasi Dulu*\n\nData Anda sepertinya valid, tapi saya perlu tahu Anda mau ambil sembako di mana?\n\nKetik Angka *1* untuk Pasarjaya (Kedoya,Cengkareng,Pesakih dll)\nKetik Angka *2* untuk Dharmajaya (Kosambi,Kapuk Jagal,Pulogadung,Cakung)\n\n_Ketik 0 untuk batal._`
+                            text: `⚠️ *Mohon Pilih Lokasi Dulu*\n\nData Anda sepertinya valid, tapi saya perlu tahu Anda mau ambil sembako di mana?\n\nSaat ini yang tersedia: *2. DHARMAJAYA*\n\n_Ketik 0 untuk batal._`
                         });
                         userFlowByPhone.set(senderPhone, 'SELECT_LOCATION');
                         return; // Selesai
@@ -1950,6 +1953,11 @@ export async function connectToWhatsApp() {
                 else if (currentUserFlow === 'SELECT_LOCATION') {
                     // Logic Unified: Pilihan 1 -> Menu Pasarjaya, Pilihan 2 -> Dharmajaya (Auto Process Pending)
                     if (normalized === '1') {
+                        if (PASARJAYA_DISABLED) {
+                            replyText = '⚠️ PasarJaya sementara ditutup.\nSilakan pilih lokasi yang tersedia: *2. DHARMAJAYA*.';
+                            if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
+                            continue;
+                        }
                         // ✅ BUKA PASARJAYA - Tampilkan menu sub-lokasi
                         replyText = MENU_PASARJAYA_LOCATIONS;
                         userFlowByPhone.set(senderPhone, 'SELECT_PASARJAYA_SUB');
@@ -1990,12 +1998,18 @@ export async function connectToWhatsApp() {
                         pendingRegistrationData.delete(senderPhone);
                         replyText = '✅ Pendaftaran dibatalkan.';
                     } else {
-                        replyText = '⚠️ Ketik Angka *1* (Pasarjaya) atau Ketik Angka *2* (Dharmajaya).\nKetik *0* untuk batal.';
+                        replyText = '⚠️ Ketik Angka *2* (Dharmajaya).\nKetik *0* untuk batal.';
                     }
                     if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
                     continue;
                 }
                 else if (currentUserFlow === 'SELECT_PASARJAYA_SUB') {
+                    if (PASARJAYA_DISABLED) {
+                        userFlowByPhone.set(senderPhone, 'SELECT_LOCATION');
+                        replyText = '⚠️ PasarJaya sementara ditutup.\nSilakan pilih lokasi yang tersedia: *2. DHARMAJAYA*.';
+                        if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
+                        continue;
+                    }
                     // HANDLER MENU PASARJAYA (1-5)
                     if (normalized === '0') {
                         // Back to None
@@ -2089,6 +2103,12 @@ export async function connectToWhatsApp() {
                     continue;
                 }
                 else if (currentUserFlow === 'INPUT_MANUAL_LOCATION') {
+                    if (PASARJAYA_DISABLED) {
+                        userFlowByPhone.set(senderPhone, 'SELECT_LOCATION');
+                        replyText = '⚠️ PasarJaya sementara ditutup.\nSilakan pilih lokasi yang tersedia: *2. DHARMAJAYA*.';
+                        if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
+                        continue;
+                    }
                     // HANDLER INPUT LOKASI MANUAL
                     const lokasiName = rawTrim; // Ambil input user sebagai nama lokasi
                     // Validasi minimal panjang
@@ -4596,9 +4616,16 @@ export async function connectToWhatsApp() {
                     // --- EXECUTION BLOCKS ---
 
                     if (blockAskLocation) {
+                        if (PASARJAYA_DISABLED && detectedFormat === 'PASARJAYA') {
+                            await sock.sendMessage(remoteJid, {
+                                text: '⚠️ PasarJaya sementara ditutup.\nSilakan kirim data format Dharmajaya atau pilih *2. DHARMAJAYA* dari menu.'
+                            });
+                            userFlowByPhone.set(senderPhone, 'SELECT_LOCATION');
+                            continue;
+                        }
                         // Tolak halus dan minta pilih lokasi
                         await sock.sendMessage(remoteJid, {
-                            text: `⚠️ *Mohon Pilih Lokasi Dulu*\n\nData Anda sepertinya valid, tapi saya perlu tahu Anda mau ambil sembako di mana?\n\nKetik *1* untuk Pasarjaya (Kedoya,Cengkareng,Pesakih dll)\nKetik *2* untuk Dharmajaya (Kosambi,Kapuk Jagal,Pulogadung,Cakung)`
+                            text: `⚠️ *Mohon Pilih Lokasi Dulu*\n\nData Anda sepertinya valid, tapi saya perlu tahu Anda mau ambil sembako di mana?\n\nSaat ini yang tersedia: *2. DHARMAJAYA*`
                         });
                         userFlowByPhone.set(senderPhone, 'SELECT_LOCATION');
                         // Jangan continue, biarkan logic bawah skip karena if (lines.length >= minLines) akan kita guard
@@ -4613,7 +4640,7 @@ export async function connectToWhatsApp() {
                             });
                         } else {
                             await sock.sendMessage(remoteJid, {
-                                text: `⚠️ *DATA TERTOLAK (Salah Format)*\n\nAnda memilih **DHARMAJAYA**, maka format data harus **4 Baris**.\n\nAnda mengirim 5 baris (dengan tanggal lahir).\nSilakan hapus baris tanggal lahir atau pilih lokasi Pasarjaya dari Menu.`
+                                text: `⚠️ *DATA TERTOLAK (Salah Format)*\n\nAnda memilih **DHARMAJAYA**, maka format data harus **4 Baris**.\n\nAnda mengirim 5 baris (dengan tanggal lahir).\nSilakan hapus baris tanggal lahir lalu kirim ulang.`
                             });
                         }
                         continue;
@@ -4647,6 +4674,13 @@ export async function connectToWhatsApp() {
 
                         // VALIDASI BARU: Jika PASARJAYA tapi belum pilih lokasi spesifik, minta pilih dulu
                         if (finalContext === 'PASARJAYA' && !storedSpecificLocation) {
+                            if (PASARJAYA_DISABLED) {
+                                userLocationChoice.set(senderPhone, 'DHARMAJAYA');
+                                await sock.sendMessage(remoteJid, {
+                                    text: '⚠️ PasarJaya sementara ditutup.\nSilakan kirim ulang dengan format *DHARMAJAYA* (4 baris).'
+                                });
+                                continue;
+                            }
                             // Simpan data pending agar tidak perlu kirim ulang
                             pendingRegistrationData.set(senderPhone, messageText);
                             userFlowByPhone.set(senderPhone, 'SELECT_PASARJAYA_SUB');
