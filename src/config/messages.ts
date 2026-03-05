@@ -232,6 +232,7 @@ export const ADMIN_MENU_MESSAGE = [
     '1️⃣6️⃣ Kelola Blokir No KK',
     '1️⃣7️⃣ Kelola Prefix Kartu',
     '1️⃣8️⃣ Kelola Lokasi Penuh',
+    '1️⃣9️⃣ Batas per Lokasi (per user/hari)',
     '',
     '💡 _Ketik *#TEMPLATE* untuk edit pesan tutup_',
     '💡 _Ketik *#TEMPLATE RESET* untuk kembali ke default_',

@@ -303,6 +303,28 @@ function normalizeLocationKey(raw: string): string {
     return (raw || '').trim().replace(/\s+/g, ' ');
 }
 
+export async function getTotalDataTodayForSenderByLocation(
+    senderPhone: string,
+    processingDayKey: string,
+    locationKey: string
+): Promise<number> {
+    const locationNormalized = normalizeLocationKey(locationKey);
+
+    const { count, error } = await supabase
+        .from('data_harian')
+        .select('id', { count: 'exact', head: true })
+        .eq('sender_phone', senderPhone)
+        .eq('processing_day_key', processingDayKey)
+        .eq('lokasi', locationNormalized);
+
+    if (error) {
+        console.error(`Error getTotalDataTodayForSenderByLocation for ${senderPhone}:`, error.message);
+        return 0;
+    }
+
+    return count || 0;
+}
+
 function isMissingTableError(error: unknown, tableName: string): boolean {
     if (!error || typeof error !== 'object') return false;
 

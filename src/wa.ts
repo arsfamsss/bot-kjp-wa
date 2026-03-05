@@ -51,6 +51,7 @@ import {
     updateLidForPhone,
     getPhoneFromLidSync,
     getTotalDataTodayForSender,
+    getTotalDataTodayForSenderByLocation,
     getBotSettings,
     updateBotSettings,
     formatCloseTimeString,
@@ -87,6 +88,14 @@ import {
     listClosedLocationsByProvider,
     openSpecificLocation,
 } from './services/locationGate';
+import {
+    disableLocationQuotaLimit,
+    getLocationQuotaLimit,
+    listAllDharmajayaLocations,
+    listLocationQuotaLimits,
+    resolveDharmajayaLocationByChoice,
+    setLocationQuotaLimit,
+} from './services/locationQuota';
 import {
     buildFailedDataCopyMessage,
     buildStatusSummaryMessage,
@@ -130,6 +139,7 @@ import {
     editSessionByPhone as editSessionMap,
     contactSessionByPhone, // NEW: Kelola Kontak
     closeWindowDraftByPhone,
+    locationQuotaDraftByPhone,
     reregisterDataCache, // FITUR DAFTAR ULANG
     reregisterOfferedToday, // FITUR DAFTAR ULANG
     statusCheckSelectionByPhone,
@@ -369,6 +379,72 @@ function normalizeIncomingCommand(raw: string): string {
     if (up === 'MENU_BANTUAN') return '6';
     if (up === 'HAPUS') return '3'; // Support keyword "HAPUS" langsung
     return up;
+}
+
+function buildLocationQuotaMenuText(): string {
+    return [
+        '📊 *BATAS PER LOKASI (PER USER/HARI)*',
+        '',
+        '1️⃣ Set batas lokasi',
+        '2️⃣ Lihat batas lokasi',
+        '3️⃣ Nonaktifkan batas lokasi',
+        '',
+        '0️⃣ Kembali ke Menu Admin',
+    ].join('\n');
+}
+
+function buildLocationQuotaListText(): string {
+    const lines: string[] = ['📊 *DAFTAR BATAS PER LOKASI (PER USER/HARI)*', ''];
+    const limits = listLocationQuotaLimits();
+
+    limits.forEach((item, index) => {
+        const locationLabel = item.locationKey.replace('DHARMAJAYA - ', '');
+        const value = item.enabled ? `${item.limit}` : 'OFF';
+        lines.push(`${index + 1}. ${locationLabel}: ${value}`);
+    });
+
+    lines.push('');
+    lines.push('Ketik *0* untuk kembali.');
+    return lines.join('\n');
+}
+
+async function checkLocationQuotaBeforeSave(logJson: any, senderPhone: string): Promise<{ allowed: boolean; message?: string }> {
+    const okItems = (logJson?.items || []).filter((it: any) => it?.status === 'OK');
+    if (okItems.length === 0) return { allowed: true };
+
+    const processingDayKey = (logJson?.processing_day_key || '').toString();
+    if (!processingDayKey) return { allowed: true };
+
+    const pendingPerLocation = new Map<string, number>();
+    okItems.forEach((it: any) => {
+        const lokasi = (it?.parsed?.lokasi || '').toString().trim();
+        if (!lokasi) return;
+        pendingPerLocation.set(lokasi, (pendingPerLocation.get(lokasi) || 0) + 1);
+    });
+
+    for (const [locationKey, pendingCount] of pendingPerLocation.entries()) {
+        const limit = getLocationQuotaLimit(locationKey);
+        if (limit === null) continue;
+
+        const used = await getTotalDataTodayForSenderByLocation(senderPhone, processingDayKey, locationKey);
+        const after = used + pendingCount;
+
+        if (after > limit) {
+            return {
+                allowed: false,
+                message: [
+                    '⛔ *Batas kirim lokasi tercapai*',
+                    `Lokasi: *${locationKey}*`,
+                    `Batas Anda hari ini: *${limit} data*`,
+                    `Sudah terpakai: *${used} data*`,
+                    '',
+                    'Silakan kirim lagi besok atau pilih lokasi lain.',
+                ].join('\n'),
+            };
+        }
+    }
+
+    return { allowed: true };
 }
 
 
@@ -1429,6 +1505,12 @@ export async function connectToWhatsApp() {
                             failed_remainder_lines: [],
                         };
 
+                        const quotaCheck = await checkLocationQuotaBeforeSave(logJson, senderPhone);
+                        if (!quotaCheck.allowed) {
+                            await sock.sendMessage(remoteJid, { text: quotaCheck.message || '⛔ Batas lokasi tercapai.' });
+                            continue;
+                        }
+
                         const saveResult = await saveLogAndOkItems(logJson as any, `[DAFTAR ULANG] ${cachedFailed.length} data`);
                         if (saveResult.success) {
                             // Mark as re-registered di registration_results
@@ -1496,6 +1578,12 @@ export async function connectToWhatsApp() {
                             items,
                             failed_remainder_lines: [],
                         };
+
+                        const quotaCheck = await checkLocationQuotaBeforeSave(logJson, senderPhone);
+                        if (!quotaCheck.allowed) {
+                            await sock.sendMessage(remoteJid, { text: quotaCheck.message || '⛔ Batas lokasi tercapai.' });
+                            continue;
+                        }
 
                         const saveResult = await saveLogAndOkItems(logJson as any, `[DAFTAR ULANG PARTIAL] ${selectedItems.length} data`);
                         if (saveResult.success) {
@@ -1679,6 +1767,12 @@ export async function connectToWhatsApp() {
                         logJson.sender_name = existingName || undefined;
 
                         if (logJson.stats.total_blocks > 0 || (logJson.failed_remainder_lines && logJson.failed_remainder_lines.length > 0)) {
+                            const quotaCheck = await checkLocationQuotaBeforeSave(logJson, senderPhone);
+                            if (!quotaCheck.allowed) {
+                                await sock.sendMessage(remoteJid, { text: quotaCheck.message || '⛔ Batas lokasi tercapai.' });
+                                continue;
+                            }
+
                             const saveResult = await saveLogAndOkItems(logJson, messageText);
 
                             if (!saveResult.success) {
@@ -2049,6 +2143,15 @@ export async function connectToWhatsApp() {
 
                             // Logic Save & Reply (Copied for safety)
                             if (logJson.stats.total_blocks > 0 && (!logJson.failed_remainder_lines || logJson.failed_remainder_lines.length === 0)) {
+                                const quotaCheck = await checkLocationQuotaBeforeSave(logJson, senderPhone);
+                                if (!quotaCheck.allowed) {
+                                    replyText = quotaCheck.message || '⛔ Batas lokasi tercapai.';
+                                    userFlowByPhone.set(senderPhone, 'NONE');
+                                    pendingRegistrationData.delete(senderPhone);
+                                    if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
+                                    continue;
+                                }
+
                                 const saveResult = await saveLogAndOkItems(logJson, pendingData);
                                 if (!saveResult.success) {
                                     console.error('❌ Gagal simpan ke database (PASARJAYA SUB):', saveResult.dataError);
@@ -2142,6 +2245,15 @@ export async function connectToWhatsApp() {
                             logJson.sender_name = existingName || undefined;
 
                             if (logJson.stats.total_blocks > 0 && (!logJson.failed_remainder_lines || logJson.failed_remainder_lines.length === 0)) {
+                                const quotaCheck = await checkLocationQuotaBeforeSave(logJson, senderPhone);
+                                if (!quotaCheck.allowed) {
+                                    replyText = quotaCheck.message || '⛔ Batas lokasi tercapai.';
+                                    userFlowByPhone.set(senderPhone, 'NONE');
+                                    pendingRegistrationData.delete(senderPhone);
+                                    if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
+                                    continue;
+                                }
+
                                 const saveResult = await saveLogAndOkItems(logJson, pendingData);
                                 if (!saveResult.success) {
                                     console.error('❌ Gagal simpan ke database (MANUAL LOCATION):', saveResult.dataError);
@@ -2208,6 +2320,15 @@ export async function connectToWhatsApp() {
                             logJson.sender_name = existingName || undefined;
 
                             if (logJson.stats.total_blocks > 0 && (!logJson.failed_remainder_lines || logJson.failed_remainder_lines.length === 0)) {
+                                const quotaCheck = await checkLocationQuotaBeforeSave(logJson, senderPhone);
+                                if (!quotaCheck.allowed) {
+                                    replyText = quotaCheck.message || '⛔ Batas lokasi tercapai.';
+                                    userFlowByPhone.set(senderPhone, 'NONE');
+                                    pendingRegistrationData.delete(senderPhone);
+                                    if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
+                                    continue;
+                                }
+
                                 const saveResult = await saveLogAndOkItems(logJson, pendingData);
                                 if (!saveResult.success) {
                                     console.error('❌ Gagal simpan ke database (DHARMAJAYA SUB):', saveResult.dataError);
@@ -2687,6 +2808,10 @@ export async function connectToWhatsApp() {
                         } else if (normalized === '18') {
                             adminFlowByPhone.set(senderPhone, 'BLOCKED_LOCATION_MENU');
                             replyText = buildBlockedLocationMenuText();
+                        } else if (normalized === '19') {
+                            locationQuotaDraftByPhone.delete(senderPhone);
+                            adminFlowByPhone.set(senderPhone, 'LOCATION_QUOTA_MENU');
+                            replyText = buildLocationQuotaMenuText();
                         } else replyText = '⚠️ Pilihan tidak dikenali.';
                     } else if (currentAdminFlow === 'SETTING_OPERATION_MENU') {
                         if (normalized === '0') {
@@ -3590,6 +3715,97 @@ export async function connectToWhatsApp() {
                                 replyText += '\n\n' + buildBlockedLocationMenuText();
                             }
                             adminFlowByPhone.set(senderPhone, 'BLOCKED_LOCATION_MENU');
+                        }
+                    } else if (currentAdminFlow === 'LOCATION_QUOTA_MENU') {
+                        if (normalized === '0') {
+                            locationQuotaDraftByPhone.delete(senderPhone);
+                            adminFlowByPhone.set(senderPhone, 'MENU');
+                            replyText = ADMIN_MENU_MESSAGE;
+                        } else if (normalized === '1') {
+                            locationQuotaDraftByPhone.delete(senderPhone);
+                            adminFlowByPhone.set(senderPhone, 'LOCATION_QUOTA_SET');
+                            replyText = [
+                                '✍️ *SET BATAS PER LOKASI (PER USER/HARI)*',
+                                '',
+                                'Ketik format: *nomor lokasi batas*',
+                                'Contoh: *4 50* (Cakung = 50 data/user/hari)',
+                                '',
+                                'Daftar lokasi:',
+                                ...listAllDharmajayaLocations().map((loc, idx) => `${idx + 1}. ${loc.replace('DHARMAJAYA - ', '')}`),
+                                '',
+                                '_Ketik 0 untuk kembali._'
+                            ].join('\n');
+                        } else if (normalized === '2') {
+                            replyText = buildLocationQuotaListText() + '\n\n' + buildLocationQuotaMenuText();
+                        } else if (normalized === '3') {
+                            locationQuotaDraftByPhone.delete(senderPhone);
+                            adminFlowByPhone.set(senderPhone, 'LOCATION_QUOTA_DISABLE');
+                            replyText = [
+                                '📴 *NONAKTIFKAN BATAS LOKASI*',
+                                '',
+                                'Ketik nomor lokasi yang ingin dinonaktifkan.',
+                                '',
+                                ...listAllDharmajayaLocations().map((loc, idx) => `${idx + 1}. ${loc.replace('DHARMAJAYA - ', '')}`),
+                                '',
+                                '_Ketik 0 untuk kembali._'
+                            ].join('\n');
+                        } else {
+                            replyText = '⚠️ Pilihan tidak dikenali. Ketik 1, 2, 3, atau 0.';
+                        }
+                    } else if (currentAdminFlow === 'LOCATION_QUOTA_SET') {
+                        if (normalized === '0') {
+                            locationQuotaDraftByPhone.delete(senderPhone);
+                            adminFlowByPhone.set(senderPhone, 'LOCATION_QUOTA_MENU');
+                            replyText = buildLocationQuotaMenuText();
+                        } else {
+                            const draft = locationQuotaDraftByPhone.get(senderPhone);
+                            const parts = rawTrim.replace('|', ' ').split(/\s+/).filter(Boolean);
+
+                            let locationChoice = parts[0] || '';
+                            let limitPart = parts[1] || '';
+
+                            if (draft?.locationKey && parts.length === 1) {
+                                locationChoice = '';
+                                limitPart = parts[0];
+                            }
+
+                            if (!draft?.locationKey && !limitPart) {
+                                const locationKey = resolveDharmajayaLocationByChoice(locationChoice);
+                                if (!locationKey) {
+                                    replyText = '⚠️ Nomor lokasi tidak valid. Pilih 1-4.';
+                                } else {
+                                    locationQuotaDraftByPhone.set(senderPhone, { locationKey });
+                                    replyText = `Lokasi *${locationKey.replace('DHARMAJAYA - ', '')}* dipilih.\nSekarang ketik batasnya (contoh: *50*).`;
+                                }
+                            } else {
+                                const locationKey = draft?.locationKey || resolveDharmajayaLocationByChoice(locationChoice);
+                                const limit = Number(limitPart);
+
+                                if (!locationKey) {
+                                    replyText = '⚠️ Nomor lokasi tidak valid. Pilih 1-4.';
+                                } else if (!Number.isInteger(limit) || limit < 0) {
+                                    replyText = '⚠️ Batas harus angka bulat minimal 0.';
+                                } else {
+                                    const result = setLocationQuotaLimit(locationKey, limit);
+                                    locationQuotaDraftByPhone.delete(senderPhone);
+                                    adminFlowByPhone.set(senderPhone, 'LOCATION_QUOTA_MENU');
+                                    replyText = `${result.success ? '✅' : '❌'} ${result.message}\n\n${buildLocationQuotaMenuText()}`;
+                                }
+                            }
+                        }
+                    } else if (currentAdminFlow === 'LOCATION_QUOTA_DISABLE') {
+                        if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'LOCATION_QUOTA_MENU');
+                            replyText = buildLocationQuotaMenuText();
+                        } else {
+                            const locationKey = resolveDharmajayaLocationByChoice(normalized);
+                            if (!locationKey) {
+                                replyText = '⚠️ Nomor lokasi tidak valid. Pilih 1-4.';
+                            } else {
+                                const result = disableLocationQuotaLimit(locationKey);
+                                adminFlowByPhone.set(senderPhone, 'LOCATION_QUOTA_MENU');
+                                replyText = `${result.success ? '✅' : '❌'} ${result.message}\n\n${buildLocationQuotaMenuText()}`;
+                            }
                         }
                     } else if (currentAdminFlow === 'BROADCAST_SELECT') {
                         if (normalized === '1') {
@@ -4766,6 +4982,13 @@ export async function connectToWhatsApp() {
                                 ].join('\n');
                             } else {
                                 // DATA BERSIH (Valid Blocks Only & No Remainder) -> PROSES SIMPAN
+                                const quotaCheck = await checkLocationQuotaBeforeSave(logJson, senderPhone);
+                                if (!quotaCheck.allowed) {
+                                    replyText = quotaCheck.message || '⛔ Batas lokasi tercapai.';
+                                    if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
+                                    continue;
+                                }
+
                                 const saveResult = await saveLogAndOkItems(logJson, messageText);
 
                                 if (!saveResult.success) {

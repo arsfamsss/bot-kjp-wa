@@ -91,6 +91,9 @@ export type AdminFlowState =
     | 'BLOCKED_LOCATION_MENU'
     | 'BLOCKED_LOCATION_ADD'
     | 'BLOCKED_LOCATION_DELETE'
+    | 'LOCATION_QUOTA_MENU'
+    | 'LOCATION_QUOTA_SET'
+    | 'LOCATION_QUOTA_DISABLE'
     // NEW CONTACT MANAGEMENT FLOW
     | 'CONTACT_MENU'        // Menu Utama Kelola Kontak
     | 'CONTACT_SEARCH'      // Input keyword pencarian
@@ -150,6 +153,12 @@ export type ContactSession = {
     newContactName?: string; // Sementara simpan nama saat tambah kontak baru
 };
 export const contactSessionByPhone = new Map<string, ContactSession>();
+
+export type LocationQuotaDraft = {
+    locationKey?: string;
+};
+
+export const locationQuotaDraftByPhone = new Map<string, LocationQuotaDraft>();
 
 export type CloseWindowDraft = {
     startIso: string;
