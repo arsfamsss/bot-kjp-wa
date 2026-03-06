@@ -1338,7 +1338,7 @@ const DEFAULT_BOT_SETTINGS: BotSettings = {
     close_hour_start: 0,
     close_minute_start: 0,
     close_hour_end: 6,
-    close_minute_end: 0,
+    close_minute_end: 5,
     close_message_template: `⛔ *MOHON MAAF, SISTEM SEDANG TUTUP*
 (Maintenance Harian)
 
@@ -1470,7 +1470,7 @@ export function renderCloseMessage(settings: BotSettings): string {
             // Custom Message for Long Term Close
             return `⛔ *MOHON MAAF, SISTEM SEDANG TUTUP (Maintenance dan rekap Harian) ⛔*
 
-🕒 Jam Tutup: *00.00 - 06.00 WIB*
+🕒 Jam Tutup: *00.00 - 06.05 WIB*
 ✅ Buka Kembali: *${jamBuka}*
 
 📌 Data yang Anda kirim sekarang *tidak akan diproses*. Silakan kirim ulang setelah jam buka untuk pendaftaran besok.

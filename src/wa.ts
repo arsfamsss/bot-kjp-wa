@@ -189,7 +189,7 @@ const ADMIN_PHONES = new Set(ADMIN_PHONES_RAW.map(normalizePhone));
 const DEFAULT_CLOSE_START_HOUR = 0;
 const DEFAULT_CLOSE_START_MINUTE = 0;
 const DEFAULT_CLOSE_END_HOUR = 6;
-const DEFAULT_CLOSE_END_MINUTE = 0;
+const DEFAULT_CLOSE_END_MINUTE = 5;
 const PASARJAYA_DISABLED = ['1', 'true', 'yes', 'on'].includes(
     (process.env.PASARJAYA_DISABLED ?? 'true').trim().toLowerCase()
 );
@@ -2578,7 +2578,7 @@ export async function connectToWhatsApp() {
                                     '',
                                     'Status sekarang: *24 jam buka* (tanpa jam tutup).',
                                     'Untuk mengaktifkan lagi jadwal normal, pilih:',
-                                    '3️⃣ *Kembali ke Default (00.00 - 06.00)*',
+                                    '3️⃣ *Kembali ke Default (00.00 - 06.05)*',
                                 ].join('\n')
                                 : '❌ Gagal membuka bot. Coba lagi.';
                         } else if (normalized === '2') {
@@ -2612,8 +2612,8 @@ export async function connectToWhatsApp() {
                                     '✅ *JADWAL DEFAULT BERHASIL DIAKTIFKAN*',
                                     '',
                                     'Jam operasional sekarang:',
-                                    '🟢 BUKA: *06.01 - 23.59 WIB*',
-                                    '🔴 TUTUP: *00.00 - 06.00 WIB*',
+                                    '🟢 BUKA: *06.06 - 23.59 WIB*',
+                                    '🔴 TUTUP: *00.00 - 06.05 WIB*',
                                 ].join('\n')
                                 : '❌ Gagal mengaktifkan jadwal default. Coba lagi.';
                         } else {
@@ -2632,7 +2632,7 @@ export async function connectToWhatsApp() {
                                 '',
                                 '1️⃣ Buka Sekarang',
                                 '2️⃣ Tutup Sekarang',
-                                '3️⃣ Kembali ke Default (00.00 - 06.00)',
+                                '3️⃣ Kembali ke Default (00.00 - 06.05)',
                                 '',
                                 '_Ketik 0 untuk batal._',
                             ].join('\n');
@@ -4140,18 +4140,12 @@ export async function connectToWhatsApp() {
                         else {
                             const iso = parseFlexibleDate(input); // returns YYYY-MM-DD
                             if (iso) {
-                                // Set target buka jam 00:00 atau jam 06:00 pada tanggal tersebut?
                                 // ISO string from dateParser usually is YYYY-MM-DD.
-                                // Let's make it YYYY-MM-DDT06:00:00 (Pagi)
-                                const endIso = `${iso}T06:00:00.000Z`; // UTC? No wait.
-                                // We need proper ISO string handling.
                                 // parseFlexibleDate usage:
                                 // if input 05-02-2026 -> 2026-02-05
-
-                                // Create Date Object from that
                                 const startDate = new Date();
                                 const targetDate = new Date(iso); // This defaults to UTC 00:00 usually
-                                targetDate.setHours(6, 0, 0, 0); // Set to 06:00 Local/Server?
+                                targetDate.setHours(6, 5, 0, 0);
 
                                 // Validasi: Tanggal harus masa depan
                                 if (targetDate <= startDate) {
@@ -4165,7 +4159,7 @@ export async function connectToWhatsApp() {
                                     if (success) {
                                         clearBotSettingsCache();
                                         const dateDisplay = targetDate.toLocaleDateString('id-ID');
-                                        replyText = `✅ *MODA LIBUR AKTIF*\n\nBot tutup sampai tanggal *${dateDisplay}* (Pukul 06:00).`;
+                                        replyText = `✅ *MODA LIBUR AKTIF*\n\nBot tutup sampai tanggal *${dateDisplay}* (Pukul 06:05).`;
                                     } else {
                                         replyText = '❌ Gagal menyimpan.';
                                     }
@@ -4198,7 +4192,7 @@ export async function connectToWhatsApp() {
                                 broadcastDraftMap.set(senderPhone, { targets: [], message: validTime }); // Store START_TIME
 
                                 adminFlowByPhone.set(senderPhone, 'SETTING_CLOSE_TIME_END');
-                                replyText = `✅ Mulai tutup: *${validTime}*\n\nSelanjutnya, jam berapa bot akan *BUKA KEMBALI*? (Format HH:mm)\nContoh: *06:00*`;
+                                replyText = `✅ Mulai tutup: *${validTime}*\n\nSelanjutnya, jam berapa bot akan *BUKA KEMBALI*? (Format HH:mm)\nContoh: *06:05*`;
                             }
                         }
 
@@ -4207,7 +4201,7 @@ export async function connectToWhatsApp() {
                         const timePattern = /^(\d{1,2}):(\d{2})$/;
                         const match = rawTrim.match(timePattern);
                         if (!match) {
-                            replyText = '⚠️ Format jam salah. Gunakan HH:mm (contoh: 06:00). Ketik 0 untuk batal.';
+                            replyText = '⚠️ Format jam salah. Gunakan HH:mm (contoh: 06:05). Ketik 0 untuk batal.';
                         } else {
                             const hEnd = parseInt(match[1]);
                             const mEnd = parseInt(match[2]);
