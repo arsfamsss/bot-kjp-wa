@@ -15,6 +15,21 @@ const RETRY_LIMIT = toPositiveInt(process.env.DHARMAJAYA_RETRY_LIMIT, 3);
 const RETRY_DELAY_MS = toPositiveInt(process.env.DHARMAJAYA_RETRY_DELAY_MS, 1200);
 const REQUEST_GAP_MS = toPositiveInt(process.env.DHARMAJAYA_REQUEST_GAP_MS, 350);
 
+function formatLongIndonesianDate(dateIso: string): string {
+    const [year, month, day] = dateIso.split('-').map(Number);
+    if (!year || !month || !day) {
+        return dateIso;
+    }
+    const date = new Date(Date.UTC(year, month - 1, day));
+    return new Intl.DateTimeFormat('id-ID', {
+        weekday: 'long',
+        day: '2-digit',
+        month: 'long',
+        year: 'numeric',
+        timeZone: 'UTC',
+    }).format(date);
+}
+
 export interface StatusCheckItem {
     nama: string;
     no_kjp: string;
@@ -115,12 +130,11 @@ export function buildStatusSummaryMessage(results: StatusCheckResult[], dateIso:
     const successCount = successResults.length;
     const failedCount = failedResults.length;
     const errorCount = errorResults.length;
-    const [yyyy = '', mm = '', dd = ''] = dateIso.split('-');
-    const displayDate = `${dd}${mm}${yyyy}`;
+    const displayDate = formatLongIndonesianDate(dateIso);
 
     const lines: string[] = [
-        '📋 *LAPORAN PENDAFTARAN - DHARMA JAYA SEMUA LOKASI*',
-        `🗓️ Tanggal: ${displayDate}`,
+        '📋 *LAPORAN HASIL PENDAFTARAN*',
+        `🗓️ ${displayDate}`,
         '',
         `✅ *SUKSES: ${successCount} Data*`,
     ];

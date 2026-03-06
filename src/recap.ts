@@ -374,7 +374,6 @@ export async function getGlobalRecap(
     lines.push(`📊 Total Keseluruhan: *${data.length}* Data`);
     lines.push('');
     appendLocationTotals(lines);
-    lines.push('👇 *RINCIAN DATA MASUK:*');
 
     // Sort pengirim berdasarkan nama A-Z
     const sortedSenderPhones = Object.keys(grouped).sort((a, b) => {
@@ -386,6 +385,45 @@ export async function getGlobalRecap(
         if (!nameB && nameLookup) nameB = nameLookup(b);
         return (nameA || '').localeCompare(nameB || '');
     });
+
+    lines.push('👥 *RINGKASAN PER USER:*');
+    lines.push('');
+
+    sortedSenderPhones.forEach((phone, idx) => {
+        const items = grouped[phone];
+
+        let contactName: string | null | undefined = getContactName(phone);
+        if (!contactName) {
+            contactName = dbNamesMap.get(phone) || null;
+        }
+        if (!contactName && nameLookup) {
+            contactName = nameLookup(phone);
+        }
+
+        const nameDisplay = contactName ? contactName : 'Tanpa Nama';
+        lines.push(`${idx + 1}. ${nameDisplay} = ${items.length} Data`);
+
+        const locationCount = new Map<string, number>();
+        for (const item of items) {
+            const locMeta = normalizeLocationMeta(item.lokasi);
+            const existing = locationCount.get(locMeta.subLabel) || 0;
+            locationCount.set(locMeta.subLabel, existing + 1);
+        }
+
+        const sortedLocations = Array.from(locationCount.entries()).sort((a, b) =>
+            a[0].localeCompare(b[0], 'id-ID', { sensitivity: 'base' })
+        );
+
+        for (const [locationLabel, count] of sortedLocations) {
+            lines.push(`- ${locationLabel} : ${count} data`);
+        }
+
+        lines.push('');
+    });
+
+    lines.push('────────────────────────────────────');
+    lines.push('👇 *RINCIAN DATA MASUK:*');
+    
 
     sortedSenderPhones.forEach((phone, idx) => {
         const items = grouped[phone];
@@ -485,8 +523,6 @@ export async function getGlobalRecap(
             }
         }
     });
-
-    appendLocationTotals(lines);
 
     lines.push(`_Akhir laporan (${data.length} data)_`);
     return lines.join('\n');

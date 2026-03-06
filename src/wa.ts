@@ -1710,7 +1710,7 @@ export async function connectToWhatsApp() {
                     try {
                         const dateDisplayLong = formatLongIndonesianDate(selectionSession.targetDate);
                         await sock.sendMessage(remoteJid, {
-                            text: `⏳ Sedang cek status pendaftaran (${selectedItems.length} data) untuk pengambilan ${selectionSession.targetDate} (${dateDisplayLong}). Mohon tunggu...`
+                            text: `⏳ Sedang cek status pendaftaran (${selectedItems.length} data) untuk pengambilan ${dateDisplayLong}. Mohon tunggu...`
                         });
 
                         const results = await checkRegistrationStatuses(selectedItems, selectionSession.targetDate);
@@ -4491,7 +4491,7 @@ export async function connectToWhatsApp() {
                             try {
                                 const dateDisplayLong = formatLongIndonesianDate(targetDate);
                                 await sock.sendMessage(remoteJid, {
-                                    text: `⏳ Sedang cek status pendaftaran (${items.length} data) untuk pengambilan ${targetDate} (${dateDisplayLong}). Mohon tunggu...`
+                                    text: `⏳ Sedang cek status pendaftaran (${items.length} data) untuk pengambilan ${dateDisplayLong}. Mohon tunggu...`
                                 });
 
                                 const results = await checkRegistrationStatuses(items, targetDate);
