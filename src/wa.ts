@@ -2612,7 +2612,7 @@ export async function connectToWhatsApp() {
                                     '✅ *JADWAL DEFAULT BERHASIL DIAKTIFKAN*',
                                     '',
                                     'Jam operasional sekarang:',
-                                    '🟢 BUKA: *06.06 - 23.59 WIB*',
+                                    '🟢 BUKA: *06.05 - 23.59 WIB*',
                                     '🔴 TUTUP: *00.00 - 06.05 WIB*',
                                 ].join('\n')
                                 : '❌ Gagal mengaktifkan jadwal default. Coba lagi.';

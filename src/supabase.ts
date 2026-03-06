@@ -1434,18 +1434,7 @@ export function formatCloseTimeString(settings: BotSettings): string {
 
 // Helper untuk mendapatkan string jam buka
 export function formatOpenTimeString(settings: BotSettings): string {
-    // FIX: Menit 60 Bug
-    // Logic lama: settings.close_minute_end + 1
-    // Logic baru: gunakan Date object atau aritmatika sederhana
-    let m = settings.close_minute_end + 1;
-    let h = settings.close_hour_end;
-
-    if (m >= 60) {
-        m = 0;
-        h = (h + 1) % 24;
-    }
-
-    return `${String(h).padStart(2, '0')}.${String(m).padStart(2, '0')}`;
+    return `${String(settings.close_hour_end).padStart(2, '0')}.${String(settings.close_minute_end).padStart(2, '0')}`;
 }
 
 // Render template pesan tutup dengan placeholder

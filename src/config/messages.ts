@@ -248,7 +248,7 @@ export const CLOSE_MESSAGE_TEMPLATE_UNIFIED = [
     '⛔ *MOHON MAAF, SISTEM SEDANG TUTUP (Maintenance dan rekap Harian) ⛔*',
     '',
     '🕒 Jam Tutup: 00.00 - 06.05 WIB',
-    '✅ Buka Kembali: Pukul 06.06 WIB',
+    '✅ Buka Kembali: Pukul 06.05 WIB',
     '',
     '📌 Data yang Anda kirim sekarang tidak akan diproses. Silakan kirim ulang setelah jam buka untuk pendaftaran besok.',
     '',

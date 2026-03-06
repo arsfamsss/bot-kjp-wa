@@ -83,11 +83,10 @@ export function isSystemClosed(date: Date, settings?: {
 
     if (startClose < endClose) {
         // Normal: Tutup 09:00 s/d 12:00
-        return minutes >= startClose && minutes <= endClose;
+        return minutes >= startClose && minutes < endClose;
     } else {
         // Lintas Hari: Tutup 23:00 s/d 04:00
-        // Artinya: Tutup jika (>= 23:00) ATAU (<= 04:00)
-        return minutes >= startClose || minutes <= endClose;
+        return minutes >= startClose || minutes < endClose;
     }
 }
 

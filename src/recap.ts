@@ -370,7 +370,7 @@ export async function getGlobalRecap(
 
     const lines: string[] = [];
     lines.push(`👑 *LAPORAN DETAIL DATA*`);
-    lines.push(`📅 Periode: ${dateLabel} (06.01–23.59 WIB)`);
+    lines.push(`📅 Periode: ${dateLabel} (06.05–23.59 WIB)`);
     lines.push(`📊 Total Keseluruhan: *${data.length}* Data`);
     lines.push('');
     appendLocationTotals(lines);
