@@ -234,54 +234,6 @@ export function buildReplyForInvalidDetails(
     return lines.join('\n');
 }
 
-// --- BAGIAN 1b: BUILD REPLY KHUSUS DAFTAR ULANG (NEW) ---
-export function buildReplyForReregister(
-    acceptedItems: ValidItemDetail[],
-    totalTodayCount: number
-): string {
-    const lines: string[] = [];
-
-    // Header
-    lines.push(`✅ *DAFTAR ULANG BERHASIL*`);
-    lines.push('');
-    lines.push(`Data Terdaftar: ${acceptedItems.length} Orang`);
-    lines.push('');
-
-    if (acceptedItems.length > 0) {
-        acceptedItems.forEach((item, i) => {
-            // Tentukan lokasi pengambilan (Sama logic dengan Recap Today)
-            let lokasiLabel = '📍 Duri Kosambi'; // Default lama
-            if (item.lokasi) {
-                if (item.lokasi.startsWith('PASARJAYA') || item.lokasi.startsWith('DHARMAJAYA')) {
-                    lokasiLabel = `📍 ${item.lokasi}`;
-                }
-            }
-
-            lines.push(`┌── ${i + 1}. ${extractChildName(item.nama)}`);
-            const jenisLabel = resolveCardTypeLabel(item.no_kjp, item.jenis_kartu);
-            lines.push(`│   📇 ${jenisLabel} : ${item.no_kjp}`);
-            if (item.no_ktp) lines.push(`│   🪖 KTP   : ${item.no_ktp}`);
-            if (item.no_kk) lines.push(`│   🏠 KK    : ${item.no_kk}`);
-
-            // Tampilkan tanggal lahir jika ada (khusus Pasarjaya)
-            if (item.tanggal_lahir) {
-                const tglLahirDisplay = formatDateDMY(item.tanggal_lahir);
-                lines.push(`│   🎂 Lahir : ${tglLahirDisplay}`);
-            }
-
-            lines.push(`└── ${lokasiLabel}`);
-
-            // Jarak antar item
-            if (i < acceptedItems.length - 1) lines.push('');
-        });
-    }
-
-    lines.push('');
-    lines.push(`📊 Total data hari ini: *${totalTodayCount}*`);
-
-    return lines.join('\n');
-}
-
 // --- BAGIAN 2: REKAP GLOBAL ADMIN (BERDASARKAN processing_day_key) ---
 export async function getGlobalRecap(
     startKey: string,

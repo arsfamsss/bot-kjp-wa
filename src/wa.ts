@@ -20,7 +20,6 @@ import {
     buildReplyForInvalidDetails,
     getTodayRecapForSender,
     extractChildName,
-    buildReplyForReregister,
     ValidItemDetail,
     getGlobalRecap,
     generateExportData,
@@ -68,12 +67,6 @@ import {
     addBlockedPhone,
     removeBlockedPhone,
     isPhoneBlocked,
-    // --- FITUR DAFTAR ULANG ---
-    isFeatureDaftarUlangEnabled,
-    getFailedRegistrations,
-    markAsReRegistered,
-    autoMatchReRegistered,
-    markOfferedReregister,
 } from './supabase';
 import { getProcessingDayKey, getWibIsoDate, shiftIsoDate, isSystemClosed, getWibParts } from './time';
 import { getContactName } from './contacts_data';
@@ -140,8 +133,6 @@ import {
     contactSessionByPhone, // NEW: Kelola Kontak
     closeWindowDraftByPhone,
     locationQuotaDraftByPhone,
-    reregisterDataCache, // FITUR DAFTAR ULANG
-    reregisterOfferedToday, // FITUR DAFTAR ULANG
     statusCheckSelectionByPhone,
     statusCheckInProgressByPhone,
 } from './state';
@@ -1452,184 +1443,6 @@ export async function connectToWhatsApp() {
                 }
                 // --- END PATCH 3 ---
 
-                // --- FITUR DAFTAR ULANG: FLOW HANDLERS ---
-                if (currentUserFlow === 'REREGISTER_OFFER' || currentUserFlow === 'REREGISTER_SELECT') {
-                    const cachedFailed = reregisterDataCache.get(senderPhone) || [];
-
-                    // Mapping lokasi Bot CEK STATUS → format Bot WA
-                    const lokasiMapping: Record<string, string> = {
-                        'Kapuk': 'DHARMAJAYA - Kapuk Jagal',
-                        'Duri Kosambi': 'DHARMAJAYA - Duri Kosambi',
-                        'Pulogadung': 'DHARMAJAYA - Pulogadung',
-                        'Cakung': 'DHARMAJAYA - Cakung',
-                    };
-                    const mapLokasi = (lok: string | null) => {
-                        if (!lok) return null;
-                        return lokasiMapping[lok] || lok; // Fallback ke value asli jika tidak ada di mapping
-                    };
-
-                    if (normalized === 'SKIP' || normalized === '0' || normalized === 'BATAL') {
-                        // User skip tawaran daftar ulang
-                        userFlowByPhone.set(senderPhone, 'NONE');
-                        reregisterDataCache.delete(senderPhone);
-                        // Tandai sudah ditawari agar tidak muncul lagi hari ini
-                        reregisterOfferedToday.set(senderPhone, processingDayKey);
-                        await markOfferedReregister(senderPhone);
-                        await sock.sendMessage(remoteJid, { text: '✅ OK, tawaran daftar ulang dilewati.\n\nSilakan lanjut kirim data seperti biasa.' });
-                        // Tampilkan menu
-                        await sendMainMenu(sock, remoteJid, isAdmin);
-                        continue;
-                    }
-
-                    if (normalized === 'DAFTAR ULANG' || normalized === 'ULANG SEMUA') {
-                        // Daftar ulang SEMUA data gagal
-                        if (cachedFailed.length === 0) {
-                            await sock.sendMessage(remoteJid, { text: '⚠️ Tidak ada data gagal untuk didaftarkan ulang.' });
-                            userFlowByPhone.set(senderPhone, 'NONE');
-                            continue;
-                        }
-
-                        // Konversi data gagal ke format data_harian dan simpan
-                        const items = cachedFailed.map((item: any) => ({
-                            parsed: {
-                                nama: extractChildName(item.nama),
-                                no_kjp: item.no_kjp,
-                                no_ktp: item.no_ktp || '',
-                                no_kk: item.no_kk || '',
-                                lokasi: mapLokasi(item.lokasi),
-                            },
-                            status: 'OK',
-                            index: 0,
-                        }));
-
-                        const logJson = {
-                            tanggal: tanggalWib,
-                            processing_day_key: processingDayKey,
-                            received_at: receivedAt,
-                            sender_phone: senderPhone,
-                            sender_name: existingName || undefined,
-                            message_id: msg.key.id,
-                            stats: { total_blocks: items.length, ok_count: items.length, skip_format_count: 0, skip_duplicate_count: 0 },
-                            items,
-                            failed_remainder_lines: [],
-                        };
-
-                        const quotaCheck = await checkLocationQuotaBeforeSave(logJson, senderPhone);
-                        if (!quotaCheck.allowed) {
-                            await sock.sendMessage(remoteJid, { text: quotaCheck.message || '⛔ Batas lokasi tercapai.' });
-                            continue;
-                        }
-
-                        const saveResult = await saveLogAndOkItems(logJson as any, `[DAFTAR ULANG] ${cachedFailed.length} data`);
-                        if (saveResult.success) {
-                            // Mark as re-registered di registration_results
-                            const ids = cachedFailed.map((item: any) => item.id);
-                            await markAsReRegistered(ids);
-
-                            const { validCount } = await getTodayRecapForSender(senderPhone, processingDayKey);
-
-                            // NEW FORMAT: Detailed Success Message
-                            const validItems: ValidItemDetail[] = items.map((it: any) => ({
-                                nama: it.parsed.nama,
-                                no_kjp: it.parsed.no_kjp,
-                                no_ktp: it.parsed.no_ktp,
-                                no_kk: it.parsed.no_kk,
-                                lokasi: it.parsed.lokasi,
-                            }));
-                            const replyText = buildReplyForReregister(validItems, validCount);
-
-                            await sock.sendMessage(remoteJid, { text: replyText });
-                        } else {
-                            await sock.sendMessage(remoteJid, { text: '❌ Gagal menyimpan data daftar ulang. Silakan coba kirim manual.' });
-                        }
-
-                        userFlowByPhone.set(senderPhone, 'NONE');
-                        reregisterDataCache.delete(senderPhone);
-                        reregisterOfferedToday.set(senderPhone, processingDayKey);
-                        continue;
-                    }
-
-                    // Cek apakah user ketik ULANG 1 3 5 (pilih nomor tertentu)
-                    // UPDATE: WAJIB pakai kata ULANG, tapi pemisah angkanya bebas (spasi, koma, titik)
-                    const ulangMatch = normalized.match(/^ULANG\s+([\d\s,.]+)+$/);
-                    if (ulangMatch) {
-                        const indicesRaw = ulangMatch[1].split(/[\s,.]+/).map(Number).filter(n => n > 0);
-                        const selectedItems = indicesRaw
-                            .filter(idx => idx <= cachedFailed.length)
-                            .map(idx => cachedFailed[idx - 1]);
-
-                        if (selectedItems.length === 0) {
-                            await sock.sendMessage(remoteJid, { text: '⚠️ Nomor yang Anda ketik tidak valid. Coba lagi.' });
-                            continue;
-                        }
-
-                        // Simpan data terpilih
-                        const items = selectedItems.map((item: any) => ({
-                            parsed: {
-                                nama: extractChildName(item.nama),
-                                no_kjp: item.no_kjp,
-                                no_ktp: item.no_ktp || '',
-                                no_kk: item.no_kk || '',
-                                lokasi: mapLokasi(item.lokasi),
-                            },
-                            status: 'OK',
-                            index: 0,
-                        }));
-
-                        const logJson = {
-                            tanggal: tanggalWib,
-                            processing_day_key: processingDayKey,
-                            received_at: receivedAt,
-                            sender_phone: senderPhone,
-                            sender_name: existingName || undefined,
-                            message_id: msg.key.id,
-                            stats: { total_blocks: items.length, ok_count: items.length, skip_format_count: 0, skip_duplicate_count: 0 },
-                            items,
-                            failed_remainder_lines: [],
-                        };
-
-                        const quotaCheck = await checkLocationQuotaBeforeSave(logJson, senderPhone);
-                        if (!quotaCheck.allowed) {
-                            await sock.sendMessage(remoteJid, { text: quotaCheck.message || '⛔ Batas lokasi tercapai.' });
-                            continue;
-                        }
-
-                        const saveResult = await saveLogAndOkItems(logJson as any, `[DAFTAR ULANG PARTIAL] ${selectedItems.length} data`);
-                        if (saveResult.success) {
-                            const ids = selectedItems.map((item: any) => item.id);
-                            await markAsReRegistered(ids);
-
-                            const { validCount } = await getTodayRecapForSender(senderPhone, processingDayKey);
-
-                            // NEW FORMAT: Detailed Success Message
-                            const validItems: ValidItemDetail[] = items.map((it: any) => ({
-                                nama: it.parsed.nama,
-                                no_kjp: it.parsed.no_kjp,
-                                no_ktp: it.parsed.no_ktp,
-                                no_kk: it.parsed.no_kk,
-                                lokasi: it.parsed.lokasi,
-                            }));
-                            const replyText = buildReplyForReregister(validItems, validCount);
-
-                            await sock.sendMessage(remoteJid, { text: replyText });
-                        } else {
-                            await sock.sendMessage(remoteJid, { text: '❌ Gagal menyimpan data daftar ulang. Silakan coba kirim manual.' });
-                        }
-
-                        userFlowByPhone.set(senderPhone, 'NONE');
-                        reregisterDataCache.delete(senderPhone);
-                        reregisterOfferedToday.set(senderPhone, processingDayKey);
-                        continue;
-                    }
-
-                    // Input tidak dikenali dalam flow REREGISTER
-                    await sock.sendMessage(remoteJid, {
-                        text: '⚠️ Maaf, pesan Anda belum sesuai.\n\nSilakan balas dengan salah satu cara berikut:\n\n✅ Ketik *ULANG SEMUA*\n→ Untuk mendaftarkan ulang SEMUA data di atas\n\n✅ Ketik *ULANG* lalu nomor yang dipilih\n→ Contoh: ketik *ULANG 1 3 5*\n→ Artinya: hanya daftar ulang nomor 1, 3, dan 5\n\n❌ Ketik *SKIP*\n→ Untuk melewati (tidak jadi daftar ulang)'
-                    });
-                    continue;
-                }
-                // --- END FITUR DAFTAR ULANG FLOW HANDLERS ---
-
                 // ===== STRICT LOGIC PENDAFTARAN =====
 
                 // 1. Apakah ini terlihat seperti data pendaftaran (minimal 4 baris)?
@@ -1795,26 +1608,6 @@ export async function connectToWhatsApp() {
                                 const replyDataText = buildReplyForNewData(logJson, todayRecap.validCount, existingLocation, todayRecap.validItems);
                                 await sock.sendMessage(remoteJid, { text: replyDataText });
                                 console.log(`📤 Data pendaftaran (${existingLocation}) berhasil diproses untuk ${senderPhone}`);
-
-                                // --- FITUR DAFTAR ULANG: Auto-match KJP ---
-                                try {
-                                    const featureOn = await isFeatureDaftarUlangEnabled();
-                                    if (featureOn) {
-                                        const savedKjps = logJson.items
-                                            .filter((it: any) => it.status === 'OK' && it.parsed?.no_kjp)
-                                            .map((it: any) => it.parsed.no_kjp);
-                                        if (savedKjps.length > 0) {
-                                            const matchCount = await autoMatchReRegistered(savedKjps);
-                                            if (matchCount > 0) {
-                                                await sock.sendMessage(remoteJid, {
-                                                    text: `ℹ️ *Auto-Match:* ${matchCount} data yang sebelumnya gagal telah otomatis ditandai sebagai didaftarkan ulang.`
-                                                });
-                                            }
-                                        }
-                                    }
-                                } catch (autoMatchErr) {
-                                    console.error('⚠️ Auto-match reregister error:', autoMatchErr);
-                                }
                             }
                         } else {
                             await sock.sendMessage(remoteJid, {
@@ -1833,10 +1626,6 @@ export async function connectToWhatsApp() {
 
                 // Handle Reset Flow jika user ketik Menu/Greeting
                 if (currentUserFlow !== 'NONE' && (normalized === '0' || isGreetingOrMenu(normalized))) {
-                    // Cleanup reregister cache jika sedang dalam flow daftar ulang
-                    if ((currentUserFlow as string) === 'REREGISTER_OFFER' || (currentUserFlow as string) === 'REREGISTER_SELECT') {
-                        reregisterDataCache.delete(senderPhone);
-                    }
                     if ((currentUserFlow as string) === 'CHECK_STATUS_PICK_ITEMS') {
                         statusCheckSelectionByPhone.delete(senderPhone);
                         statusCheckInProgressByPhone.delete(senderPhone);
@@ -1844,67 +1633,6 @@ export async function connectToWhatsApp() {
                     userFlowByPhone.set(senderPhone, 'NONE');
                     // Lanjut ke handler menu utama di bawah
                 }
-                // --- GLOBAL RE-REGISTER CHECK (NEW LOGIC) ---
-                // Cek apakah user punya data gagal kemarin? Jika ya, TAWARKAN DULU sebelum proses apapun.
-                // Syarat:
-                // 1. Fitur ON
-                // 2. User belum ditawari hari ini
-                // 3. Flow user sedang kosong (NONE) -> Agar tidak memotong proses input manual / sub-lokasi
-                // 4. Bukan Admin (opsional, tapi admin jarang daftar)
-
-                try {
-                    const featureOn = await isFeatureDaftarUlangEnabled();
-                    const alreadyOffered = reregisterOfferedToday.get(senderPhone) === processingDayKey;
-
-                    // Exclude jika user sedang dalam flow tertentu (selain NONE)
-                    const isIdle = currentUserFlow === 'NONE' || !currentUserFlow;
-
-                    if (featureOn && !alreadyOffered && isIdle && !isAdmin) {
-                        const failedData = await getFailedRegistrations(senderPhone);
-
-                        if (failedData.length > 0) {
-                            // Simpan ke cache dan set flow
-                            reregisterDataCache.set(senderPhone, failedData);
-                            userFlowByPhone.set(senderPhone, 'REREGISTER_OFFER');
-                            reregisterOfferedToday.set(senderPhone, processingDayKey);
-
-                            // Bangun pesan tawaran
-                            const lines: string[] = [
-                                '🔄 *TAWARAN DAFTAR ULANG*',
-                                '',
-                                `Ada *${failedData.length}* data kemarin yang *gagal terdaftar*:`,
-                                '',
-                            ];
-
-                            failedData.forEach((item: any, idx: number) => {
-                                // Logic: Ambil teks dalam kurung (nama anak). Jika tidak ada kurung, ambil full nama.
-                                let childName = item.nama;
-                                const match = item.nama?.match(/\(([^)]+)\)/);
-                                if (match && match[1]) {
-                                    childName = match[1]; // Ambil isi dalam kurung saja
-                                }
-                                lines.push(`*${idx + 1}.* ${childName}`);
-                                lines.push(`   Kartu: ${item.no_kjp}`);
-                                lines.push(`   Lokasi: ${item.lokasi || '-'}`);
-                                lines.push('');
-                            });
-
-                            lines.push('━━━━━━━━━━━━━━━━━━');
-                            lines.push('📋 *Pilihan:*');
-                            lines.push('✅ Ketik *ULANG SEMUA* → daftar ulang semua');
-                            lines.push('✅ Ketik *ULANG 1 3 5* → pilih nomor tertentu');
-                            lines.push('❌ Ketik *SKIP* → lewati / tidak usah');
-
-                            await sock.sendMessage(remoteJid, { text: lines.join('\n') });
-
-                            // STOP PROCESSING HERE, user must respond to offer (or skip)
-                            continue;
-                        }
-                    }
-                } catch (reregErr) {
-                    console.error('⚠️ Global Reregister check error:', reregErr);
-                }
-                // --- END GLOBAL CHECK ---
 
                 if (currentUserFlow === 'CHECK_DATA_MENU') {
                     if (normalized === '1') {
@@ -5029,59 +4757,6 @@ export async function connectToWhatsApp() {
                 if (!replyText) {
                     if (isGreetingOrMenu(normalized)) {
                         pendingDelete.delete(senderPhone);
-
-                        // --- FITUR DAFTAR ULANG: Cek data gagal sebelum tampilkan menu ---
-                        try {
-                            const featureOn = await isFeatureDaftarUlangEnabled();
-                            const alreadyOffered = reregisterOfferedToday.get(senderPhone) === processingDayKey;
-
-                            if (featureOn && !alreadyOffered) {
-                                const failedData = await getFailedRegistrations(senderPhone);
-
-                                if (failedData.length > 0) {
-                                    // Simpan ke cache dan set flow
-                                    reregisterDataCache.set(senderPhone, failedData);
-                                    userFlowByPhone.set(senderPhone, 'REREGISTER_OFFER');
-                                    reregisterOfferedToday.set(senderPhone, processingDayKey);
-
-                                    // Bangun pesan tawaran
-                                    const lines: string[] = [
-                                        '🔄 *TAWARAN DAFTAR ULANG*',
-                                        '',
-                                        `Ada *${failedData.length}* data kemarin yang *gagal terdaftar*:`,
-                                        '',
-                                    ];
-
-                                    failedData.forEach((item: any, idx: number) => {
-                                        // Ambil nama anak dari dalam kurung, misal "Fathir Min 7 (Maya)" → "Maya"
-                                        let childName = item.nama;
-                                        const match = item.nama?.match(/\(([^)]+)\)/);
-                                        if (match && match[1]) {
-                                            childName = match[1];
-                                        }
-                                        lines.push(`*${idx + 1}.* ${childName}`);
-                                        lines.push(`   Kartu: ${item.no_kjp}`);
-                                        lines.push(`   KTP: ${item.no_ktp || '-'}`);
-                                        lines.push(`   KK: ${item.no_kk || '-'}`);
-                                        lines.push(`   Lokasi: ${item.lokasi || '-'}`);
-                                        lines.push('');
-                                    });
-
-                                    lines.push('━━━━━━━━━━━━━━━━━━');
-                                    lines.push('📋 *Pilihan:*');
-                                    lines.push('✅ Ketik *ULANG SEMUA* → daftar ulang semua');
-                                    lines.push('✅ Ketik *ULANG 1 3 5* → pilih nomor tertentu');
-                                    lines.push('❌ Ketik *SKIP* → lewati / tidak usah');
-
-                                    await sock.sendMessage(remoteJid, { text: lines.join('\n') });
-                                    continue;
-                                }
-                            }
-                        } catch (reregErr) {
-                            console.error('⚠️ Reregister offer check error:', reregErr);
-                            // Lanjut ke menu biasa jika error
-                        }
-                        // --- END FITUR DAFTAR ULANG ---
 
                         await sendMainMenu(sock, remoteJid, isAdmin);
                     } else {
