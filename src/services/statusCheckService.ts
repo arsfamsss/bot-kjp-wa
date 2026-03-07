@@ -15,14 +15,43 @@ const RETRY_LIMIT = toPositiveInt(process.env.DHARMAJAYA_RETRY_LIMIT, 3);
 const RETRY_DELAY_MS = toPositiveInt(process.env.DHARMAJAYA_RETRY_DELAY_MS, 1200);
 const REQUEST_GAP_MS = toPositiveInt(process.env.DHARMAJAYA_REQUEST_GAP_MS, 350);
 
-function formatLongIndonesianDate(dateIso: string): string {
+function parseIsoDateUtc(dateIso: string): Date | null {
     const [year, month, day] = dateIso.split('-').map(Number);
     if (!year || !month || !day) {
+        return null;
+    }
+    return new Date(Date.UTC(year, month - 1, day));
+}
+
+function shiftIsoDate(dateIso: string, deltaDays: number): string {
+    const date = parseIsoDateUtc(dateIso);
+    if (!date) {
         return dateIso;
     }
-    const date = new Date(Date.UTC(year, month - 1, day));
+    date.setUTCDate(date.getUTCDate() + deltaDays);
+    return date.toISOString().slice(0, 10);
+}
+
+function formatLongIndonesianDate(dateIso: string): string {
+    const date = parseIsoDateUtc(dateIso);
+    if (!date) {
+        return dateIso;
+    }
     return new Intl.DateTimeFormat('id-ID', {
         weekday: 'long',
+        day: '2-digit',
+        month: 'long',
+        year: 'numeric',
+        timeZone: 'UTC',
+    }).format(date);
+}
+
+function formatIndonesianDateWithoutWeekday(dateIso: string): string {
+    const date = parseIsoDateUtc(dateIso);
+    if (!date) {
+        return dateIso;
+    }
+    return new Intl.DateTimeFormat('id-ID', {
         day: '2-digit',
         month: 'long',
         year: 'numeric',
@@ -130,11 +159,13 @@ export function buildStatusSummaryMessage(results: StatusCheckResult[], dateIso:
     const successCount = successResults.length;
     const failedCount = failedResults.length;
     const errorCount = errorResults.length;
-    const displayDate = formatLongIndonesianDate(dateIso);
+    const pickupDateDisplay = formatLongIndonesianDate(dateIso);
+    const reportDateIso = shiftIsoDate(dateIso, -1);
+    const reportDateDisplay = formatIndonesianDateWithoutWeekday(reportDateIso);
 
     const lines: string[] = [
-        '📋 *LAPORAN HASIL PENDAFTARAN*',
-        `🗓️ ${displayDate}`,
+        `📋 *LAPORAN HASIL PENDAFTARAN ${reportDateDisplay}*`,
+        `Tanggal Pengambilan : ${pickupDateDisplay}`,
         '',
         `✅ *SUKSES: ${successCount} Data*`,
     ];
