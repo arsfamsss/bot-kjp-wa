@@ -1097,7 +1097,7 @@ export async function connectToWhatsApp() {
                                     '*4.* Jakmart Bambu Larangan',
                                     '*5.* Lokasi Lain...',
                                     '',
-                                    '_Ketik angka pilihanmu!_',
+                                    'Ketik angka lokasi baru:',
                                     '_(Ketik 0 untuk batal)_'
                                 ].join('\n');
                             } else {
@@ -1109,7 +1109,7 @@ export async function connectToWhatsApp() {
                                     '*3.* Pulogadung',
                                     '*4.* Cakung',
                                     '',
-                                    '_Ketik angka pilihanmu!_',
+                                    'Ketik angka lokasi baru:',
                                     '_(Ketik 0 untuk batal)_'
                                 ].join('\n');
                             }
@@ -1124,6 +1124,13 @@ export async function connectToWhatsApp() {
                                 'no_kk': 'Nomor KK',
                                 'tanggal_lahir': 'Tanggal Lahir'
                             }[session.selectedFieldKey!] || session.selectedFieldKey!;
+                            const fieldInputPrompt = {
+                                'nama': 'Ketik *Nama baru*.',
+                                'no_kjp': 'Ketik *Nomor Kartu baru* (16-18 angka).',
+                                'no_ktp': 'Ketik *Nomor KTP baru* (16 angka).',
+                                'no_kk': 'Ketik *Nomor KK baru* (16 angka).',
+                                'tanggal_lahir': 'Ketik *Tanggal Lahir baru* (DD-MM-YYYY).'
+                            }[session.selectedFieldKey!] || `Ketik *${fieldLabel} baru*.`;
 
                             // UPDATE SESSION
                             editSessionMap.set(senderPhone, session);
@@ -1132,7 +1139,7 @@ export async function connectToWhatsApp() {
                             replyText = [
                                 `📝 *EDIT ${(fieldLabel || 'DATA').toUpperCase()}*`,
                                 '',
-                                `Silakan ketik nilai baru untuk ${fieldLabel}.`,
+                                fieldInputPrompt,
                                 '',
                                 '_Ketik 0 untuk batal._'
                             ].join('\n');
@@ -1179,7 +1186,7 @@ export async function connectToWhatsApp() {
                             if (session.selectedFieldKey === 'no_kjp') {
                                 if (len < 16 || len > 18) {
                                     isValid = false;
-                                    errorMsg = '⚠️ Nomor Kartu harus 16-18 digit.';
+                                    errorMsg = '⚠️ Nomor Kartu harus 16-18 angka.';
                                 } else if (!cleanVal.startsWith('504948')) {
                                     isValid = false;
                                     errorMsg = '⚠️ Nomor Kartu harus diawali 504948.';
@@ -1188,7 +1195,7 @@ export async function connectToWhatsApp() {
                                 // KTP / KK
                                 if (len !== 16) {
                                     isValid = false;
-                                    errorMsg = `⚠️ Nomor ${session.selectedFieldKey === 'no_ktp' ? 'KTP' : 'KK'} harus 16 digit.`;
+                                    errorMsg = `⚠️ Nomor ${session.selectedFieldKey === 'no_ktp' ? 'KTP' : 'KK'} harus 16 angka.`;
                                 }
                             }
                         } else if (session.selectedFieldKey === 'tanggal_lahir') {
