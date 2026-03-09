@@ -112,6 +112,9 @@ import {
     UNDERAGE_CONFIRMATION_MESSAGE,
     UNDERAGE_CONFIRMATION_REMINDER,
     UNDERAGE_CONFIRMATION_CANCEL_MESSAGE,
+    UNKNOWN_REGION_CONFIRMATION_MESSAGE,
+    UNKNOWN_REGION_CONFIRMATION_REMINDER,
+    UNKNOWN_REGION_CONFIRMATION_CANCEL_MESSAGE,
 } from './config/messages';
 import {
     normalizePhone,
@@ -141,8 +144,12 @@ import {
     statusCheckSelectionByPhone,
     statusCheckInProgressByPhone,
     pendingUnderageConfirmationByPhone,
+    pendingUnknownRegionConfirmationByPhone,
 } from './state';
-import type { PendingUnderageConfirmationSession } from './state';
+import type {
+    PendingUnderageConfirmationSession,
+    PendingUnknownRegionConfirmationSession,
+} from './state';
 import type { LogJson } from './types';
 
 const AUTH_FOLDER = 'auth_info_baileys';
@@ -533,6 +540,83 @@ async function queueUnderageConfirmationIfNeeded(params: {
         detailSection,
         '',
         UNDERAGE_CONFIRMATION_REMINDER,
+    ].join('\n');
+
+    await params.sockInstance.sendMessage(params.remoteJid, { text: warningText });
+    return true;
+}
+
+function getUnknownRegionOkItems(logJson: LogJson) {
+    return logJson.items.filter((item) => item.status === 'OK' && item.parsed.unknown_region_warning === true);
+}
+
+function removeUnknownRegionOkItems(logJson: LogJson): LogJson {
+    const items = logJson.items.filter((item) => !(item.status === 'OK' && item.parsed.unknown_region_warning === true));
+    const okCount = items.filter((item) => item.status === 'OK').length;
+    const skipFormatCount = items.filter((item) => item.status === 'SKIP_FORMAT').length;
+    const skipDuplicateCount = items.filter((item) => item.status === 'SKIP_DUPLICATE').length;
+
+    return {
+        ...logJson,
+        items,
+        stats: {
+            total_blocks: items.length,
+            ok_count: okCount,
+            skip_format_count: skipFormatCount,
+            skip_duplicate_count: skipDuplicateCount,
+        },
+    };
+}
+
+function clearUnknownRegionConfirmationSession(senderPhone: string): void {
+    pendingUnknownRegionConfirmationByPhone.delete(senderPhone);
+    userFlowByPhone.set(senderPhone, 'NONE');
+}
+
+async function queueUnknownRegionConfirmationIfNeeded(params: {
+    sockInstance: WASocket;
+    remoteJid: string;
+    senderPhone: string;
+    logJson: LogJson;
+    originalText: string;
+    locationContext: 'PASARJAYA' | 'DHARMAJAYA';
+    processingDayKey: string;
+}): Promise<boolean> {
+    const unknownRegionItems = getUnknownRegionOkItems(params.logJson);
+    if (unknownRegionItems.length === 0) return false;
+
+    const pendingSession: PendingUnknownRegionConfirmationSession = {
+        logJson: params.logJson,
+        originalText: params.originalText,
+        locationContext: params.locationContext,
+        processingDayKey: params.processingDayKey,
+    };
+
+    pendingUnknownRegionConfirmationByPhone.set(params.senderPhone, pendingSession);
+    userFlowByPhone.set(params.senderPhone, 'UNKNOWN_REGION_CONFIRMATION');
+
+    const previewLines = unknownRegionItems.slice(0, 5).map((item, index) => {
+        const name = item.parsed.nama || 'Tanpa nama';
+        const ktp = item.parsed.no_ktp || '-';
+        return `${index + 1}. ${name} (KTP: ${ktp})`;
+    });
+
+    const moreLine = unknownRegionItems.length > 5
+        ? `...dan ${unknownRegionItems.length - 5} data lainnya.`
+        : '';
+
+    const detailSection = [
+        'Data yang perlu konfirmasi:',
+        ...previewLines,
+        moreLine,
+    ].filter(Boolean).join('\n');
+
+    const warningText = [
+        UNKNOWN_REGION_CONFIRMATION_MESSAGE,
+        '',
+        detailSection,
+        '',
+        UNKNOWN_REGION_CONFIRMATION_REMINDER,
     ].join('\n');
 
     await params.sockInstance.sendMessage(params.remoteJid, { text: warningText });
@@ -1576,6 +1660,82 @@ export async function connectToWhatsApp() {
                 }
                 // --- END PATCH 3 ---
 
+                const pendingUnknownRegionSession = pendingUnknownRegionConfirmationByPhone.get(senderPhone);
+                if (currentUserFlow === 'UNKNOWN_REGION_CONFIRMATION' || pendingUnknownRegionSession) {
+                    if (!pendingUnknownRegionSession) {
+                        userFlowByPhone.set(senderPhone, 'NONE');
+                        await sock.sendMessage(remoteJid, {
+                            text: '⚠️ Sesi konfirmasi kode wilayah sudah berakhir. Silakan kirim ulang data.',
+                        });
+                        continue;
+                    }
+
+                    if (normalized === 'YA' || normalized === 'LANJUT' || normalized === 'BATAL' || normalized === '0') {
+                        const isCancelUnknownRegion = normalized === 'BATAL' || normalized === '0';
+                        const logJsonToSave = isCancelUnknownRegion
+                            ? removeUnknownRegionOkItems(pendingUnknownRegionSession.logJson)
+                            : pendingUnknownRegionSession.logJson;
+
+                        if (logJsonToSave.stats.ok_count <= 0) {
+                            clearUnknownRegionConfirmationSession(senderPhone);
+                            await sock.sendMessage(remoteJid, { text: UNKNOWN_REGION_CONFIRMATION_CANCEL_MESSAGE });
+                            continue;
+                        }
+
+                        const quotaCheck = await checkLocationQuotaBeforeSave(logJsonToSave, senderPhone);
+                        if (!quotaCheck.allowed) {
+                            clearUnknownRegionConfirmationSession(senderPhone);
+                            await sock.sendMessage(remoteJid, {
+                                text: quotaCheck.message || '⛔ Batas lokasi tercapai.',
+                            });
+                            continue;
+                        }
+
+                        clearUnknownRegionConfirmationSession(senderPhone);
+                        const hasPendingUnderage = await queueUnderageConfirmationIfNeeded({
+                            sockInstance: sock,
+                            remoteJid,
+                            senderPhone,
+                            logJson: logJsonToSave,
+                            originalText: pendingUnknownRegionSession.originalText,
+                            locationContext: pendingUnknownRegionSession.locationContext,
+                            processingDayKey: pendingUnknownRegionSession.processingDayKey,
+                        });
+                        if (hasPendingUnderage) {
+                            continue;
+                        }
+
+                        const saveResult = await saveLogAndOkItems(logJsonToSave, pendingUnknownRegionSession.originalText);
+                        if (!saveResult.success) {
+                            console.error('❌ Gagal simpan ke database (UNKNOWN REGION CONFIRM):', saveResult.dataError);
+                            const errorMsg = buildDatabaseErrorMessage(saveResult.dataError, logJsonToSave);
+                            await sock.sendMessage(remoteJid, { text: errorMsg });
+                            continue;
+                        }
+
+                        const todayRecap = await getTodayRecapForSender(
+                            senderPhone,
+                            pendingUnknownRegionSession.processingDayKey,
+                            'received_at'
+                        );
+                        const replyDataText = buildReplyForNewData(
+                            logJsonToSave,
+                            todayRecap.validCount,
+                            pendingUnknownRegionSession.locationContext,
+                            todayRecap.validItems
+                        );
+                        const finalReplyText = isCancelUnknownRegion
+                            ? `✅ Data kode wilayah KTP tidak dikenal dibatalkan.\n\n${replyDataText}`
+                            : replyDataText;
+
+                        await sock.sendMessage(remoteJid, { text: finalReplyText });
+                        continue;
+                    }
+
+                    await sock.sendMessage(remoteJid, { text: UNKNOWN_REGION_CONFIRMATION_REMINDER });
+                    continue;
+                }
+
                 const pendingUnderageSession = pendingUnderageConfirmationByPhone.get(senderPhone);
                 if (currentUserFlow === 'UNDERAGE_CONFIRMATION' || pendingUnderageSession) {
                     if (!pendingUnderageSession) {
@@ -1789,6 +1949,19 @@ export async function connectToWhatsApp() {
                             const quotaCheck = await checkLocationQuotaBeforeSave(logJson, senderPhone);
                             if (!quotaCheck.allowed) {
                                 await sock.sendMessage(remoteJid, { text: quotaCheck.message || '⛔ Batas lokasi tercapai.' });
+                                continue;
+                            }
+
+                            const hasPendingUnknownRegion = await queueUnknownRegionConfirmationIfNeeded({
+                                sockInstance: sock,
+                                remoteJid,
+                                senderPhone,
+                                logJson,
+                                originalText: messageText,
+                                locationContext: existingLocation === 'PASARJAYA' ? 'PASARJAYA' : 'DHARMAJAYA',
+                                processingDayKey,
+                            });
+                            if (hasPendingUnknownRegion) {
                                 continue;
                             }
 
@@ -2102,6 +2275,20 @@ export async function connectToWhatsApp() {
                                     continue;
                                 }
 
+                                const hasPendingUnknownRegion = await queueUnknownRegionConfirmationIfNeeded({
+                                    sockInstance: sock,
+                                    remoteJid,
+                                    senderPhone,
+                                    logJson,
+                                    originalText: pendingData,
+                                    locationContext: 'PASARJAYA',
+                                    processingDayKey,
+                                });
+                                if (hasPendingUnknownRegion) {
+                                    pendingRegistrationData.delete(senderPhone);
+                                    continue;
+                                }
+
                                 const hasPendingUnderage = await queueUnderageConfirmationIfNeeded({
                                     sockInstance: sock,
                                     remoteJid,
@@ -2218,6 +2405,20 @@ export async function connectToWhatsApp() {
                                     continue;
                                 }
 
+                                const hasPendingUnknownRegion = await queueUnknownRegionConfirmationIfNeeded({
+                                    sockInstance: sock,
+                                    remoteJid,
+                                    senderPhone,
+                                    logJson,
+                                    originalText: pendingData,
+                                    locationContext: 'PASARJAYA',
+                                    processingDayKey,
+                                });
+                                if (hasPendingUnknownRegion) {
+                                    pendingRegistrationData.delete(senderPhone);
+                                    continue;
+                                }
+
                                 const hasPendingUnderage = await queueUnderageConfirmationIfNeeded({
                                     sockInstance: sock,
                                     remoteJid,
@@ -2304,6 +2505,20 @@ export async function connectToWhatsApp() {
                                     userFlowByPhone.set(senderPhone, 'NONE');
                                     pendingRegistrationData.delete(senderPhone);
                                     if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
+                                    continue;
+                                }
+
+                                const hasPendingUnknownRegion = await queueUnknownRegionConfirmationIfNeeded({
+                                    sockInstance: sock,
+                                    remoteJid,
+                                    senderPhone,
+                                    logJson,
+                                    originalText: pendingData,
+                                    locationContext: 'DHARMAJAYA',
+                                    processingDayKey,
+                                });
+                                if (hasPendingUnknownRegion) {
+                                    pendingRegistrationData.delete(senderPhone);
                                     continue;
                                 }
 
@@ -4978,6 +5193,19 @@ export async function connectToWhatsApp() {
                                 if (!quotaCheck.allowed) {
                                     replyText = quotaCheck.message || '⛔ Batas lokasi tercapai.';
                                     if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
+                                    continue;
+                                }
+
+                                const hasPendingUnknownRegion = await queueUnknownRegionConfirmationIfNeeded({
+                                    sockInstance: sock,
+                                    remoteJid,
+                                    senderPhone,
+                                    logJson,
+                                    originalText: messageText,
+                                    locationContext: finalContext,
+                                    processingDayKey,
+                                });
+                                if (hasPendingUnknownRegion) {
                                     continue;
                                 }
 

@@ -20,7 +20,8 @@ export type UserFlowState =
     | 'EDIT_CONFIRMATION' // PATCH 2
     | 'EDIT_PICK_LOCATION' // PATCH 3: Edit Lokasi - Menu Pilih
     | 'EDIT_INPUT_MANUAL_LOCATION' // PATCH 3: Edit Lokasi - Input Manual (Pasarjaya)
-    | 'UNDERAGE_CONFIRMATION';
+    | 'UNDERAGE_CONFIRMATION'
+    | 'UNKNOWN_REGION_CONFIRMATION';
 
 export interface EditSession {
     recordsToday: any[]; // Store the fetched records to avoid re-fetching and ensure ID consistency
@@ -46,6 +47,13 @@ export interface StatusCheckSelectionSession {
 }
 
 export interface PendingUnderageConfirmationSession {
+    logJson: LogJson;
+    originalText: string;
+    locationContext: 'PASARJAYA' | 'DHARMAJAYA';
+    processingDayKey: string;
+}
+
+export interface PendingUnknownRegionConfirmationSession {
     logJson: LogJson;
     originalText: string;
     locationContext: 'PASARJAYA' | 'DHARMAJAYA';
@@ -146,6 +154,7 @@ export const adminUserListCache = new Map<string, { phone: string; name: string;
 // Simpan data pendaftaran sementara sebelum pilih lokasi
 export const pendingRegistrationData = new Map<string, string>();
 export const pendingUnderageConfirmationByPhone = new Map<string, PendingUnderageConfirmationSession>();
+export const pendingUnknownRegionConfirmationByPhone = new Map<string, PendingUnknownRegionConfirmationSession>();
 
 // Sesi Edit Data
 export const editSessionByPhone = new Map<string, EditSession>();

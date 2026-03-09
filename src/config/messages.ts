@@ -84,6 +84,17 @@ export const UNDERAGE_CONFIRMATION_MESSAGE = [
 export const UNDERAGE_CONFIRMATION_REMINDER = 'Balas *LANJUT* atau *BATAL*.';
 export const UNDERAGE_CONFIRMATION_CANCEL_MESSAGE = '✅ Data usia di bawah 17 tahun dibatalkan. Tidak ada data yang diproses.';
 
+export const UNKNOWN_REGION_CONFIRMATION_MESSAGE = [
+    '⚠️ *PERLU KONFIRMASI KODE WILAYAH KTP*',
+    '',
+    'Ada data dengan kode wilayah NIK yang tidak ditemukan di referensi.',
+    'Kalau Ibu/Bapak yakin datanya benar dan ingin tetap diproses, balas *YA*.',
+    'Kalau mau batalkan data tersebut dulu, balas *BATAL*.'
+].join('\n');
+
+export const UNKNOWN_REGION_CONFIRMATION_REMINDER = 'Balas *YA* atau *BATAL*.';
+export const UNKNOWN_REGION_CONFIRMATION_CANCEL_MESSAGE = '✅ Data dengan kode wilayah KTP tidak dikenal dibatalkan. Tidak ada data yang diproses.';
+
 export const KTP_REGION_NOT_FOUND_MESSAGE = [
     'Kode wilayah NIK tidak ditemukan di data referensi.',
     'Mohon cek ulang nomor KTP (16 angka) lalu kirim lagi.'

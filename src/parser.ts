@@ -224,6 +224,21 @@ function applyNikAgeWarnings(items: LogItem[], referenceDate: Date): LogItem[] {
     });
 }
 
+function applyUnknownRegionWarnings(items: LogItem[]): LogItem[] {
+    return items.map((item) => {
+        if (item.status !== 'OK') return item;
+        if (!item.parsed.unknown_region_warning) return item;
+
+        item.errors.push({
+            field: 'no_ktp',
+            type: 'unknown_region',
+            detail: KTP_REGION_NOT_FOUND_MESSAGE,
+        });
+
+        return item;
+    });
+}
+
 // --- BAGIAN 2: PARSING LOGIC ---
 
 /// --- HELPER: CLEAN NAME ---
@@ -593,11 +608,7 @@ export function validateBlockToItem(block: string[], index: number, location: 'P
                 detail: KTP_MASTER_UNAVAILABLE_MESSAGE,
             });
         } else if (regionLookup.status === 'NOT_FOUND') {
-            errors.push({
-                field: 'no_ktp',
-                type: 'unknown_region',
-                detail: KTP_REGION_NOT_FOUND_MESSAGE,
-            });
+            parsed.unknown_region_warning = true;
         }
     }
 
@@ -694,6 +705,7 @@ export async function processRawMessageToLogJson(params: {
         });
     }
     items = applyNikAgeWarnings(items, receivedAt);
+    items = applyUnknownRegionWarnings(items);
 
     // 3) duplikat DI DALAM 1 PESAN
     // ✅ PENTING: KK BOLEH SAMA DALAM 1 PESAN (Sesuai Request)

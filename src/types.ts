@@ -19,6 +19,7 @@ export interface ParsedFields {
     nik_birth_date?: string;
     nik_age_years?: number;
     underage_warning?: boolean;
+    unknown_region_warning?: boolean;
 }
 
 export interface ItemError {
