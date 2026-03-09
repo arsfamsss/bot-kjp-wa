@@ -297,16 +297,24 @@ export async function checkDuplicatesBatch(
         const sameSenderNameHit = sameSenderNameMap.get(canonicalName);
         if (!sameSenderNameHit) return item;
 
+        const info: DuplicateInfo = {
+            kind: 'NAME',
+            processing_day_key: processingDayKey,
+            safe_message: `Nama mirip/sama sudah pernah Ibu/Bapak kirim hari ini: ${formatDataRingkas(sameSenderNameHit)}.`,
+            first_seen_at: null,
+            first_seen_wib_time: null,
+            original_data: {
+                nama: sameSenderNameHit.nama || '',
+                no_kjp: sameSenderNameHit.no_kjp || '',
+                no_ktp: sameSenderNameHit.no_ktp || '',
+                no_kk: sameSenderNameHit.no_kk || '',
+            },
+        };
+
         return {
             ...item,
-            errors: [
-                ...item.errors,
-                {
-                    field: 'nama',
-                    type: 'duplicate',
-                    detail: `⚠️ Nama mirip/sama sudah pernah Ibu/Bapak kirim hari ini: ${formatDataRingkas(sameSenderNameHit)}. Tolong cek agar tidak dobel.`,
-                },
-            ],
+            status: 'SKIP_DUPLICATE',
+            duplicate_info: info,
         };
     });
 }

@@ -513,7 +513,7 @@ function buildDuplicateInMessageDetail(params: {
     return lines.join('\n');
 }
 
-function applySoftDuplicateNameWarningsInMessage(items: LogItem[]): LogItem[] {
+function applyDuplicateNameHardBlockInMessage(items: LogItem[]): LogItem[] {
     const seen = new Map<string, { itemIdx: number; displayName: string }>();
 
     return items.map((item, idx) => {
@@ -530,12 +530,13 @@ function applySoftDuplicateNameWarningsInMessage(items: LogItem[]): LogItem[] {
 
         return {
             ...item,
+            status: 'SKIP_FORMAT',
             errors: [
                 ...item.errors,
                 {
                     field: 'nama',
-                    type: 'duplicate',
-                    detail: `⚠️ Nama mirip/sama dengan data no. ${first.itemIdx + 1} (${first.displayName}). Cek lagi supaya tidak dobel.`,
+                    type: 'duplicate_in_message',
+                    detail: `Nama dobel dalam 1 kiriman (sama dengan data no. ${first.itemIdx + 1}: ${first.displayName}).`,
                 },
             ],
         };
@@ -757,7 +758,7 @@ export async function processRawMessageToLogJson(params: {
         });
     }
 
-    items = applySoftDuplicateNameWarningsInMessage(items);
+    items = applyDuplicateNameHardBlockInMessage(items);
 
     items = await checkBlockedKkBatch(items);
     items = await checkBlockedKtpBatch(items);
