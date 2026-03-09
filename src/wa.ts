@@ -67,6 +67,7 @@ import {
     addBlockedPhone,
     removeBlockedPhone,
     isPhoneBlocked,
+    hasProcessedMessageById,
 } from './supabase';
 import { getProcessingDayKey, getWibIsoDate, shiftIsoDate, isSystemClosed, getWibParts } from './time';
 import { getContactName } from './contacts_data';
@@ -200,6 +201,11 @@ const DEFAULT_CLOSE_END_MINUTE = 5;
 const PASARJAYA_DISABLED = ['1', 'true', 'yes', 'on'].includes(
     (process.env.PASARJAYA_DISABLED ?? 'true').trim().toLowerCase()
 );
+const inFlightMessageKeys = new Set<string>();
+
+function buildMessageIdempotencyKey(senderPhone: string, processingDayKey: string, messageId: string): string {
+    return `${senderPhone}|${processingDayKey}|${messageId}`;
+}
 
 function formatOperationStatus(settings: {
     close_hour_start: number;
@@ -650,6 +656,9 @@ export async function connectToWhatsApp() {
             if (msg.key.fromMe) continue;
             if (shouldIgnoreMessage(msg)) continue;
 
+            let senderPhoneForLock = '';
+            let processingDayKeyForLock = '';
+
             try {
                 const rawRemoteJid = msg.key.remoteJid;
                 if (!rawRemoteJid) continue;
@@ -683,6 +692,7 @@ export async function connectToWhatsApp() {
                         }
                     }
                 }
+                senderPhoneForLock = senderPhone;
 
                 // helper flag
                 const senderIsLid = isLidJid(chatJid);
@@ -701,6 +711,7 @@ export async function connectToWhatsApp() {
                 const tanggalWib = getWibIsoDate(receivedAt);
 
                 const processingDayKey = getProcessingDayKey(receivedAt);
+                processingDayKeyForLock = processingDayKey;
                 const mAny: any = msg.message as any;
 
                 const messageText =
@@ -978,6 +989,34 @@ export async function connectToWhatsApp() {
 
                 const linesForData = parseRawMessageToLines(messageText);
                 const looksLikeRegistrationData = linesForData.length >= 4 && linesForData.length % 4 === 0;
+
+                const messageId = msg.key.id || '';
+                let inFlightMessageKey: string | null = null;
+                if (messageId && linesForData.length >= 4) {
+                    inFlightMessageKey = buildMessageIdempotencyKey(senderPhone, processingDayKey, messageId);
+
+                    if (inFlightMessageKeys.has(inFlightMessageKey)) {
+                        await sock.sendMessage(remoteJid, {
+                            text: '⏳ Pesan data ini sedang diproses. Mohon tunggu sebentar ya.',
+                        });
+                        continue;
+                    }
+
+                    const alreadyProcessed = await hasProcessedMessageById({
+                        senderPhone,
+                        processingDayKey,
+                        messageId,
+                    });
+
+                    if (alreadyProcessed) {
+                        await sock.sendMessage(remoteJid, {
+                            text: 'ℹ️ Pesan data ini sudah pernah diproses sebelumnya. Ketik *CEK* untuk lihat rekap terbaru.',
+                        });
+                        continue;
+                    }
+
+                    inFlightMessageKeys.add(inFlightMessageKey);
+                }
 
                 // --- MENU USER LOGIC ---
                 // Helper to render check data result
@@ -5038,6 +5077,12 @@ Ketik MENU untuk bantuan.`;
                 console.log(`📤 Balasan terkirim ke ${senderPhone}`);
             } catch (error) {
                 console.error('Error memproses pesan:', error);
+            } finally {
+                const messageId = msg.key.id || '';
+                if (messageId && senderPhoneForLock && processingDayKeyForLock) {
+                    const key = buildMessageIdempotencyKey(senderPhoneForLock, processingDayKeyForLock, messageId);
+                    inFlightMessageKeys.delete(key);
+                }
             }
         }
     });

@@ -256,6 +256,21 @@ function cleanName(raw: string): string {
     return cleaned.replace(/\s+/g, ' ').trim();
 }
 
+export function normalizeNameForDedup(raw: string): string {
+    if (!raw) return '';
+
+    const normalized = raw
+        .normalize('NFKC')
+        .replace(/[\u200B-\u200D\uFEFF]/g, '')
+        .replace(/\u00A0/g, ' ')
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    return normalized;
+}
+
 /**
  * Mem-parsing 1 blok data (4 baris atau 5 baris) menjadi object LogItem.
  * Ini adalah langkah awal parsing, belum termasuk validasi lengkap atau cek duplikat.
@@ -278,6 +293,7 @@ export function parseBlockToItem(lines: string[], index: number, processingDayKe
         errors: [],
         parsed: {
             nama: parsedNama,
+            name_canonical: normalizeNameForDedup(parsedNama),
             no_kjp: lines[1] || '',
             no_ktp: lines[2] || '',
             no_kk: lines[3] || '',
@@ -396,6 +412,7 @@ function buildParsedFields(block: string[], location: 'PASARJAYA' | 'DHARMAJAYA'
         const [line1, line2, line3, line4, line5] = block;
         return {
             nama: cleanName(line1),
+            name_canonical: normalizeNameForDedup(cleanName(line1)),
             no_kjp: extractCardNumber(line2),  // Line 2: Kartu
             no_ktp: extractDigits(line3),  // Line 3: KTP
             no_kk: extractDigits(line4),   // Line 4: KK
@@ -410,6 +427,7 @@ function buildParsedFields(block: string[], location: 'PASARJAYA' | 'DHARMAJAYA'
         const resolved = resolveJenisKartu(noKjp, cardText);
         return {
             nama: cleanName(line1),
+            name_canonical: normalizeNameForDedup(cleanName(line1)),
             no_kjp: noKjp,
             no_ktp: extractDigits(line3),
             no_kk: extractDigits(line4),
@@ -478,6 +496,35 @@ function buildDuplicateInMessageDetail(params: {
     }
 
     return lines.join('\n');
+}
+
+function applySoftDuplicateNameWarningsInMessage(items: LogItem[]): LogItem[] {
+    const seen = new Map<string, { itemIdx: number; displayName: string }>();
+
+    return items.map((item, idx) => {
+        if (item.status !== 'OK') return item;
+
+        const canonical = item.parsed.name_canonical || normalizeNameForDedup(item.parsed.nama || '');
+        if (!canonical) return item;
+
+        const first = seen.get(canonical);
+        if (!first) {
+            seen.set(canonical, { itemIdx: idx, displayName: item.parsed.nama || '-' });
+            return item;
+        }
+
+        return {
+            ...item,
+            errors: [
+                ...item.errors,
+                {
+                    field: 'nama',
+                    type: 'duplicate',
+                    detail: `⚠️ Nama mirip/sama dengan data no. ${first.itemIdx + 1} (${first.displayName}). Cek lagi supaya tidak dobel.`,
+                },
+            ],
+        };
+    });
 }
 
 export function validateBlockToItem(block: string[], index: number, location: 'PASARJAYA' | 'DHARMAJAYA' | 'DEFAULT' = 'DEFAULT'): LogItem {
@@ -652,14 +699,14 @@ export async function processRawMessageToLogJson(params: {
     // ✅ PENTING: KK BOLEH SAMA DALAM 1 PESAN (Sesuai Request)
     // ✅ Tapi KJP dan KTP/NIK Tetap TIDAK BOLEH SAMA DALAM 1 PESAN
 
-    const occurrences = new Map<string, { itemIdx: number; field: 'no_kjp' | 'no_ktp' | 'nama' }[]>();
+    const occurrences = new Map<string, { itemIdx: number; field: 'no_kjp' | 'no_ktp' }[]>();
 
     items.forEach((it, idx) => {
         // PERBAIKAN: Hanya cek item yang statusnya masih OK
         if (it.status !== 'OK') return;
 
         // Cek duplikat internal hanya untuk KJP dan KTP
-        (['no_kjp', 'no_ktp', 'nama'] as const).forEach((field) => {
+        (['no_kjp', 'no_ktp'] as const).forEach((field) => {
             const val = it.parsed[field];
             if (!val) return;
 
@@ -697,6 +744,8 @@ export async function processRawMessageToLogJson(params: {
             }
         });
     }
+
+    items = applySoftDuplicateNameWarningsInMessage(items);
 
     items = await checkBlockedKkBatch(items);
     items = await checkBlockedKtpBatch(items);

@@ -41,6 +41,20 @@ export function buildReplyForNewData(
                     lines.push(`     🆔 ${item.parsed.no_kjp}${jenis}${koreksiNote}`);
                 }
             });
+
+            const nameWarnings = log.items
+                .filter((item) => item.status === 'OK')
+                .flatMap((item) =>
+                    item.errors
+                        .filter((err) => err.field === 'nama' && err.type === 'duplicate')
+                        .map((err) => `⚠️ ${extractChildName(item.parsed.nama)} → ${err.detail}`)
+                );
+
+            if (nameWarnings.length > 0) {
+                lines.push('');
+                lines.push('⚠️ *PERINGATAN CEK NAMA*');
+                lines.push(...nameWarnings);
+            }
         }
 
         lines.push('');

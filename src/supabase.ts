@@ -136,7 +136,7 @@ export async function checkDuplicatesBatch(
     items: LogItem[],
     ctx: { processingDayKey: string; senderPhone: string; tanggal: string }
 ): Promise<LogItem[]> {
-    const { processingDayKey } = ctx;
+    const { processingDayKey, senderPhone } = ctx;
 
     // Filter items yang statusnya OK (hanya ini yang perlu dicek ke DB)
     const activeItems = items.filter(it => it.status === 'OK');
@@ -170,6 +170,39 @@ export async function checkDuplicatesBatch(
             globalDupes = data;
         } else if (error) {
             console.error('Error batch global dupes:', error);
+        }
+    }
+
+    const sameSenderNameMap = new Map<string, { nama: string; no_kjp: string; no_ktp: string; no_kk: string }>();
+    const activeCanonicalNames = Array.from(
+        new Set(
+            activeItems
+                .map((it) => it.parsed.name_canonical || normalizeNameForDedup(it.parsed.nama || ''))
+                .filter((v) => v.length > 0)
+        )
+    );
+
+    if (activeCanonicalNames.length > 0) {
+        const { data, error } = await supabase
+            .from('data_harian')
+            .select('nama, no_kjp, no_ktp, no_kk')
+            .eq('processing_day_key', processingDayKey)
+            .eq('sender_phone', senderPhone)
+            .not('nama', 'is', null);
+
+        if (!error && data) {
+            for (const row of data as Array<{ nama?: string | null; no_kjp?: string | null; no_ktp?: string | null; no_kk?: string | null }>) {
+                const canonical = normalizeNameForDedup(row.nama || '');
+                if (!canonical || sameSenderNameMap.has(canonical)) continue;
+                sameSenderNameMap.set(canonical, {
+                    nama: row.nama || '-',
+                    no_kjp: row.no_kjp || '-',
+                    no_ktp: row.no_ktp || '-',
+                    no_kk: row.no_kk || '-',
+                });
+            }
+        } else if (error) {
+            console.error('Error batch same sender names:', error);
         }
     }
 
@@ -258,7 +291,23 @@ export async function checkDuplicatesBatch(
             };
         }
 
-        return item;
+        const canonicalName = item.parsed.name_canonical || normalizeNameForDedup(item.parsed.nama || '');
+        if (!canonicalName) return item;
+
+        const sameSenderNameHit = sameSenderNameMap.get(canonicalName);
+        if (!sameSenderNameHit) return item;
+
+        return {
+            ...item,
+            errors: [
+                ...item.errors,
+                {
+                    field: 'nama',
+                    type: 'duplicate',
+                    detail: `⚠️ Nama mirip/sama sudah pernah Ibu/Bapak kirim hari ini: ${formatDataRingkas(sameSenderNameHit)}. Tolong cek agar tidak dobel.`,
+                },
+            ],
+        };
     });
 }
 
@@ -287,6 +336,19 @@ export type BlockedLocationItem = {
     created_at?: string | null;
     updated_at?: string | null;
 };
+
+function normalizeNameForDedup(raw: string): string {
+    if (!raw) return '';
+
+    return raw
+        .normalize('NFKC')
+        .replace(/[\u200B-\u200D\uFEFF]/g, '')
+        .replace(/\u00A0/g, ' ')
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
 
 function normalizeKk(raw: string): string {
     return (raw || '').replace(/\D/g, '');
@@ -728,6 +790,32 @@ export async function isLocationBlocked(locationRaw: string): Promise<{ blocked:
 
     if (!data) return { blocked: false };
     return { blocked: true, reason: (data as { reason?: string | null }).reason || null };
+}
+
+export async function hasProcessedMessageById(params: {
+    senderPhone: string;
+    processingDayKey: string;
+    messageId: string;
+}): Promise<boolean> {
+    const { senderPhone, processingDayKey, messageId } = params;
+    if (!messageId) return false;
+
+    const { data, error } = await supabase
+        .from('log_pesan_wa')
+        .select('id')
+        .eq('sender_phone', senderPhone)
+        .eq('processing_day_key', processingDayKey)
+        .eq('wa_message_id', messageId)
+        .limit(1);
+
+    if (error) {
+        if (!isMissingTableError(error, 'log_pesan_wa')) {
+            console.error('Error hasProcessedMessageById:', error);
+        }
+        return false;
+    }
+
+    return Array.isArray(data) && data.length > 0;
 }
 
 export async function saveLogAndOkItems(log: LogJson, rawText: string): Promise<{ success: boolean; dataError?: any; logError?: any }> {

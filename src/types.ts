@@ -4,6 +4,7 @@ export type ItemStatus = "OK" | "SKIP_FORMAT" | "SKIP_DUPLICATE";
 
 export interface ParsedFields {
     nama: string;
+    name_canonical?: string;
     no_kjp: string;
     no_ktp: string;
     no_kk: string;
