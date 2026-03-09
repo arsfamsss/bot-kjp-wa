@@ -19,7 +19,8 @@ export type UserFlowState =
     | 'EDIT_INPUT_VALUE' // PATCH 2
     | 'EDIT_CONFIRMATION' // PATCH 2
     | 'EDIT_PICK_LOCATION' // PATCH 3: Edit Lokasi - Menu Pilih
-    | 'EDIT_INPUT_MANUAL_LOCATION'; // PATCH 3: Edit Lokasi - Input Manual (Pasarjaya)
+    | 'EDIT_INPUT_MANUAL_LOCATION' // PATCH 3: Edit Lokasi - Input Manual (Pasarjaya)
+    | 'UNDERAGE_CONFIRMATION';
 
 export interface EditSession {
     recordsToday: any[]; // Store the fetched records to avoid re-fetching and ensure ID consistency
@@ -42,6 +43,13 @@ export interface StatusCheckSelectionSession {
     targetDate: string;
     sourceDate: string;
     items: StatusCheckSelectionItem[];
+}
+
+export interface PendingUnderageConfirmationSession {
+    logJson: LogJson;
+    originalText: string;
+    locationContext: 'PASARJAYA' | 'DHARMAJAYA';
+    processingDayKey: string;
 }
 
 // State alur menu admin
@@ -137,6 +145,7 @@ export const adminUserListCache = new Map<string, { phone: string; name: string;
 
 // Simpan data pendaftaran sementara sebelum pilih lokasi
 export const pendingRegistrationData = new Map<string, string>();
+export const pendingUnderageConfirmationByPhone = new Map<string, PendingUnderageConfirmationSession>();
 
 // Sesi Edit Data
 export const editSessionByPhone = new Map<string, EditSession>();
@@ -164,3 +173,4 @@ export type CloseWindowDraft = {
 };
 
 export const closeWindowDraftByPhone = new Map<string, CloseWindowDraft>();
+import type { LogJson } from './types';

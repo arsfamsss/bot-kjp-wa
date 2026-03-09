@@ -5,6 +5,8 @@ import { checkBlockedKkBatch, checkBlockedKtpBatch, checkBlockedLocationBatch, c
 import { parseFlexibleDate } from './utils/dateParser';
 import { normalizeCardTypeName, getCardTypeChoicesText } from './utils/cardTypeRules';
 import { getCardPrefixType } from './utils/cardPrefixConfig';
+import { lookupNikRegionFromMaster } from './services/ktpMasterLookup';
+import { KTP_MASTER_UNAVAILABLE_MESSAGE, KTP_REGION_NOT_FOUND_MESSAGE } from './config/messages';
 
 // --- BAGIAN 1: PEMBERSIH INPUT ---
 
@@ -122,6 +124,104 @@ function resolveJenisKartu(noKjp: string, textManual: string): {
         manual_type: null,
         prefix_type: null,
     };
+}
+
+function getWibDateParts(referenceDate: Date): { year: number; month: number; day: number } {
+    const formatter = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Jakarta',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+    });
+
+    const parts = formatter.formatToParts(referenceDate);
+    const year = Number.parseInt(parts.find((part) => part.type === 'year')?.value || '', 10);
+    const month = Number.parseInt(parts.find((part) => part.type === 'month')?.value || '', 10);
+    const day = Number.parseInt(parts.find((part) => part.type === 'day')?.value || '', 10);
+
+    return { year, month, day };
+}
+
+function calculateAgeYearsWib(referenceDate: Date, birthYear: number, birthMonth: number, birthDay: number): number {
+    const wib = getWibDateParts(referenceDate);
+    let age = wib.year - birthYear;
+
+    if (wib.month < birthMonth || (wib.month === birthMonth && wib.day < birthDay)) {
+        age -= 1;
+    }
+
+    return age;
+}
+
+function parseNikBirthData(nik: string, referenceDate: Date): { birthDateIso: string; ageYears: number } | null {
+    if (!/^\d{16}$/.test(nik)) return null;
+
+    const rawDay = Number.parseInt(nik.slice(6, 8), 10);
+    const month = Number.parseInt(nik.slice(8, 10), 10);
+    const shortYear = Number.parseInt(nik.slice(10, 12), 10);
+
+    if (!Number.isFinite(rawDay) || !Number.isFinite(month) || !Number.isFinite(shortYear)) return null;
+
+    const day = rawDay > 40 ? rawDay - 40 : rawDay;
+    if (day < 1 || day > 31 || month < 1 || month > 12) return null;
+
+    const candidateYears = [2000 + shortYear, 1900 + shortYear];
+    const validCandidates: { birthDate: Date; ageYears: number }[] = [];
+
+    for (const year of candidateYears) {
+        const birthDate = new Date(Date.UTC(year, month - 1, day));
+        if (
+            birthDate.getUTCFullYear() !== year
+            || birthDate.getUTCMonth() !== month - 1
+            || birthDate.getUTCDate() !== day
+        ) {
+            continue;
+        }
+
+        const ageYears = calculateAgeYearsWib(referenceDate, year, month, day);
+        if (!Number.isFinite(ageYears) || ageYears < 0 || ageYears > 120) continue;
+
+        validCandidates.push({ birthDate, ageYears });
+    }
+
+    if (validCandidates.length === 0) return null;
+
+    validCandidates.sort((a, b) => b.birthDate.getTime() - a.birthDate.getTime());
+    const selected = validCandidates[0];
+
+    const birthDateIso = [
+        selected.birthDate.getUTCFullYear().toString().padStart(4, '0'),
+        (selected.birthDate.getUTCMonth() + 1).toString().padStart(2, '0'),
+        selected.birthDate.getUTCDate().toString().padStart(2, '0'),
+    ].join('-');
+
+    return { birthDateIso, ageYears: selected.ageYears };
+}
+
+function applyNikAgeWarnings(items: LogItem[], referenceDate: Date): LogItem[] {
+    const minimumAge = 17;
+
+    return items.map((item) => {
+        const nik = item.parsed.no_ktp;
+        if (!nik || nik.length !== 16) return item;
+
+        const birthData = parseNikBirthData(nik, referenceDate);
+        if (!birthData) return item;
+
+        item.parsed.nik_birth_date = birthData.birthDateIso;
+        item.parsed.nik_age_years = birthData.ageYears;
+
+        if (item.status === 'OK' && birthData.ageYears < minimumAge) {
+            item.parsed.underage_warning = true;
+            item.errors.push({
+                field: 'underage_warning',
+                type: 'underage_warning',
+                detail: `Usia terdeteksi ${birthData.ageYears} tahun dari NIK (di bawah 17 tahun).`,
+            });
+        }
+
+        return item;
+    });
 }
 
 // --- BAGIAN 2: PARSING LOGIC ---
@@ -437,6 +537,21 @@ export function validateBlockToItem(block: string[], index: number, location: 'P
             type: 'invalid_length',
             detail: `Panjang KTP salah (${parsed.no_ktp.length} digit). Harusnya 16 digit.`,
         });
+    } else {
+        const regionLookup = lookupNikRegionFromMaster(parsed.no_ktp);
+        if (regionLookup.status === 'MASTER_UNAVAILABLE') {
+            errors.push({
+                field: 'no_ktp',
+                type: 'unknown_region',
+                detail: KTP_MASTER_UNAVAILABLE_MESSAGE,
+            });
+        } else if (regionLookup.status === 'NOT_FOUND') {
+            errors.push({
+                field: 'no_ktp',
+                type: 'unknown_region',
+                detail: KTP_REGION_NOT_FOUND_MESSAGE,
+            });
+        }
     }
 
     // KK 16 digit
@@ -531,6 +646,7 @@ export async function processRawMessageToLogJson(params: {
             if (it.parsed) it.parsed.lokasi = specificLocation;
         });
     }
+    items = applyNikAgeWarnings(items, receivedAt);
 
     // 3) duplikat DI DALAM 1 PESAN
     // ✅ PENTING: KK BOLEH SAMA DALAM 1 PESAN (Sesuai Request)

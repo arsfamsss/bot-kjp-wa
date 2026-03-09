@@ -94,6 +94,7 @@ import {
     buildStatusSummaryMessage,
     checkRegistrationStatuses,
 } from './services/statusCheckService';
+import { warmupKtpMasterCsvLookup } from './services/ktpMasterLookup';
 import {
     MENU_MESSAGE,
     FORMAT_DAFTAR_MESSAGE,
@@ -107,6 +108,9 @@ import {
     MENU_PASARJAYA_LOCATIONS, // NEW
     PASARJAYA_MAPPING, // NEW
     DHARMAJAYA_MAPPING,
+    UNDERAGE_CONFIRMATION_MESSAGE,
+    UNDERAGE_CONFIRMATION_REMINDER,
+    UNDERAGE_CONFIRMATION_CANCEL_MESSAGE,
 } from './config/messages';
 import {
     normalizePhone,
@@ -135,7 +139,10 @@ import {
     locationQuotaDraftByPhone,
     statusCheckSelectionByPhone,
     statusCheckInProgressByPhone,
+    pendingUnderageConfirmationByPhone,
 } from './state';
+import type { PendingUnderageConfirmationSession } from './state';
+import type { LogJson } from './types';
 
 const AUTH_FOLDER = 'auth_info_baileys';
 const STORE_FILE = 'baileys_store.json';
@@ -399,7 +406,7 @@ function buildLocationQuotaListText(): string {
     return lines.join('\n');
 }
 
-async function checkLocationQuotaBeforeSave(logJson: any, senderPhone: string): Promise<{ allowed: boolean; message?: string }> {
+async function checkLocationQuotaBeforeSave(logJson: LogJson, senderPhone: string): Promise<{ allowed: boolean; message?: string }> {
     const okItems = (logJson?.items || []).filter((it: any) => it?.status === 'OK');
     if (okItems.length === 0) return { allowed: true };
 
@@ -447,6 +454,85 @@ async function checkLocationQuotaBeforeSave(logJson: any, senderPhone: string): 
     return { allowed: true };
 }
 
+function getUnderageOkItems(logJson: LogJson) {
+    return logJson.items.filter((item) => item.status === 'OK' && item.parsed.underage_warning === true);
+}
+
+function removeUnderageOkItems(logJson: LogJson): LogJson {
+    const items = logJson.items.filter((item) => !(item.status === 'OK' && item.parsed.underage_warning === true));
+    const okCount = items.filter((item) => item.status === 'OK').length;
+    const skipFormatCount = items.filter((item) => item.status === 'SKIP_FORMAT').length;
+    const skipDuplicateCount = items.filter((item) => item.status === 'SKIP_DUPLICATE').length;
+
+    return {
+        ...logJson,
+        items,
+        stats: {
+            total_blocks: items.length,
+            ok_count: okCount,
+            skip_format_count: skipFormatCount,
+            skip_duplicate_count: skipDuplicateCount,
+        },
+    };
+}
+
+function clearUnderageConfirmationSession(senderPhone: string): void {
+    pendingUnderageConfirmationByPhone.delete(senderPhone);
+    userFlowByPhone.set(senderPhone, 'NONE');
+}
+
+async function queueUnderageConfirmationIfNeeded(params: {
+    sockInstance: WASocket;
+    remoteJid: string;
+    senderPhone: string;
+    logJson: LogJson;
+    originalText: string;
+    locationContext: 'PASARJAYA' | 'DHARMAJAYA';
+    processingDayKey: string;
+}): Promise<boolean> {
+    const underageItems = getUnderageOkItems(params.logJson);
+    if (underageItems.length === 0) return false;
+
+    const pendingSession: PendingUnderageConfirmationSession = {
+        logJson: params.logJson,
+        originalText: params.originalText,
+        locationContext: params.locationContext,
+        processingDayKey: params.processingDayKey,
+    };
+
+    pendingUnderageConfirmationByPhone.set(params.senderPhone, pendingSession);
+    userFlowByPhone.set(params.senderPhone, 'UNDERAGE_CONFIRMATION');
+
+    const previewLines = underageItems.slice(0, 5).map((item, index) => {
+        const name = item.parsed.nama || 'Tanpa nama';
+        const ageText = typeof item.parsed.nik_age_years === 'number'
+            ? `${item.parsed.nik_age_years} tahun`
+            : '<17 tahun';
+        return `${index + 1}. ${name} (${ageText})`;
+    });
+
+    const moreLine = underageItems.length > 5
+        ? `...dan ${underageItems.length - 5} data lainnya.`
+        : '';
+
+    const detailSection = [
+        'Data yang perlu konfirmasi:',
+        ...previewLines,
+        moreLine,
+    ].filter(Boolean).join('\n');
+
+    const warningText = [
+        UNDERAGE_CONFIRMATION_MESSAGE,
+        '',
+        detailSection,
+        '',
+        UNDERAGE_CONFIRMATION_REMINDER,
+    ].join('\n');
+
+    await params.sockInstance.sendMessage(params.remoteJid, { text: warningText });
+    return true;
+}
+
 
 function getMessageDate(msg: any): Date {
     const ts: any = msg?.messageTimestamp;
@@ -482,6 +568,7 @@ function shouldIgnoreMessage(msg: any): boolean {
 }
 
 export async function connectToWhatsApp() {
+    warmupKtpMasterCsvLookup();
     await initRegisteredUsersCache(); // Inisialisasi cache user terdaftar
     const { state, saveCreds } = await useMultiFileAuthState(AUTH_FOLDER);
     const { version } = await fetchLatestBaileysVersion();
@@ -1450,6 +1537,70 @@ export async function connectToWhatsApp() {
                 }
                 // --- END PATCH 3 ---
 
+                const pendingUnderageSession = pendingUnderageConfirmationByPhone.get(senderPhone);
+                if (currentUserFlow === 'UNDERAGE_CONFIRMATION' || pendingUnderageSession) {
+                    if (!pendingUnderageSession) {
+                        userFlowByPhone.set(senderPhone, 'NONE');
+                        await sock.sendMessage(remoteJid, {
+                            text: '⚠️ Sesi konfirmasi usia sudah berakhir. Silakan kirim ulang data.',
+                        });
+                        continue;
+                    }
+
+                    if (normalized === 'LANJUT' || normalized === 'BATAL' || normalized === '0') {
+                        const isCancelUnderage = normalized === 'BATAL' || normalized === '0';
+                        const logJsonToSave = isCancelUnderage
+                            ? removeUnderageOkItems(pendingUnderageSession.logJson)
+                            : pendingUnderageSession.logJson;
+
+                        if (logJsonToSave.stats.ok_count <= 0) {
+                            clearUnderageConfirmationSession(senderPhone);
+                            await sock.sendMessage(remoteJid, { text: UNDERAGE_CONFIRMATION_CANCEL_MESSAGE });
+                            continue;
+                        }
+
+                        const quotaCheck = await checkLocationQuotaBeforeSave(logJsonToSave, senderPhone);
+                        if (!quotaCheck.allowed) {
+                            clearUnderageConfirmationSession(senderPhone);
+                            await sock.sendMessage(remoteJid, {
+                                text: quotaCheck.message || '⛔ Batas lokasi tercapai.',
+                            });
+                            continue;
+                        }
+
+                        const saveResult = await saveLogAndOkItems(logJsonToSave, pendingUnderageSession.originalText);
+                        if (!saveResult.success) {
+                            console.error('❌ Gagal simpan ke database (UNDERAGE CONFIRM):', saveResult.dataError);
+                            const errorMsg = buildDatabaseErrorMessage(saveResult.dataError, logJsonToSave);
+                            await sock.sendMessage(remoteJid, { text: errorMsg });
+                            clearUnderageConfirmationSession(senderPhone);
+                            continue;
+                        }
+
+                        const todayRecap = await getTodayRecapForSender(
+                            senderPhone,
+                            pendingUnderageSession.processingDayKey,
+                            'received_at'
+                        );
+                        const replyDataText = buildReplyForNewData(
+                            logJsonToSave,
+                            todayRecap.validCount,
+                            pendingUnderageSession.locationContext,
+                            todayRecap.validItems
+                        );
+                        const finalReplyText = isCancelUnderage
+                            ? `✅ Data usia di bawah 17 tahun dibatalkan.\n\n${replyDataText}`
+                            : replyDataText;
+
+                        await sock.sendMessage(remoteJid, { text: finalReplyText });
+                        clearUnderageConfirmationSession(senderPhone);
+                        continue;
+                    }
+
+                    await sock.sendMessage(remoteJid, { text: UNDERAGE_CONFIRMATION_REMINDER });
+                    continue;
+                }
+
                 // ===== STRICT LOGIC PENDAFTARAN =====
 
                 // 1. Apakah ini terlihat seperti data pendaftaran (minimal 4 baris)?
@@ -1599,6 +1750,19 @@ export async function connectToWhatsApp() {
                             const quotaCheck = await checkLocationQuotaBeforeSave(logJson, senderPhone);
                             if (!quotaCheck.allowed) {
                                 await sock.sendMessage(remoteJid, { text: quotaCheck.message || '⛔ Batas lokasi tercapai.' });
+                                continue;
+                            }
+
+                            const hasPendingUnderage = await queueUnderageConfirmationIfNeeded({
+                                sockInstance: sock,
+                                remoteJid,
+                                senderPhone,
+                                logJson,
+                                originalText: messageText,
+                                locationContext: existingLocation === 'PASARJAYA' ? 'PASARJAYA' : 'DHARMAJAYA',
+                                processingDayKey,
+                            });
+                            if (hasPendingUnderage) {
                                 continue;
                             }
 
@@ -1899,6 +2063,20 @@ export async function connectToWhatsApp() {
                                     continue;
                                 }
 
+                                const hasPendingUnderage = await queueUnderageConfirmationIfNeeded({
+                                    sockInstance: sock,
+                                    remoteJid,
+                                    senderPhone,
+                                    logJson,
+                                    originalText: pendingData,
+                                    locationContext: 'PASARJAYA',
+                                    processingDayKey,
+                                });
+                                if (hasPendingUnderage) {
+                                    pendingRegistrationData.delete(senderPhone);
+                                    continue;
+                                }
+
                                 const saveResult = await saveLogAndOkItems(logJson, pendingData);
                                 if (!saveResult.success) {
                                     console.error('❌ Gagal simpan ke database (PASARJAYA SUB):', saveResult.dataError);
@@ -2001,6 +2179,20 @@ export async function connectToWhatsApp() {
                                     continue;
                                 }
 
+                                const hasPendingUnderage = await queueUnderageConfirmationIfNeeded({
+                                    sockInstance: sock,
+                                    remoteJid,
+                                    senderPhone,
+                                    logJson,
+                                    originalText: pendingData,
+                                    locationContext: 'PASARJAYA',
+                                    processingDayKey,
+                                });
+                                if (hasPendingUnderage) {
+                                    pendingRegistrationData.delete(senderPhone);
+                                    continue;
+                                }
+
                                 const saveResult = await saveLogAndOkItems(logJson, pendingData);
                                 if (!saveResult.success) {
                                     console.error('❌ Gagal simpan ke database (MANUAL LOCATION):', saveResult.dataError);
@@ -2073,6 +2265,20 @@ export async function connectToWhatsApp() {
                                     userFlowByPhone.set(senderPhone, 'NONE');
                                     pendingRegistrationData.delete(senderPhone);
                                     if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
+                                    continue;
+                                }
+
+                                const hasPendingUnderage = await queueUnderageConfirmationIfNeeded({
+                                    sockInstance: sock,
+                                    remoteJid,
+                                    senderPhone,
+                                    logJson,
+                                    originalText: pendingData,
+                                    locationContext: 'DHARMAJAYA',
+                                    processingDayKey,
+                                });
+                                if (hasPendingUnderage) {
+                                    pendingRegistrationData.delete(senderPhone);
                                     continue;
                                 }
 
@@ -4733,6 +4939,19 @@ export async function connectToWhatsApp() {
                                 if (!quotaCheck.allowed) {
                                     replyText = quotaCheck.message || '⛔ Batas lokasi tercapai.';
                                     if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
+                                    continue;
+                                }
+
+                                const hasPendingUnderage = await queueUnderageConfirmationIfNeeded({
+                                    sockInstance: sock,
+                                    remoteJid,
+                                    senderPhone,
+                                    logJson,
+                                    originalText: messageText,
+                                    locationContext: finalContext,
+                                    processingDayKey,
+                                });
+                                if (hasPendingUnderage) {
                                     continue;
                                 }
 

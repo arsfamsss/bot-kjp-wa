@@ -73,6 +73,27 @@ export const DHARMAJAYA_MAPPING: Record<string, string> = {
     '4': 'Cakung'
 };
 
+export const UNDERAGE_CONFIRMATION_MESSAGE = [
+    '⚠️ *PERLU KONFIRMASI*',
+    '',
+    'Ada data dengan usia di bawah 17 tahun (terdeteksi dari NIK di baris KTP).',
+    'Kalau Ibu/Bapak ingin tetap diproses, ketik *LANJUT*.',
+    'Kalau tidak jadi, ketik *BATAL* untuk batalkan data usia di bawah 17 tahun.'
+].join('\n');
+
+export const UNDERAGE_CONFIRMATION_REMINDER = 'Balas *LANJUT* atau *BATAL*.';
+export const UNDERAGE_CONFIRMATION_CANCEL_MESSAGE = '✅ Data usia di bawah 17 tahun dibatalkan. Tidak ada data yang diproses.';
+
+export const KTP_REGION_NOT_FOUND_MESSAGE = [
+    'Kode wilayah NIK tidak ditemukan di data referensi.',
+    'Mohon cek ulang nomor KTP (16 angka) lalu kirim lagi.'
+].join(' ');
+
+export const KTP_MASTER_UNAVAILABLE_MESSAGE = [
+    'Validasi wilayah KTP sedang bermasalah di sistem.',
+    'Mohon coba lagi sebentar, jangan ubah data dulu.'
+].join(' ');
+
 // --- FORMAT DAFTAR PASARJAYA (5 baris) ---
 export const FORMAT_DAFTAR_PASARJAYA = [
     '✅ *LOKASI TERPILIH: PASARJAYA*',

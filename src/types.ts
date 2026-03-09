@@ -15,10 +15,13 @@ export interface ParsedFields {
     jenis_kartu_prefix?: string;
     tanggal_lahir?: string | null; // Format YYYY-MM-DD
     lokasi?: string; // Full location string: "PASARJAYA - Jakgrosir Kedoya" or "DHARMAJAYA"
+    nik_birth_date?: string;
+    nik_age_years?: number;
+    underage_warning?: boolean;
 }
 
 export interface ItemError {
-    field: "nama" | "no_kjp" | "no_ktp" | "no_kk" | "tanggal_lahir" | "lokasi";
+    field: "nama" | "no_kjp" | "no_ktp" | "no_kk" | "tanggal_lahir" | "lokasi" | "underage_warning";
     type:
     | "required"
     | "invalid_length"
@@ -32,7 +35,9 @@ export interface ItemError {
     | "unknown_card_type"
     | "invalid_card_type"
     | "blocked_location"
-    | "card_type_mismatch";  // Prefix tidak dikenal & tidak ada teks jenis kartu (Dharmajaya)
+    | "card_type_mismatch"
+    | "underage_warning"
+    | "unknown_region";
     detail: string;
 }
 
