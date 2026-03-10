@@ -3,8 +3,10 @@ import {
     isLocationBlocked,
     closeLocation,
     openLocation,
+    isGlobalLocationQuotaFull,
 } from '../supabase';
 import { DHARMAJAYA_MAPPING, PASARJAYA_MAPPING } from '../config/messages';
+import { getProcessingDayKey } from '../time';
 
 export type ProviderType = 'PASARJAYA' | 'DHARMAJAYA';
 
@@ -21,8 +23,25 @@ export function getProviderSubLocations(provider: ProviderType): string[] {
 
 export async function isSpecificLocationClosed(provider: ProviderType, subLocation: string): Promise<{ closed: boolean; reason?: string | null }> {
     const locationKey = buildLocationKey(provider, subLocation);
-    const result = await isLocationBlocked(locationKey);
-    return { closed: result.blocked, reason: result.reason || null };
+    const blockedResult = await isLocationBlocked(locationKey);
+    if (blockedResult.blocked) {
+        return { closed: true, reason: blockedResult.reason || null };
+    }
+
+    if (provider !== 'DHARMAJAYA') {
+        return { closed: false, reason: null };
+    }
+
+    const dayKey = getProcessingDayKey(new Date());
+    const quotaResult = await isGlobalLocationQuotaFull(dayKey, locationKey);
+    if (quotaResult.full) {
+        return {
+            closed: true,
+            reason: `Kuota global harian sudah penuh (${quotaResult.used}/${quotaResult.limit}).`,
+        };
+    }
+
+    return { closed: false, reason: null };
 }
 
 export async function closeSpecificLocation(
@@ -52,6 +71,18 @@ export async function listClosedLocationsByProvider(provider: ProviderType): Pro
 
 export async function buildDharmajayaMenuWithStatus(): Promise<string> {
     const closed = new Set(await listClosedLocationsByProvider('DHARMAJAYA'));
+    const dayKey = getProcessingDayKey(new Date());
+
+    await Promise.all(
+        Object.values(DHARMAJAYA_MAPPING).map(async (name) => {
+            const locationKey = buildLocationKey('DHARMAJAYA', name);
+            const quotaResult = await isGlobalLocationQuotaFull(dayKey, locationKey);
+            if (quotaResult.full) {
+                closed.add(locationKey);
+            }
+        })
+    );
+
     const options = Object.entries(DHARMAJAYA_MAPPING).map(([idx, name]) => {
         const marker = closed.has(buildLocationKey('DHARMAJAYA', name)) ? ' (FULL)' : '';
         return `*${idx}.* ${name}${marker}`;

@@ -345,6 +345,35 @@ export type BlockedLocationItem = {
     updated_at?: string | null;
 };
 
+export type GlobalLocationQuotaItem = {
+    location_key: string;
+    daily_limit: number;
+    is_enabled: boolean;
+};
+
+export type GlobalLocationQuotaDecision = {
+    location_key: string;
+    allowed: boolean;
+    limit_value: number | null;
+    used_before: number;
+    requested_count: number;
+    used_after: number;
+    reason: string | null;
+};
+
+export type GlobalLocationQuotaReservation = {
+    processingDayKey: string;
+    messageId: string;
+    locations: Array<{ locationKey: string; reservedCount: number }>;
+};
+
+export type GlobalLocationQuotaReserveResult = {
+    success: boolean;
+    message?: string;
+    decisions: GlobalLocationQuotaDecision[];
+    reservation?: GlobalLocationQuotaReservation;
+};
+
 function normalizeNameForDedup(raw: string): string {
     if (!raw) return '';
 
@@ -393,6 +422,306 @@ export async function getTotalDataTodayForSenderByLocation(
     }
 
     return count || 0;
+}
+
+export type GlobalLocationQuotaListEntry = {
+    locationKey: string;
+    limit: number | null;
+    enabled: boolean;
+};
+
+type GlobalLocationQuotaRow = {
+    location_key: string;
+    daily_limit: number;
+    is_enabled: boolean;
+};
+
+function toGlobalLocationQuotaDecision(row: unknown): GlobalLocationQuotaDecision | null {
+    if (!row || typeof row !== 'object') return null;
+    const data = row as Record<string, unknown>;
+    if (typeof data.location_key !== 'string') return null;
+
+    const limitValue = typeof data.limit_value === 'number' ? data.limit_value : null;
+    const usedBefore = typeof data.used_before === 'number' ? data.used_before : 0;
+    const requestedCount = typeof data.requested_count === 'number' ? data.requested_count : 0;
+    const usedAfter = typeof data.used_after === 'number' ? data.used_after : usedBefore;
+
+    return {
+        location_key: data.location_key,
+        allowed: Boolean(data.allowed),
+        limit_value: limitValue,
+        used_before: usedBefore,
+        requested_count: requestedCount,
+        used_after: usedAfter,
+        reason: typeof data.reason === 'string' ? data.reason : null,
+    };
+}
+
+export async function listGlobalLocationQuotaLimits(locationKeys: string[]): Promise<GlobalLocationQuotaListEntry[]> {
+    const normalizedKeys = Array.from(
+        new Set(
+            locationKeys
+                .map(normalizeLocationKey)
+                .filter(Boolean)
+        )
+    );
+
+    if (normalizedKeys.length === 0) return [];
+
+    const { data, error } = await supabase
+        .from('location_global_quota_limits')
+        .select('location_key, daily_limit, is_enabled')
+        .in('location_key', normalizedKeys);
+
+    if (error) {
+        if (!isMissingTableError(error, 'location_global_quota_limits')) {
+            console.error('Error listGlobalLocationQuotaLimits:', error);
+        }
+        return normalizedKeys.map(locationKey => ({
+            locationKey,
+            limit: null,
+            enabled: false,
+        }));
+    }
+
+    const byLocation = new Map<string, GlobalLocationQuotaRow>();
+    for (const row of (data || []) as GlobalLocationQuotaRow[]) {
+        byLocation.set(normalizeLocationKey(row.location_key), row);
+    }
+
+    return normalizedKeys.map(locationKey => {
+        const row = byLocation.get(locationKey);
+        if (!row || !row.is_enabled) {
+            return { locationKey, limit: null, enabled: false };
+        }
+
+        const limit = Number.isInteger(row.daily_limit) && row.daily_limit >= 0 ? row.daily_limit : null;
+        return {
+            locationKey,
+            limit,
+            enabled: limit !== null,
+        };
+    });
+}
+
+export async function getGlobalLocationQuotaLimit(locationKey: string): Promise<number | null> {
+    const normalizedLocationKey = normalizeLocationKey(locationKey);
+    if (!normalizedLocationKey) return null;
+
+    const { data, error } = await supabase
+        .from('location_global_quota_limits')
+        .select('daily_limit, is_enabled')
+        .eq('location_key', normalizedLocationKey)
+        .maybeSingle();
+
+    if (error) {
+        if (!isMissingTableError(error, 'location_global_quota_limits')) {
+            console.error(`Error getGlobalLocationQuotaLimit for ${normalizedLocationKey}:`, error);
+        }
+        return null;
+    }
+
+    if (!data || data.is_enabled !== true) return null;
+    if (!Number.isInteger(data.daily_limit) || data.daily_limit < 0) return null;
+
+    return data.daily_limit;
+}
+
+export async function setGlobalLocationQuotaLimit(locationKey: string, limit: number): Promise<{ success: boolean; message: string }> {
+    const normalizedLocationKey = normalizeLocationKey(locationKey);
+    if (!normalizedLocationKey) {
+        return { success: false, message: 'Lokasi tidak valid.' };
+    }
+
+    if (!Number.isInteger(limit) || limit < 0) {
+        return { success: false, message: 'Batas harus angka bulat >= 0.' };
+    }
+
+    const payload: GlobalLocationQuotaRow = {
+        location_key: normalizedLocationKey,
+        daily_limit: limit,
+        is_enabled: true,
+    };
+
+    const { error } = await supabase
+        .from('location_global_quota_limits')
+        .upsert(payload, { onConflict: 'location_key' });
+
+    if (error) {
+        if (isMissingTableError(error, 'location_global_quota_limits')) {
+            return { success: false, message: 'Tabel kuota global lokasi belum dibuat di database.' };
+        }
+        console.error('Error setGlobalLocationQuotaLimit:', error);
+        return { success: false, message: 'Gagal menyimpan kuota global lokasi.' };
+    }
+
+    return {
+        success: true,
+        message: `Kuota global untuk *${normalizedLocationKey}* diset ke *${limit}* data total/hari.`,
+    };
+}
+
+export async function disableGlobalLocationQuotaLimit(locationKey: string): Promise<{ success: boolean; message: string }> {
+    const normalizedLocationKey = normalizeLocationKey(locationKey);
+    if (!normalizedLocationKey) {
+        return { success: false, message: 'Lokasi tidak valid.' };
+    }
+
+    const { error } = await supabase
+        .from('location_global_quota_limits')
+        .upsert(
+            {
+                location_key: normalizedLocationKey,
+                daily_limit: 0,
+                is_enabled: false,
+            },
+            { onConflict: 'location_key' }
+        );
+
+    if (error) {
+        if (isMissingTableError(error, 'location_global_quota_limits')) {
+            return { success: false, message: 'Tabel kuota global lokasi belum dibuat di database.' };
+        }
+        console.error('Error disableGlobalLocationQuotaLimit:', error);
+        return { success: false, message: 'Gagal menonaktifkan kuota global lokasi.' };
+    }
+
+    return {
+        success: true,
+        message: `Kuota global untuk *${normalizedLocationKey}* dinonaktifkan.`,
+    };
+}
+
+export async function isGlobalLocationQuotaFull(
+    processingDayKey: string,
+    locationKey: string
+): Promise<{ full: boolean; limit: number | null; used: number }> {
+    const normalizedLocationKey = normalizeLocationKey(locationKey);
+    const limit = await getGlobalLocationQuotaLimit(normalizedLocationKey);
+    if (limit === null) {
+        return { full: false, limit: null, used: 0 };
+    }
+
+    const { data, error } = await supabase
+        .from('location_global_quota_usage')
+        .select('used_count')
+        .eq('processing_day_key', processingDayKey)
+        .eq('location_key', normalizedLocationKey)
+        .maybeSingle();
+
+    if (error) {
+        if (!isMissingTableError(error, 'location_global_quota_usage')) {
+            console.error(`Error isGlobalLocationQuotaFull for ${normalizedLocationKey}:`, error);
+        }
+        return { full: false, limit, used: 0 };
+    }
+
+    const used = data && typeof data.used_count === 'number' ? data.used_count : 0;
+    return { full: used >= limit, limit, used };
+}
+
+export async function reserveGlobalLocationQuota(input: {
+    processingDayKey: string;
+    messageId: string;
+    pendingByLocation: Map<string, number>;
+}): Promise<GlobalLocationQuotaReserveResult> {
+    const payload = Array.from(input.pendingByLocation.entries())
+        .map(([locationKey, pendingCount]) => ({
+            location_key: normalizeLocationKey(locationKey),
+            pending_count: Number.isInteger(pendingCount) ? pendingCount : 0,
+        }))
+        .filter(item => item.location_key && item.pending_count > 0)
+        .sort((a, b) => a.location_key.localeCompare(b.location_key));
+
+    if (payload.length === 0) {
+        return { success: true, decisions: [] };
+    }
+
+    const { data, error } = await supabase.rpc('reserve_global_location_quota', {
+        p_processing_day_key: input.processingDayKey,
+        p_message_id: input.messageId,
+        p_payload: payload,
+    });
+
+    if (error) {
+        if (
+            isMissingTableError(error, 'location_global_quota_limits') ||
+            isMissingTableError(error, 'location_global_quota_usage') ||
+            isMissingTableError(error, 'location_global_quota_reservations') ||
+            (error.code === '42883' && (error.message || '').includes('reserve_global_location_quota'))
+        ) {
+            return {
+                success: false,
+                message: 'Fitur kuota global belum siap di database.',
+                decisions: [],
+            };
+        }
+        console.error('Error reserveGlobalLocationQuota:', error);
+        return {
+            success: false,
+            message: 'Sistem kuota global sedang bermasalah. Coba lagi sebentar.',
+            decisions: [],
+        };
+    }
+
+    const decisions = (Array.isArray(data) ? data : [])
+        .map(toGlobalLocationQuotaDecision)
+        .filter((item): item is GlobalLocationQuotaDecision => item !== null);
+
+    const denied = decisions.find(item => !item.allowed);
+    if (denied) {
+        const limitText = denied.limit_value !== null ? denied.limit_value : '-';
+        const blockedMessage =
+            `❌ Lokasi *${denied.location_key}* sudah mencapai kuota global harian.\n` +
+            `- Batas global: *${limitText}*\n` +
+            `- Sudah terpakai: *${denied.used_before}*\n` +
+            `- Data masuk di pesan ini: *${denied.requested_count}*`;
+
+        return {
+            success: false,
+            message: blockedMessage,
+            decisions,
+        };
+    }
+
+    return {
+        success: true,
+        decisions,
+        reservation: {
+            processingDayKey: input.processingDayKey,
+            messageId: input.messageId,
+            locations: payload.map(item => ({
+                locationKey: item.location_key,
+                reservedCount: item.pending_count,
+            })),
+        },
+    };
+}
+
+export async function releaseGlobalLocationQuotaReservation(
+    reservation: GlobalLocationQuotaReservation
+): Promise<boolean> {
+    if (!reservation.messageId || !reservation.processingDayKey) return true;
+
+    const { error } = await supabase.rpc('release_global_location_quota_reservation', {
+        p_processing_day_key: reservation.processingDayKey,
+        p_message_id: reservation.messageId,
+    });
+
+    if (error) {
+        if (
+            isMissingTableError(error, 'location_global_quota_reservations') ||
+            isMissingTableError(error, 'location_global_quota_usage') ||
+            (error.code === '42883' && (error.message || '').includes('release_global_location_quota_reservation'))
+        ) {
+            console.warn('Release global quota reservation skipped (DB feature not ready).');
+            return false;
+        }
+        console.error('Error releaseGlobalLocationQuotaReservation:', error);
+        return false;
+    }
+
+    return true;
 }
 
 function isMissingTableError(error: unknown, tableName: string): boolean {

@@ -108,6 +108,9 @@ export type AdminFlowState =
     | 'LOCATION_QUOTA_MENU'
     | 'LOCATION_QUOTA_SET'
     | 'LOCATION_QUOTA_DISABLE'
+    | 'GLOBAL_LOCATION_QUOTA_MENU'
+    | 'GLOBAL_LOCATION_QUOTA_SET'
+    | 'GLOBAL_LOCATION_QUOTA_DISABLE'
     // NEW CONTACT MANAGEMENT FLOW
     | 'CONTACT_MENU'        // Menu Utama Kelola Kontak
     | 'CONTACT_SEARCH'      // Input keyword pencarian
@@ -175,6 +178,12 @@ export type LocationQuotaDraft = {
 };
 
 export const locationQuotaDraftByPhone = new Map<string, LocationQuotaDraft>();
+
+export type GlobalLocationQuotaDraft = {
+    locationKey?: string;
+};
+
+export const globalLocationQuotaDraftByPhone = new Map<string, GlobalLocationQuotaDraft>();
 
 export type CloseWindowDraft = {
     startIso: string;

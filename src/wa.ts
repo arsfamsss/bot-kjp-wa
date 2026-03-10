@@ -68,6 +68,12 @@ import {
     removeBlockedPhone,
     isPhoneBlocked,
     hasProcessedMessageById,
+    disableGlobalLocationQuotaLimit,
+    setGlobalLocationQuotaLimit,
+    listGlobalLocationQuotaLimits,
+    reserveGlobalLocationQuota,
+    releaseGlobalLocationQuotaReservation,
+    type GlobalLocationQuotaReservation,
 } from './supabase';
 import { getProcessingDayKey, getWibIsoDate, shiftIsoDate, isSystemClosed, getWibParts } from './time';
 import { getContactName } from './contacts_data';
@@ -141,6 +147,7 @@ import {
     contactSessionByPhone, // NEW: Kelola Kontak
     closeWindowDraftByPhone,
     locationQuotaDraftByPhone,
+    globalLocationQuotaDraftByPhone,
     statusCheckSelectionByPhone,
     statusCheckInProgressByPhone,
     pendingUnderageConfirmationByPhone,
@@ -417,6 +424,90 @@ function buildLocationQuotaListText(): string {
     lines.push('');
     lines.push('Ketik *0* untuk kembali.');
     return lines.join('\n');
+}
+
+function buildGlobalLocationQuotaMenuText(): string {
+    return [
+        '🌐 *KUOTA GLOBAL PER LOKASI (SEMUA USER/HARI)*',
+        '',
+        '1️⃣ Set kuota global lokasi',
+        '2️⃣ Lihat kuota global lokasi',
+        '3️⃣ Nonaktifkan kuota global lokasi',
+        '',
+        '0️⃣ Kembali ke Menu Admin',
+    ].join('\n');
+}
+
+async function buildGlobalLocationQuotaListText(): Promise<string> {
+    const lines: string[] = ['🌐 *DAFTAR KUOTA GLOBAL PER LOKASI (SEMUA USER/HARI)*', ''];
+    const locationKeys = listAllDharmajayaLocations();
+    const limits = await listGlobalLocationQuotaLimits(locationKeys);
+    const byLocation = new Map(limits.map(item => [item.locationKey, item]));
+
+    locationKeys.forEach((locationKey, index) => {
+        const locationLabel = locationKey.replace('DHARMAJAYA - ', '');
+        const item = byLocation.get(locationKey);
+        const value = item && item.enabled && item.limit !== null ? `${item.limit}` : 'OFF';
+        lines.push(`${index + 1}. ${locationLabel}: ${value}`);
+    });
+
+    lines.push('');
+    lines.push('Ketik *0* untuk kembali.');
+    return lines.join('\n');
+}
+
+function collectPendingOkItemsPerLocation(logJson: LogJson): Map<string, number> {
+    const pendingPerLocation = new Map<string, number>();
+    const okItems = (logJson?.items || []).filter((it: unknown) => {
+        if (!it || typeof it !== 'object') return false;
+        const data = it as Record<string, unknown>;
+        return data.status === 'OK';
+    });
+
+    okItems.forEach((it: unknown) => {
+        if (!it || typeof it !== 'object') return;
+        const data = it as Record<string, unknown>;
+        const parsed = data.parsed as Record<string, unknown> | undefined;
+        const lokasi = (parsed?.lokasi || '').toString().trim();
+        if (!lokasi) return;
+        pendingPerLocation.set(lokasi, (pendingPerLocation.get(lokasi) || 0) + 1);
+    });
+
+    return pendingPerLocation;
+}
+
+async function checkGlobalLocationQuotaBeforeSave(
+    logJson: LogJson,
+    messageId: string
+): Promise<{ allowed: boolean; message?: string; reservation?: GlobalLocationQuotaReservation }> {
+    const pendingPerLocation = collectPendingOkItemsPerLocation(logJson);
+    if (pendingPerLocation.size === 0) return { allowed: true };
+
+    const processingDayKey = (logJson?.processing_day_key || '').toString();
+    if (!processingDayKey) return { allowed: true };
+
+    const reserveResult = await reserveGlobalLocationQuota({
+        processingDayKey,
+        messageId,
+        pendingByLocation: pendingPerLocation,
+    });
+
+    if (!reserveResult.success) {
+        return {
+            allowed: false,
+            message: reserveResult.message || '⚠️ Kuota global lokasi sedang bermasalah. Silakan coba lagi beberapa saat.',
+        };
+    }
+
+    return {
+        allowed: true,
+        reservation: reserveResult.reservation,
+    };
+}
+
+async function releaseGlobalQuotaReservationIfNeeded(reservation?: GlobalLocationQuotaReservation): Promise<void> {
+    if (!reservation) return;
+    await releaseGlobalLocationQuotaReservation(reservation);
 }
 
 async function checkLocationQuotaBeforeSave(logJson: LogJson, senderPhone: string): Promise<{ allowed: boolean; message?: string }> {
@@ -1705,8 +1796,21 @@ export async function connectToWhatsApp() {
                             continue;
                         }
 
+                        const globalQuotaCheck = await checkGlobalLocationQuotaBeforeSave(
+                            logJsonToSave,
+                            msg.key.id || `${senderPhone}-${Date.now()}`
+                        );
+                        if (!globalQuotaCheck.allowed) {
+                            clearUnknownRegionConfirmationSession(senderPhone);
+                            await sock.sendMessage(remoteJid, {
+                                text: globalQuotaCheck.message || '⛔ Kuota global lokasi tercapai.',
+                            });
+                            continue;
+                        }
+
                         const saveResult = await saveLogAndOkItems(logJsonToSave, pendingUnknownRegionSession.originalText);
                         if (!saveResult.success) {
+                            await releaseGlobalQuotaReservationIfNeeded(globalQuotaCheck.reservation);
                             console.error('❌ Gagal simpan ke database (UNKNOWN REGION CONFIRM):', saveResult.dataError);
                             const errorMsg = buildDatabaseErrorMessage(saveResult.dataError, logJsonToSave);
                             await sock.sendMessage(remoteJid, { text: errorMsg });
@@ -1767,8 +1871,21 @@ export async function connectToWhatsApp() {
                             continue;
                         }
 
+                        const globalQuotaCheck = await checkGlobalLocationQuotaBeforeSave(
+                            logJsonToSave,
+                            msg.key.id || `${senderPhone}-${Date.now()}`
+                        );
+                        if (!globalQuotaCheck.allowed) {
+                            clearUnderageConfirmationSession(senderPhone);
+                            await sock.sendMessage(remoteJid, {
+                                text: globalQuotaCheck.message || '⛔ Kuota global lokasi tercapai.',
+                            });
+                            continue;
+                        }
+
                         const saveResult = await saveLogAndOkItems(logJsonToSave, pendingUnderageSession.originalText);
                         if (!saveResult.success) {
+                            await releaseGlobalQuotaReservationIfNeeded(globalQuotaCheck.reservation);
                             console.error('❌ Gagal simpan ke database (UNDERAGE CONFIRM):', saveResult.dataError);
                             const errorMsg = buildDatabaseErrorMessage(saveResult.dataError, logJsonToSave);
                             await sock.sendMessage(remoteJid, { text: errorMsg });
@@ -1978,9 +2095,21 @@ export async function connectToWhatsApp() {
                                 continue;
                             }
 
+                            const globalQuotaCheck = await checkGlobalLocationQuotaBeforeSave(
+                                logJson,
+                                msg.key.id || `${senderPhone}-${Date.now()}`
+                            );
+                            if (!globalQuotaCheck.allowed) {
+                                await sock.sendMessage(remoteJid, {
+                                    text: globalQuotaCheck.message || '⛔ Kuota global lokasi tercapai.',
+                                });
+                                continue;
+                            }
+
                             const saveResult = await saveLogAndOkItems(logJson, messageText);
 
                             if (!saveResult.success) {
+                                await releaseGlobalQuotaReservationIfNeeded(globalQuotaCheck.reservation);
                                 console.error('❌ Gagal simpan ke database:', saveResult.dataError);
                                 const errorMsg = buildDatabaseErrorMessage(saveResult.dataError, logJson);
                                 await sock.sendMessage(remoteJid, { text: errorMsg });
@@ -2303,8 +2432,21 @@ export async function connectToWhatsApp() {
                                     continue;
                                 }
 
+                                const globalQuotaCheck = await checkGlobalLocationQuotaBeforeSave(
+                                    logJson,
+                                    msg.key.id || `${senderPhone}-${Date.now()}`
+                                );
+                                if (!globalQuotaCheck.allowed) {
+                                    replyText = globalQuotaCheck.message || '⛔ Kuota global lokasi tercapai.';
+                                    userFlowByPhone.set(senderPhone, 'NONE');
+                                    pendingRegistrationData.delete(senderPhone);
+                                    if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
+                                    continue;
+                                }
+
                                 const saveResult = await saveLogAndOkItems(logJson, pendingData);
                                 if (!saveResult.success) {
+                                    await releaseGlobalQuotaReservationIfNeeded(globalQuotaCheck.reservation);
                                     console.error('❌ Gagal simpan ke database (PASARJAYA SUB):', saveResult.dataError);
                                     replyText = buildDatabaseErrorMessage(saveResult.dataError, logJson);
                                 } else {
@@ -2433,8 +2575,21 @@ export async function connectToWhatsApp() {
                                     continue;
                                 }
 
+                                const globalQuotaCheck = await checkGlobalLocationQuotaBeforeSave(
+                                    logJson,
+                                    msg.key.id || `${senderPhone}-${Date.now()}`
+                                );
+                                if (!globalQuotaCheck.allowed) {
+                                    replyText = globalQuotaCheck.message || '⛔ Kuota global lokasi tercapai.';
+                                    userFlowByPhone.set(senderPhone, 'NONE');
+                                    pendingRegistrationData.delete(senderPhone);
+                                    if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
+                                    continue;
+                                }
+
                                 const saveResult = await saveLogAndOkItems(logJson, pendingData);
                                 if (!saveResult.success) {
+                                    await releaseGlobalQuotaReservationIfNeeded(globalQuotaCheck.reservation);
                                     console.error('❌ Gagal simpan ke database (MANUAL LOCATION):', saveResult.dataError);
                                     replyText = buildDatabaseErrorMessage(saveResult.dataError, logJson);
                                 } else {
@@ -2536,8 +2691,21 @@ export async function connectToWhatsApp() {
                                     continue;
                                 }
 
+                                const globalQuotaCheck = await checkGlobalLocationQuotaBeforeSave(
+                                    logJson,
+                                    msg.key.id || `${senderPhone}-${Date.now()}`
+                                );
+                                if (!globalQuotaCheck.allowed) {
+                                    replyText = globalQuotaCheck.message || '⛔ Kuota global lokasi tercapai.';
+                                    userFlowByPhone.set(senderPhone, 'NONE');
+                                    pendingRegistrationData.delete(senderPhone);
+                                    if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
+                                    continue;
+                                }
+
                                 const saveResult = await saveLogAndOkItems(logJson, pendingData);
                                 if (!saveResult.success) {
+                                    await releaseGlobalQuotaReservationIfNeeded(globalQuotaCheck.reservation);
                                     console.error('❌ Gagal simpan ke database (DHARMAJAYA SUB):', saveResult.dataError);
                                     replyText = buildDatabaseErrorMessage(saveResult.dataError, logJson);
                                 } else {
@@ -3019,6 +3187,10 @@ export async function connectToWhatsApp() {
                             locationQuotaDraftByPhone.delete(senderPhone);
                             adminFlowByPhone.set(senderPhone, 'LOCATION_QUOTA_MENU');
                             replyText = buildLocationQuotaMenuText();
+                        } else if (normalized === '20') {
+                            globalLocationQuotaDraftByPhone.delete(senderPhone);
+                            adminFlowByPhone.set(senderPhone, 'GLOBAL_LOCATION_QUOTA_MENU');
+                            replyText = buildGlobalLocationQuotaMenuText();
                         } else replyText = '⚠️ Pilihan tidak dikenali.';
                     } else if (currentAdminFlow === 'SETTING_OPERATION_MENU') {
                         if (normalized === '0') {
@@ -4012,6 +4184,97 @@ export async function connectToWhatsApp() {
                                 const result = disableLocationQuotaLimit(locationKey);
                                 adminFlowByPhone.set(senderPhone, 'LOCATION_QUOTA_MENU');
                                 replyText = `${result.success ? '✅' : '❌'} ${result.message}\n\n${buildLocationQuotaMenuText()}`;
+                            }
+                        }
+                    } else if (currentAdminFlow === 'GLOBAL_LOCATION_QUOTA_MENU') {
+                        if (normalized === '0') {
+                            globalLocationQuotaDraftByPhone.delete(senderPhone);
+                            adminFlowByPhone.set(senderPhone, 'MENU');
+                            replyText = ADMIN_MENU_MESSAGE;
+                        } else if (normalized === '1') {
+                            globalLocationQuotaDraftByPhone.delete(senderPhone);
+                            adminFlowByPhone.set(senderPhone, 'GLOBAL_LOCATION_QUOTA_SET');
+                            replyText = [
+                                '✍️ *SET KUOTA GLOBAL PER LOKASI (SEMUA USER/HARI)*',
+                                '',
+                                'Ketik format: *nomor lokasi batas*',
+                                'Contoh: *2 220* (Kapuk Jagal = 220 data total/hari)',
+                                '',
+                                'Daftar lokasi:',
+                                ...listAllDharmajayaLocations().map((loc, idx) => `${idx + 1}. ${loc.replace('DHARMAJAYA - ', '')}`),
+                                '',
+                                '_Ketik 0 untuk kembali._'
+                            ].join('\n');
+                        } else if (normalized === '2') {
+                            replyText = `${await buildGlobalLocationQuotaListText()}\n\n${buildGlobalLocationQuotaMenuText()}`;
+                        } else if (normalized === '3') {
+                            globalLocationQuotaDraftByPhone.delete(senderPhone);
+                            adminFlowByPhone.set(senderPhone, 'GLOBAL_LOCATION_QUOTA_DISABLE');
+                            replyText = [
+                                '📴 *NONAKTIFKAN KUOTA GLOBAL LOKASI*',
+                                '',
+                                'Ketik nomor lokasi yang ingin dinonaktifkan.',
+                                '',
+                                ...listAllDharmajayaLocations().map((loc, idx) => `${idx + 1}. ${loc.replace('DHARMAJAYA - ', '')}`),
+                                '',
+                                '_Ketik 0 untuk kembali._'
+                            ].join('\n');
+                        } else {
+                            replyText = '⚠️ Pilihan tidak dikenali. Ketik 1, 2, 3, atau 0.';
+                        }
+                    } else if (currentAdminFlow === 'GLOBAL_LOCATION_QUOTA_SET') {
+                        if (normalized === '0') {
+                            globalLocationQuotaDraftByPhone.delete(senderPhone);
+                            adminFlowByPhone.set(senderPhone, 'GLOBAL_LOCATION_QUOTA_MENU');
+                            replyText = buildGlobalLocationQuotaMenuText();
+                        } else {
+                            const draft = globalLocationQuotaDraftByPhone.get(senderPhone);
+                            const parts = rawTrim.replace('|', ' ').split(/\s+/).filter(Boolean);
+
+                            let locationChoice = parts[0] || '';
+                            let limitPart = parts[1] || '';
+
+                            if (draft?.locationKey && parts.length === 1) {
+                                locationChoice = '';
+                                limitPart = parts[0];
+                            }
+
+                            if (!draft?.locationKey && !limitPart) {
+                                const locationKey = resolveDharmajayaLocationByChoice(locationChoice);
+                                if (!locationKey) {
+                                    replyText = '⚠️ Nomor lokasi tidak valid. Pilih 1-4.';
+                                } else {
+                                    globalLocationQuotaDraftByPhone.set(senderPhone, { locationKey });
+                                    replyText = `Lokasi *${locationKey.replace('DHARMAJAYA - ', '')}* dipilih.\nSekarang ketik batas globalnya (contoh: *220*).`;
+                                }
+                            } else {
+                                const locationKey = draft?.locationKey || resolveDharmajayaLocationByChoice(locationChoice);
+                                const limit = Number(limitPart);
+
+                                if (!locationKey) {
+                                    replyText = '⚠️ Nomor lokasi tidak valid. Pilih 1-4.';
+                                } else if (!Number.isInteger(limit) || limit < 0) {
+                                    replyText = '⚠️ Batas harus angka bulat minimal 0.';
+                                } else {
+                                    const result = await setGlobalLocationQuotaLimit(locationKey, limit);
+                                    globalLocationQuotaDraftByPhone.delete(senderPhone);
+                                    adminFlowByPhone.set(senderPhone, 'GLOBAL_LOCATION_QUOTA_MENU');
+                                    replyText = `${result.success ? '✅' : '❌'} ${result.message}\n\n${buildGlobalLocationQuotaMenuText()}`;
+                                }
+                            }
+                        }
+                    } else if (currentAdminFlow === 'GLOBAL_LOCATION_QUOTA_DISABLE') {
+                        if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'GLOBAL_LOCATION_QUOTA_MENU');
+                            replyText = buildGlobalLocationQuotaMenuText();
+                        } else {
+                            const locationKey = resolveDharmajayaLocationByChoice(normalized);
+                            if (!locationKey) {
+                                replyText = '⚠️ Nomor lokasi tidak valid. Pilih 1-4.';
+                            } else {
+                                const result = await disableGlobalLocationQuotaLimit(locationKey);
+                                adminFlowByPhone.set(senderPhone, 'GLOBAL_LOCATION_QUOTA_MENU');
+                                replyText = `${result.success ? '✅' : '❌'} ${result.message}\n\n${buildGlobalLocationQuotaMenuText()}`;
                             }
                         }
                     } else if (currentAdminFlow === 'BROADCAST_SELECT') {
@@ -5222,9 +5485,20 @@ export async function connectToWhatsApp() {
                                     continue;
                                 }
 
+                                const globalQuotaCheck = await checkGlobalLocationQuotaBeforeSave(
+                                    logJson,
+                                    msg.key.id || `${senderPhone}-${Date.now()}`
+                                );
+                                if (!globalQuotaCheck.allowed) {
+                                    replyText = globalQuotaCheck.message || '⛔ Kuota global lokasi tercapai.';
+                                    if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
+                                    continue;
+                                }
+
                                 const saveResult = await saveLogAndOkItems(logJson, messageText);
 
                                 if (!saveResult.success) {
+                                    await releaseGlobalQuotaReservationIfNeeded(globalQuotaCheck.reservation);
                                     console.error('❌ Gagal simpan ke database (AUTO-DETECT):', saveResult.dataError);
                                     replyText = buildDatabaseErrorMessage(saveResult.dataError, logJson);
                                 } else {
