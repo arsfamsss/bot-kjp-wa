@@ -670,12 +670,10 @@ export async function reserveGlobalLocationQuota(input: {
 
     const denied = decisions.find(item => !item.allowed);
     if (denied) {
-        const limitText = denied.limit_value !== null ? denied.limit_value : '-';
+        const locationLabel = denied.location_key.replace(/^DHARMAJAYA\s*-\s*/i, '').trim() || denied.location_key;
         const blockedMessage =
-            `❌ Lokasi *${denied.location_key}* sudah mencapai kuota global harian.\n` +
-            `- Batas global: *${limitText}*\n` +
-            `- Sudah terpakai: *${denied.used_before}*\n` +
-            `- Data masuk di pesan ini: *${denied.requested_count}*`;
+            `⛔ Maaf, kuota pendaftaran untuk lokasi *${locationLabel}* hari ini sudah penuh. ` +
+            'Silakan pilih lokasi lain atau coba lagi besok.';
 
         return {
             success: false,
