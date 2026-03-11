@@ -1402,16 +1402,13 @@ export async function connectToWhatsApp() {
                                     '_(Ketik 0 untuk batal)_'
                                 ].join('\n');
                             } else {
+                                const dharmajayaMenu = await buildDharmajayaMenuWithStatus();
                                 replyText = [
                                     '📍 *EDIT LOKASI PENGAMBILAN*',
                                     '',
-                                    '*1.* Duri Kosambi',
-                                    '*2.* Kapuk Jagal',
-                                    '*3.* Pulogadung',
-                                    '*4.* Cakung',
+                                    dharmajayaMenu,
                                     '',
-                                    'Ketik angka lokasi baru:',
-                                    '_(Ketik 0 untuk batal)_'
+                                    'Ketik angka lokasi baru:'
                                 ].join('\n');
                             }
                         } else if (fieldKey) {
@@ -1665,6 +1662,26 @@ export async function connectToWhatsApp() {
                             const mapping = isPasarjaya ? PASARJAYA_MAPPING : DHARMAJAYA_MAPPING;
                             if (mapping[normalized]) {
                                 const lokasiName = mapping[normalized];
+
+                                if (!isPasarjaya) {
+                                    const locationStatus = await isSpecificLocationClosed('DHARMAJAYA', lokasiName);
+                                    if (locationStatus.closed) {
+                                        const statusReason = locationStatus.reason ? `\nAlasan: ${locationStatus.reason}` : '';
+                                        const dharmajayaMenu = await buildDharmajayaMenuWithStatus();
+                                        replyText = [
+                                            `⛔ Lokasi *${lokasiName}* sedang tidak tersedia.${statusReason}`,
+                                            '',
+                                            'Silakan pilih lokasi DHARMAJAYA lain:',
+                                            '',
+                                            dharmajayaMenu,
+                                        ].join('\n');
+                                        if (replyText) {
+                                            await sock.sendMessage(remoteJid, { text: replyText });
+                                            continue;
+                                        }
+                                    }
+                                }
+
                                 const prefix = isPasarjaya ? 'PASARJAYA' : 'DHARMAJAYA';
                                 session.newValue = `${prefix} - ${lokasiName}`;
                                 session.selectedFieldKey = 'lokasi';
