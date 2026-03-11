@@ -206,14 +206,6 @@ export async function checkDuplicatesBatch(
         }
     }
 
-    const formatDataRingkas = (data: { nama?: string; no_kjp?: string; no_ktp?: string; no_kk?: string } | null | undefined): string => {
-        const nama = (data?.nama || '-').toString().toUpperCase();
-        const noKjp = (data?.no_kjp || '-').toString();
-        const noKtp = (data?.no_ktp || '-').toString();
-        const noKk = (data?.no_kk || '-').toString();
-        return `Nama: ${nama} | Kartu: ${noKjp} | KTP: ${noKtp} | KK: ${noKk}`;
-    };
-
     // PROCESS CHECKING IN-MEMORY
     return items.map(item => {
         if (item.status !== 'OK') return item;
@@ -300,7 +292,13 @@ export async function checkDuplicatesBatch(
         const info: DuplicateInfo = {
             kind: 'NAME',
             processing_day_key: processingDayKey,
-            safe_message: `Nama mirip/sama sudah pernah Ibu/Bapak kirim hari ini: ${formatDataRingkas(sameSenderNameHit)}.`,
+            safe_message: [
+                '❌ *Data belum bisa diproses*',
+                'Nama ini sudah pernah dikirim hari ini 🙏',
+                'Biar bisa lanjut, coba:',
+                '- ganti nama lain, atau',
+                '- tambahin angka di belakang nama (contoh: *Budi 2*)',
+            ].join('\n'),
             first_seen_at: null,
             first_seen_wib_time: null,
             original_data: {
@@ -794,7 +792,7 @@ export async function reconcileGlobalLocationQuotaDay(
 
     try {
         const { error } = await supabase.rpc('reconcile_global_location_quota_day', {
-            p_processing_day_key: processingDayKey,
+            p_proc_day: processingDayKey,
             p_location_prefix: locationPrefix,
         });
 
