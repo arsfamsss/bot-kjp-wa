@@ -437,37 +437,20 @@ async function applyGlobalQuotaUsageDeltas(deltas: GlobalQuotaUsageDelta[]): Pro
 
     for (const item of grouped) {
         try {
-            const { data: existing, error: selectError } = await supabase
-                .from('location_global_quota_usage')
-                .select('used_count')
-                .eq('processing_day_key', item.processingDayKey)
-                .eq('location_key', item.locationKey)
-                .maybeSingle();
+            const { error } = await supabase.rpc('apply_global_location_quota_delta', {
+                p_processing_day_key: item.processingDayKey,
+                p_location_key: item.locationKey,
+                p_delta: item.delta,
+            });
 
-            if (selectError) {
-                if (!isMissingTableError(selectError, 'location_global_quota_usage')) {
-                    console.error('Error read quota usage before delta apply:', selectError);
+            if (error) {
+                if (
+                    isMissingTableError(error, 'location_global_quota_usage') ||
+                    (error.code === '42883' && (error.message || '').includes('apply_global_location_quota_delta'))
+                ) {
+                    continue;
                 }
-                continue;
-            }
-
-            const currentUsed = typeof (existing as { used_count?: unknown } | null)?.used_count === 'number'
-                ? (existing as { used_count: number }).used_count
-                : 0;
-            const nextUsed = Math.max(0, currentUsed + item.delta);
-
-            const payload = {
-                processing_day_key: item.processingDayKey,
-                location_key: item.locationKey,
-                used_count: nextUsed,
-            };
-
-            const { error: upsertError } = await supabase
-                .from('location_global_quota_usage')
-                .upsert(payload, { onConflict: 'processing_day_key,location_key' });
-
-            if (upsertError && !isMissingTableError(upsertError, 'location_global_quota_usage')) {
-                console.error('Error apply quota usage delta:', upsertError);
+                console.error('Error apply quota usage delta via RPC:', error);
             }
         } catch (error) {
             console.error('Exception applyGlobalQuotaUsageDeltas:', error);
