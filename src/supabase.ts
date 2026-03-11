@@ -782,6 +782,38 @@ export async function releaseGlobalLocationQuotaReservation(
     return true;
 }
 
+/**
+ * Reconcile: Hitung ulang used_count dari data aktual di data_harian.
+ * Gunakan setelah admin delete atau secara periodik untuk memperbaiki drift.
+ */
+export async function reconcileGlobalLocationQuotaDay(
+    processingDayKey: string,
+    locationPrefix: string = 'DHARMAJAYA - '
+): Promise<void> {
+    if (!processingDayKey) return;
+
+    try {
+        const { error } = await supabase.rpc('reconcile_global_location_quota_day', {
+            p_processing_day_key: processingDayKey,
+            p_location_prefix: locationPrefix,
+        });
+
+        if (error) {
+            if (
+                isMissingTableError(error, 'location_global_quota_usage') ||
+                (error.code === '42883' && (error.message || '').includes('reconcile_global_location_quota_day'))
+            ) {
+                return; // Fitur belum siap, skip
+            }
+            console.error('Error reconcileGlobalLocationQuotaDay:', error);
+        } else {
+            console.log(`🔄 Quota reconciled for day: ${processingDayKey}`);
+        }
+    } catch (err) {
+        console.error('Exception reconcileGlobalLocationQuotaDay:', err);
+    }
+}
+
 function isMissingTableError(error: unknown, tableName: string): boolean {
     if (!error || typeof error !== 'object') return false;
 
@@ -1271,14 +1303,9 @@ export async function saveLogAndOkItems(log: LogJson, rawText: string): Promise<
             console.error('❌ Error insert data_harian:', dataError);
         } else {
             console.log(`✅ Berhasil simpan ${rows.length} item OK ke data_harian.`);
-            const usageDeltas = rows
-                .filter((row) => row.lokasi)
-                .map((row) => ({
-                    processingDayKey: (row.processing_day_key || '').toString(),
-                    locationKey: (row.lokasi || '').toString(),
-                    delta: 1,
-                }));
-            await applyGlobalQuotaUsageDeltas(usageDeltas);
+            // CATATAN: Tidak perlu applyGlobalQuotaUsageDeltas(+1) di sini.
+            // reserve_global_location_quota RPC sudah menaikkan used_count saat reservasi.
+            // Double-counting (reserve + delta) adalah penyebab desync kuota.
         }
         return {
             error: dataError,

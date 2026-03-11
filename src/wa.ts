@@ -73,6 +73,7 @@ import {
     listGlobalLocationQuotaLimits,
     reserveGlobalLocationQuota,
     releaseGlobalLocationQuotaReservation,
+    reconcileGlobalLocationQuotaDay,
     type GlobalLocationQuotaReservation,
 } from './supabase';
 import { getProcessingDayKey, getWibIsoDate, shiftIsoDate, isSystemClosed, getWibParts } from './time';
@@ -4565,12 +4566,19 @@ export async function connectToWhatsApp() {
                                 replyText = '❌ Cache data hilang. Ulangi dari menu admin.';
                                 adminFlowByPhone.set(senderPhone, 'MENU');
                             } else {
-                                // Eksekusi Delete Loop untuk semua item
+                                // Eksekusi Delete Loop untuk semua item (FIX: query lokasi & sesuaikan kuota)
                                 let successCount = 0;
                                 const deletedNames: string[] = [];
 
                                 for (const target of dataList) {
                                     const dataId = target.phone_number;
+                                    // Query lokasi sebelum delete untuk penyesuaian kuota
+                                    const { data: rowData } = await supabase
+                                        .from('data_harian')
+                                        .select('lokasi, processing_day_key')
+                                        .eq('id', dataId)
+                                        .maybeSingle();
+
                                     const { error } = await supabase
                                         .from('data_harian')
                                         .delete()
@@ -4579,11 +4587,23 @@ export async function connectToWhatsApp() {
                                     if (!error) {
                                         successCount++;
                                         deletedNames.push(target.push_name || 'Data User');
+                                        // Sesuaikan kuota global setelah hapus
+                                        if (rowData?.lokasi && rowData?.processing_day_key) {
+                                            await supabase.rpc('apply_global_location_quota_delta', {
+                                                p_processing_day_key: rowData.processing_day_key,
+                                                p_location_key: rowData.lokasi,
+                                                p_delta: -1,
+                                            }).then(({ error: rpcErr }) => {
+                                                if (rpcErr) console.error('Quota delta error (admin delete ALL):', rpcErr);
+                                            });
+                                        }
                                     }
                                 }
 
                                 if (successCount > 0) {
                                     replyText = `✅ Berhasil menghapus SEMUA (${successCount}) data milik user ini.`;
+                                    // Reconcile kuota sebagai safety net
+                                    reconcileGlobalLocationQuotaDay(processingDayKey).catch(console.error);
                                 } else {
                                     replyText = '❌ Gagal menghapus data.';
                                 }
@@ -4616,6 +4636,13 @@ export async function connectToWhatsApp() {
                                         const target = dataList[idx - 1];
                                         if (target) {
                                             const dataId = target.phone_number; // ID disimpan di phone_number
+                                            // Query lokasi sebelum delete untuk penyesuaian kuota
+                                            const { data: rowData } = await supabase
+                                                .from('data_harian')
+                                                .select('lokasi, processing_day_key')
+                                                .eq('id', dataId)
+                                                .maybeSingle();
+
                                             const { error } = await supabase
                                                 .from('data_harian')
                                                 .delete()
@@ -4624,12 +4651,24 @@ export async function connectToWhatsApp() {
                                             if (!error) {
                                                 successCount++;
                                                 deletedNames.push(target.push_name || `Data ${idx}`);
+                                                // Sesuaikan kuota global setelah hapus
+                                                if (rowData?.lokasi && rowData?.processing_day_key) {
+                                                    await supabase.rpc('apply_global_location_quota_delta', {
+                                                        p_processing_day_key: rowData.processing_day_key,
+                                                        p_location_key: rowData.lokasi,
+                                                        p_delta: -1,
+                                                    }).then(({ error: rpcErr }) => {
+                                                        if (rpcErr) console.error('Quota delta error (admin delete idx):', rpcErr);
+                                                    });
+                                                }
                                             }
                                         }
                                     }
 
                                     if (successCount > 0) {
                                         replyText = `✅ Berhasil menghapus ${successCount} data:\n- ${deletedNames.join('\n- ')}`;
+                                        // Reconcile kuota sebagai safety net
+                                        reconcileGlobalLocationQuotaDay(processingDayKey).catch(console.error);
                                     } else {
                                         // JIKA 0 DATA TERHAPUS: Berarti gagal karena izin (RLS) atau data sudah hilang
                                         replyText = '❌ Gagal menghapus.\n\nKemungkinan penyebab:\n1. Izin database (RLS) memblokir bot.\n2. Data sudah dihapus sebelumnya.\n\n(Pastikan SERVICE_KEY sudah dipasang)';
