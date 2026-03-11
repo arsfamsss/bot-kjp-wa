@@ -221,6 +221,45 @@ function buildMessageIdempotencyKey(senderPhone: string, processingDayKey: strin
     return `${senderPhone}|${processingDayKey}|${messageId}`;
 }
 
+async function buildSelectLocationFirstPromptText(): Promise<string> {
+    const options = await Promise.all(
+        Object.entries(DHARMAJAYA_MAPPING).map(async ([idx, name]) => {
+            const status = await isSpecificLocationClosed('DHARMAJAYA', name);
+            return {
+                idx,
+                name,
+                available: !status.closed,
+            };
+        })
+    );
+
+    const availableSubLocations = options
+        .filter((item) => item.available)
+        .map((item) => `   ${item.idx}. ${item.name}`);
+
+    const availableSection = availableSubLocations.length > 0
+        ? availableSubLocations.join('\n')
+        : '   - Saat ini semua sub-lokasi DHARMAJAYA sedang FULL.';
+
+    return [
+        '⚠️ *Mohon Pilih Lokasi Dulu*',
+        '',
+        'Data Anda sudah valid, tapi lokasi pengambilan belum dipilih.',
+        'Silakan pilih lokasi dulu agar data bisa diproses.',
+        '',
+        'Saat ini yang tersedia: *2. DHARMAJAYA*',
+        '',
+        '*Sub-lokasi yang masih tersedia:*',
+        availableSection,
+        '',
+        'Balas bertahap:',
+        '1) Ketik *2* untuk pilih DHARMAJAYA',
+        '2) Lalu ketik angka sub-lokasi (1-4) sesuai daftar di atas',
+        '',
+        '_Ketik 0 untuk batal._',
+    ].join('\n');
+}
+
 function formatOperationStatus(settings: {
     close_hour_start: number;
     close_minute_start: number;
@@ -1961,9 +2000,11 @@ export async function connectToWhatsApp() {
                         // SIMPAN DATA SEMENTARA
                         pendingRegistrationData.set(senderPhone, messageText);
 
+                        const locationPromptText = await buildSelectLocationFirstPromptText();
+
                         // Minta pilih lokasi (Format Lama) tapi nanti 1 akan trigger menu baru
                         await sock.sendMessage(remoteJid, {
-                            text: `⚠️ *Mohon Pilih Lokasi Dulu*\n\nData Anda sepertinya valid, tapi saya perlu tahu Anda mau ambil sembako di mana?\n\nSaat ini yang tersedia: *2. DHARMAJAYA*\n\n_Ketik 0 untuk batal._`
+                            text: locationPromptText
                         });
                         userFlowByPhone.set(senderPhone, 'SELECT_LOCATION');
                         return; // Selesai
@@ -5326,9 +5367,10 @@ export async function connectToWhatsApp() {
                             userFlowByPhone.set(senderPhone, 'SELECT_LOCATION');
                             continue;
                         }
+                        const locationPromptText = await buildSelectLocationFirstPromptText();
                         // Tolak halus dan minta pilih lokasi
                         await sock.sendMessage(remoteJid, {
-                            text: `⚠️ *Mohon Pilih Lokasi Dulu*\n\nData Anda sepertinya valid, tapi saya perlu tahu Anda mau ambil sembako di mana?\n\nSaat ini yang tersedia: *2. DHARMAJAYA*`
+                            text: locationPromptText
                         });
                         userFlowByPhone.set(senderPhone, 'SELECT_LOCATION');
                         // Jangan continue, biarkan logic bawah skip karena if (lines.length >= minLines) akan kita guard

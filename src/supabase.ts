@@ -402,6 +402,79 @@ function normalizeLocationKey(raw: string): string {
     return (raw || '').trim().replace(/\s+/g, ' ');
 }
 
+type GlobalQuotaUsageDelta = {
+    processingDayKey: string;
+    locationKey: string;
+    delta: number;
+};
+
+function groupGlobalQuotaUsageDeltas(deltas: GlobalQuotaUsageDelta[]): GlobalQuotaUsageDelta[] {
+    const grouped = new Map<string, number>();
+
+    for (const item of deltas) {
+        const dayKey = (item.processingDayKey || '').trim();
+        const locationKey = normalizeLocationKey(item.locationKey || '');
+        const delta = Number(item.delta) || 0;
+        if (!dayKey || !locationKey || delta === 0) continue;
+
+        const key = `${dayKey}||${locationKey}`;
+        grouped.set(key, (grouped.get(key) || 0) + delta);
+    }
+
+    const result: GlobalQuotaUsageDelta[] = [];
+    grouped.forEach((delta, key) => {
+        if (delta === 0) return;
+        const [processingDayKey, locationKey] = key.split('||');
+        result.push({ processingDayKey, locationKey, delta });
+    });
+
+    return result;
+}
+
+async function applyGlobalQuotaUsageDeltas(deltas: GlobalQuotaUsageDelta[]): Promise<void> {
+    const grouped = groupGlobalQuotaUsageDeltas(deltas);
+    if (grouped.length === 0) return;
+
+    for (const item of grouped) {
+        try {
+            const { data: existing, error: selectError } = await supabase
+                .from('location_global_quota_usage')
+                .select('used_count')
+                .eq('processing_day_key', item.processingDayKey)
+                .eq('location_key', item.locationKey)
+                .maybeSingle();
+
+            if (selectError) {
+                if (!isMissingTableError(selectError, 'location_global_quota_usage')) {
+                    console.error('Error read quota usage before delta apply:', selectError);
+                }
+                continue;
+            }
+
+            const currentUsed = typeof (existing as { used_count?: unknown } | null)?.used_count === 'number'
+                ? (existing as { used_count: number }).used_count
+                : 0;
+            const nextUsed = Math.max(0, currentUsed + item.delta);
+
+            const payload = {
+                processing_day_key: item.processingDayKey,
+                location_key: item.locationKey,
+                used_count: nextUsed,
+            };
+
+            const { error: upsertError } = await supabase
+                .from('location_global_quota_usage')
+                .upsert(payload, { onConflict: 'processing_day_key,location_key' });
+
+            if (upsertError && !isMissingTableError(upsertError, 'location_global_quota_usage')) {
+                console.error('Error apply quota usage delta:', upsertError);
+            }
+        } catch (error) {
+            console.error('Exception applyGlobalQuotaUsageDeltas:', error);
+        }
+    }
+}
+
 export async function getTotalDataTodayForSenderByLocation(
     senderPhone: string,
     processingDayKey: string,
@@ -1183,9 +1256,11 @@ export async function saveLogAndOkItems(log: LogJson, rawText: string): Promise<
     }
 
     // Fungsi helper untuk insert data harian
-    async function insertData(): Promise<any> {
+    async function insertData(): Promise<{ error: any; insertedRows: number; usageDeltas: GlobalQuotaUsageDelta[] }> {
         const okItems = log.items.filter((it) => it.status === 'OK');
-        if (okItems.length === 0) return null; // No data to insert, not an error
+        if (okItems.length === 0) {
+            return { error: null, insertedRows: 0, usageDeltas: [] };
+        }
 
         const rows = okItems.map((it) => ({
             tanggal: log.tanggal,
@@ -1213,8 +1288,20 @@ export async function saveLogAndOkItems(log: LogJson, rawText: string): Promise<
             console.error('❌ Error insert data_harian:', dataError);
         } else {
             console.log(`✅ Berhasil simpan ${rows.length} item OK ke data_harian.`);
+            const usageDeltas = rows
+                .filter((row) => row.lokasi)
+                .map((row) => ({
+                    processingDayKey: (row.processing_day_key || '').toString(),
+                    locationKey: (row.lokasi || '').toString(),
+                    delta: 1,
+                }));
+            await applyGlobalQuotaUsageDeltas(usageDeltas);
         }
-        return dataError;
+        return {
+            error: dataError,
+            insertedRows: rows.length,
+            usageDeltas: [],
+        };
     }
 
     // PARALLEL INSERT: Log dan Data Harian berbarengan dengan proper error capture
@@ -1224,7 +1311,7 @@ export async function saveLogAndOkItems(log: LogJson, rawText: string): Promise<
     ]);
 
     // Return status - only consider failure if data insert failed (log error is less critical)
-    const success = dataErrorResult === null;
+    const success = dataErrorResult?.error === null;
 
     // DEBUG LOG: Pastikan status success benar
     if (!success) {
@@ -1233,7 +1320,7 @@ export async function saveLogAndOkItems(log: LogJson, rawText: string): Promise<
 
     return {
         success,
-        dataError: dataErrorResult,
+        dataError: dataErrorResult?.error,
         logError: logErrorResult
     };
 }
@@ -1251,17 +1338,43 @@ export async function deleteDataByNameOrCard(
         // Jika user mengirim nomor (ada digit minimal 4), kita asumsi cari nomor
         // (minimal 4 digit untuk menghindari salah hapus data pendek 123)
         if (digits.length >= 4) {
+            const { data: candidates, error: selectError } = await supabase
+                .from('data_harian')
+                .select('id, lokasi')
+                .eq('processing_day_key', processingDayKey)
+                .eq('sender_phone', senderPhone)
+                .or(`no_kjp.eq.${digits},no_ktp.eq.${digits},no_kk.eq.${digits}`);
+
+            if (selectError) {
+                console.error('Error select data by number before delete:', selectError);
+                return { success: false, count: 0, mode: 'number', error: selectError };
+            }
+
+            const rows = (candidates || []) as Array<{ id: number; lokasi?: string | null }>;
+            const idsToDelete = rows.map((row) => row.id);
+            if (idsToDelete.length === 0) {
+                return { success: true, count: 0, mode: 'number', error: null };
+            }
+
             const { count, error } = await supabase
                 .from('data_harian')
                 .delete({ count: 'exact' })
-                .eq('processing_day_key', processingDayKey) // Pastikan hari yg sama
-                .eq('sender_phone', senderPhone)            // Pastikan milik dia
-                .or(`no_kjp.eq.${digits},no_ktp.eq.${digits},no_kk.eq.${digits}`);
+                .in('id', idsToDelete);
 
             if (error) {
                 console.error('Error delete data by number:', error);
                 return { success: false, count: 0, mode: 'number', error };
             }
+
+            await applyGlobalQuotaUsageDeltas(
+                rows
+                    .filter((row) => row.lokasi)
+                    .map((row) => ({
+                        processingDayKey,
+                        locationKey: (row.lokasi || '').toString(),
+                        delta: -1,
+                    }))
+            );
 
             return { success: true, count: count ?? 0, mode: 'number', error: null };
         }
@@ -1272,17 +1385,43 @@ export async function deleteDataByNameOrCard(
 
         const norm = nameQ.trim().toUpperCase();
 
-        const { count, error } = await supabase
+        const { data: candidates, error: selectError } = await supabase
             .from('data_harian')
-            .delete({ count: 'exact' })
+            .select('id, lokasi')
             .eq('processing_day_key', processingDayKey)
             .eq('sender_phone', senderPhone)
             .ilike('nama', `%${norm}%`);
+
+        if (selectError) {
+            console.error('Error select data by name before delete:', selectError);
+            return { success: false, count: 0, mode: 'name', error: selectError };
+        }
+
+        const rows = (candidates || []) as Array<{ id: number; lokasi?: string | null }>;
+        const idsToDelete = rows.map((row) => row.id);
+        if (idsToDelete.length === 0) {
+            return { success: true, count: 0, mode: 'name', error: null };
+        }
+
+        const { count, error } = await supabase
+            .from('data_harian')
+            .delete({ count: 'exact' })
+            .in('id', idsToDelete);
 
         if (error) {
             console.error('Error delete data by name:', error);
             return { success: false, count: 0, mode: 'name', error };
         }
+
+        await applyGlobalQuotaUsageDeltas(
+            rows
+                .filter((row) => row.lokasi)
+                .map((row) => ({
+                    processingDayKey,
+                    locationKey: (row.lokasi || '').toString(),
+                    delta: -1,
+                }))
+        );
 
         return { success: true, count: count ?? 0, mode: 'name', error: null };
     } catch (error) {
@@ -1299,7 +1438,7 @@ export async function deleteDailyDataByIndex(
     // 1. Ambil data dengan urutan yang SAMA PERSIS dengan REKAP
     const { data, error } = await supabase
         .from('data_harian')
-        .select('id, nama')
+        .select('id, nama, lokasi')
         .eq('processing_day_key', processingDayKey)
         .eq('sender_phone', senderPhone)
         .order('nama', { ascending: true }) // HARUS SAMA dengan urutan tampilan HAPUS menu (A-Z)
@@ -1320,6 +1459,12 @@ export async function deleteDailyDataByIndex(
 
     if (delError) return { success: false };
 
+    await applyGlobalQuotaUsageDeltas(
+        item.lokasi
+            ? [{ processingDayKey, locationKey: (item.lokasi || '').toString(), delta: -1 }]
+            : []
+    );
+
     return { success: true, deletedName: item.nama };
 }
 
@@ -1331,7 +1476,7 @@ export async function deleteDailyDataByIndices(
     // 1. Ambil data untuk mapping index ke ID
     const { data, error } = await supabase
         .from('data_harian')
-        .select('id, nama') // Fetch Nama too
+        .select('id, nama, lokasi')
         .eq('processing_day_key', processingDayKey)
         .eq('sender_phone', senderPhone)
         .order('nama', { ascending: true }) // HARUS SAMA dengan urutan tampilan HAPUS menu (A-Z)
@@ -1360,6 +1505,18 @@ export async function deleteDailyDataByIndices(
 
     if (delError) return { success: false, deletedCount: 0, deletedNames: [] };
 
+    await applyGlobalQuotaUsageDeltas(
+        indices
+            .filter((idx) => idx > 0 && idx <= data.length)
+            .map((idx) => data[idx - 1])
+            .filter((row) => row?.lokasi)
+            .map((row) => ({
+                processingDayKey,
+                locationKey: (row.lokasi || '').toString(),
+                delta: -1,
+            }))
+    );
+
     return { success: true, deletedCount: count ?? 0, deletedNames: namesToDelete };
 }
 
@@ -1370,7 +1527,7 @@ export async function deleteAllDailyDataForSender(
     // 1. Ambil nama dulu sebelum hapus
     const { data } = await supabase
         .from('data_harian')
-        .select('nama')
+        .select('nama, lokasi')
         .eq('processing_day_key', processingDayKey)
         .eq('sender_phone', senderPhone);
 
@@ -1384,6 +1541,17 @@ export async function deleteAllDailyDataForSender(
         .eq('sender_phone', senderPhone);
 
     if (error) return { success: false, deletedCount: 0, deletedNames: [] };
+
+    await applyGlobalQuotaUsageDeltas(
+        (data || [])
+            .filter((row: any) => row?.lokasi)
+            .map((row: any) => ({
+                processingDayKey,
+                locationKey: (row.lokasi || '').toString(),
+                delta: -1,
+            }))
+    );
+
     return { success: true, deletedCount: count ?? 0, deletedNames: names };
 }
 // --- HAPUS DATA TERAKHIR (UNTUK FITUR BATAL/UNDO) ---
@@ -1396,7 +1564,7 @@ export async function deleteLastSubmission(
         // Ambil data terakhir yang dikirim user hari ini
         const { data, error: selectError } = await supabase
             .from('data_harian')
-            .select('id, nama, received_at')
+            .select('id, nama, received_at, lokasi')
             .eq('processing_day_key', processingDayKey)
             .eq('sender_phone', senderPhone)
             .order('received_at', { ascending: false })
@@ -1446,6 +1614,16 @@ export async function deleteLastSubmission(
             console.error('Error delete last submission:', deleteError);
             return { success: false, count: 0, names: [] };
         }
+
+        await applyGlobalQuotaUsageDeltas(
+            batchData
+                .filter((row: any) => row?.lokasi)
+                .map((row: any) => ({
+                    processingDayKey,
+                    locationKey: (row.lokasi || '').toString(),
+                    delta: -1,
+                }))
+        );
 
         return { success: true, count: count ?? batchData.length, names: namesToDelete };
     } catch (error) {
@@ -1549,9 +1727,10 @@ export async function clearAllDatabase(): Promise<boolean> {
     try {
         const { error: errLog } = await supabase.from('log_pesan_wa').delete().neq('id', -1);
         const { error: errData } = await supabase.from('data_harian').delete().neq('id', -1);
+        const { error: errUsage } = await supabase.from('location_global_quota_usage').delete().neq('id', -1);
 
-        if (errLog || errData) {
-            console.error('Gagal reset DB:', errLog, errData);
+        if (errLog || errData || (errUsage && !isMissingTableError(errUsage, 'location_global_quota_usage'))) {
+            console.error('Gagal reset DB:', errLog, errData, errUsage);
             return false;
         }
         return true;
@@ -1566,9 +1745,10 @@ export async function clearDatabaseForProcessingDayKey(processingDayKey: string)
     try {
         const { error: errLog } = await supabase.from('log_pesan_wa').delete().eq('processing_day_key', processingDayKey);
         const { error: errData } = await supabase.from('data_harian').delete().eq('processing_day_key', processingDayKey);
+        const { error: errUsage } = await supabase.from('location_global_quota_usage').delete().eq('processing_day_key', processingDayKey);
 
-        if (errLog || errData) {
-            console.error('Gagal reset harian:', errLog, errData);
+        if (errLog || errData || (errUsage && !isMissingTableError(errUsage, 'location_global_quota_usage'))) {
+            console.error('Gagal reset harian:', errLog, errData, errUsage);
             return false;
         }
 
@@ -1921,6 +2101,29 @@ export async function updateDailyDataField(
     value: string
 ): Promise<{ success: boolean; error: any }> {
     try {
+        let previousLocation: string | null = null;
+        let processingDayKey: string | null = null;
+
+        if (field === 'lokasi') {
+            const { data: existing, error: readError } = await supabase
+                .from('data_harian')
+                .select('processing_day_key, lokasi')
+                .eq('id', id)
+                .maybeSingle();
+
+            if (readError) {
+                console.error('Error read existing row before updateDailyDataField:', readError);
+                return { success: false, error: readError };
+            }
+
+            if (!existing) {
+                return { success: false, error: new Error('Data tidak ditemukan untuk update lokasi.') };
+            }
+
+            previousLocation = (existing as { lokasi?: string | null }).lokasi || null;
+            processingDayKey = (existing as { processing_day_key?: string | null }).processing_day_key || null;
+        }
+
         const { error } = await supabase
             .from('data_harian')
             .update({ [field]: value })
@@ -1930,6 +2133,31 @@ export async function updateDailyDataField(
             console.error('Error updateDailyDataField:', error);
             return { success: false, error };
         }
+
+        if (field === 'lokasi' && processingDayKey) {
+            const nextLocation = normalizeLocationKey(value || '');
+            const prevLocationNormalized = normalizeLocationKey(previousLocation || '');
+            const deltas: GlobalQuotaUsageDelta[] = [];
+
+            if (prevLocationNormalized) {
+                deltas.push({
+                    processingDayKey,
+                    locationKey: prevLocationNormalized,
+                    delta: -1,
+                });
+            }
+
+            if (nextLocation) {
+                deltas.push({
+                    processingDayKey,
+                    locationKey: nextLocation,
+                    delta: 1,
+                });
+            }
+
+            await applyGlobalQuotaUsageDeltas(deltas);
+        }
+
         return { success: true, error: null };
     } catch (err) {
         console.error('Exception updateDailyDataField:', err);
