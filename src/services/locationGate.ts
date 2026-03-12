@@ -84,7 +84,7 @@ export async function buildDharmajayaMenuWithStatus(): Promise<string> {
     );
 
     const options = Object.entries(DHARMAJAYA_MAPPING).map(([idx, name]) => {
-        const marker = closed.has(buildLocationKey('DHARMAJAYA', name)) ? ' (FULL)' : '';
+        const marker = closed.has(buildLocationKey('DHARMAJAYA', name)) ? ' (TUTUP)' : '';
         return `*${idx}.* ${name}${marker}`;
     });
 
@@ -96,6 +96,6 @@ export async function buildDharmajayaMenuWithStatus(): Promise<string> {
         '_Silakan balas dengan angka pilihanmu!_',
         '_(Ketik 0 untuk batal)_',
         '',
-        'Catatan: Lokasi bertanda *(FULL)* sedang ditutup sementara.',
+        'Catatan: Lokasi bertanda *(TUTUP)* sedang ditutup sementara.',
     ].join('\n');
 }

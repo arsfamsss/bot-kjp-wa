@@ -240,7 +240,7 @@ async function buildSelectLocationFirstPromptText(): Promise<string> {
 
     const availableSection = availableSubLocations.length > 0
         ? availableSubLocations.join('\n')
-        : '   - Saat ini semua sub-lokasi DHARMAJAYA sedang FULL.';
+        : '   - Saat ini semua sub-lokasi DHARMAJAYA sedang TUTUP.';
 
     return [
         '⚠️ *Mohon Pilih Lokasi Dulu*',
