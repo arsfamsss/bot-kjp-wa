@@ -1,6 +1,6 @@
 // src/index.ts
 import express from 'express';
-import { connectToWhatsApp } from './wa';
+import { connectToWhatsApp, scheduleReconnectNow } from './wa';
 import { startCsvContactsSync } from './services/csvContactsSync';
 
 const app = express();
@@ -18,10 +18,19 @@ app.listen(port, async () => {
 
     // JALANKAN BOT WHATSAPP
     // SYNC CONTACTS DARI CSV (jalankan sebelum bot WA)
-    startCsvContactsSync();
+    try {
+        startCsvContactsSync();
+    } catch (error) {
+        console.error('⚠️ CSV sync gagal start, proses bot tetap lanjut:', error);
+    }
 
     // JALANKAN BOT WHATSAPP
-    await connectToWhatsApp();
+    try {
+        await connectToWhatsApp();
+    } catch (error) {
+        console.error('❌ Gagal koneksi awal ke WhatsApp. Bot akan coba reconnect otomatis.', error);
+        scheduleReconnectNow('startup-failure');
+    }
 });
 
 process.on('uncaughtException', (err) => {

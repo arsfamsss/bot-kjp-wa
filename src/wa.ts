@@ -176,23 +176,110 @@ setInterval(() => {
     store.writeToFile(STORE_FILE);
 }, 10_000);
 
-let sock: WASocket;
+let sock!: WASocket;
 
 // --- EXPONENTIAL BACKOFF RECONNECT ---
 let retryCount = 0;
-const MAX_RETRIES = 10;
 const BASE_DELAY_MS = 3000;
+const MAX_BACKOFF_DELAY_MS = 60_000;
+const WATCHDOG_INTERVAL_MS = 60_000;
+const CONNECTING_STALE_MS = 180_000;
 
-function reconnectWithBackoff(): void {
-    if (retryCount >= MAX_RETRIES) {
-        console.log(`⛔ Gagal reconnect setelah ${MAX_RETRIES} percobaan. Butuh restart manual.`);
-        retryCount = 0;
+let reconnectTimeout: NodeJS.Timeout | null = null;
+let storePersistenceInterval: NodeJS.Timeout | null = null;
+let connectionWatchdogInterval: NodeJS.Timeout | null = null;
+let isConnecting = false;
+let lastConnectionState = 'idle';
+let reconnectSuspended = false;
+let connectAttemptStartedAt = 0;
+let lastConnectionUpdateAt = 0;
+let connectSequence = 0;
+
+function clearPendingReconnect(): void {
+    if (!reconnectTimeout) {
         return;
     }
-    const delay = Math.min(BASE_DELAY_MS * Math.pow(2, retryCount), 60000);
-    retryCount++;
-    console.log(`🔄 Reconnect percobaan ${retryCount}/${MAX_RETRIES} dalam ${delay / 1000}s...`);
-    setTimeout(() => connectToWhatsApp(), delay);
+
+    clearTimeout(reconnectTimeout);
+    reconnectTimeout = null;
+}
+
+function reconnectWithBackoff(reason = 'unknown', force = false): void {
+    if (reconnectSuspended && !force) {
+        console.log('⛔ Reconnect sedang disuspend (logout/invalid), skip auto-reconnect.');
+        return;
+    }
+
+    if (lastConnectionState === 'open' && !force) {
+        return;
+    }
+
+    if (reconnectTimeout) {
+        console.log('⏳ Reconnect sudah dijadwalkan, skip jadwal baru.');
+        return;
+    }
+
+    const exponentialFactor = Math.min(retryCount, 10);
+    const delay = Math.min(BASE_DELAY_MS * Math.pow(2, exponentialFactor), MAX_BACKOFF_DELAY_MS);
+    retryCount = Math.min(retryCount + 1, 10);
+    console.log(`🔄 Reconnect percobaan ke-${retryCount} dalam ${delay / 1000}s (trigger: ${reason})...`);
+
+    reconnectTimeout = setTimeout(() => {
+        reconnectTimeout = null;
+        void connectToWhatsApp().catch((error) => {
+            console.error('❌ Reconnect gagal dijalankan:', error);
+            reconnectWithBackoff('retry-after-failure', force);
+        });
+    }, delay);
+}
+
+function startConnectionWatchdog(): void {
+    if (connectionWatchdogInterval) {
+        return;
+    }
+
+    connectionWatchdogInterval = setInterval(() => {
+        if (isConnecting || reconnectTimeout) {
+            return;
+        }
+
+        if (reconnectSuspended) {
+            return;
+        }
+
+        const now = Date.now();
+        const timeSinceUpdateMs = now - lastConnectionUpdateAt;
+        const wsIsOpen = Boolean(sock?.ws?.isOpen);
+        const wsIsConnecting = Boolean(sock?.ws?.isConnecting);
+
+        if (lastConnectionState === 'open' && wsIsOpen) {
+            return;
+        }
+
+        const stillWithinConnectingGrace =
+            lastConnectionState === 'connecting' &&
+            wsIsConnecting &&
+            now - connectAttemptStartedAt < CONNECTING_STALE_MS;
+        if (stillWithinConnectingGrace) {
+            return;
+        }
+
+        if (sock && (lastConnectionState === 'connecting' || wsIsConnecting)) {
+            try {
+                sock.end(new Error('Watchdog detected stale WA connect attempt'));
+            } catch (error) {
+                console.warn('⚠️ Watchdog gagal menutup socket stale:', error);
+            }
+        }
+
+        reconnectWithBackoff(`watchdog state=${lastConnectionState}, staleMs=${timeSinceUpdateMs}`);
+    }, WATCHDOG_INTERVAL_MS);
+}
+
+export function scheduleReconnectNow(reason = 'manual-trigger'): void {
+    reconnectSuspended = false;
+    retryCount = 0;
+    reconnectWithBackoff(reason, true);
 }
 
 
@@ -789,11 +876,34 @@ function shouldIgnoreMessage(msg: any): boolean {
 }
 
 export async function connectToWhatsApp() {
+    if (isConnecting) {
+        console.log('⏳ Koneksi WhatsApp masih berjalan, skip connect paralel.');
+        return;
+    }
+
+    isConnecting = true;
+    clearPendingReconnect();
+    startConnectionWatchdog();
+    lastConnectionState = 'connecting';
+    connectAttemptStartedAt = Date.now();
+    lastConnectionUpdateAt = Date.now();
+
+    const attemptSequence = ++connectSequence;
+
+    try {
     warmupKtpMasterCsvLookup();
     await initRegisteredUsersCache(); // Inisialisasi cache user terdaftar
     const { state, saveCreds } = await useMultiFileAuthState(AUTH_FOLDER);
     const { version } = await fetchLatestBaileysVersion();
     console.log(`🔗 Menghubungkan ke WA v${version.join('.')}...`);
+
+    if (sock) {
+        try {
+            sock.end(new Error('Reinitializing WhatsApp socket'));
+        } catch (error) {
+            console.warn('⚠️ Gagal menutup socket sebelumnya:', error);
+        }
+    }
 
     sock = makeWASocket({
         version,
@@ -825,21 +935,31 @@ export async function connectToWhatsApp() {
     store.bind(sock.ev);
 
     // FIX: Load & Save Store agar LID mapping awet (Persistent Store)
-    const STORE_FILE = 'baileys_store_multi.json';
-    store.readFromFile(STORE_FILE);
+    const MULTI_STORE_FILE = 'baileys_store_multi.json';
+    store.readFromFile(MULTI_STORE_FILE);
 
     // Save store setiap 10 detik agar data tidak hilang saat restart
-    setInterval(() => {
-        store.writeToFile(STORE_FILE);
+    if (storePersistenceInterval) {
+        clearInterval(storePersistenceInterval);
+    }
+    storePersistenceInterval = setInterval(() => {
+        store.writeToFile(MULTI_STORE_FILE);
     }, 10_000);
 
     sock.ev.on('connection.update', (update) => {
+        if (attemptSequence !== connectSequence) {
+            return;
+        }
+
+        lastConnectionUpdateAt = Date.now();
+
         const { connection, lastDisconnect, qr } = update;
         if (qr) {
             console.log('SCAN QR CODE DI BAWAH INI:');
             qrcode.generate(qr, { small: true });
         }
         if (connection === 'close') {
+            lastConnectionState = 'close';
             const err = lastDisconnect?.error as Boom;
             const statusCode = err?.output?.statusCode;
             const noReconnectCodes = [DisconnectReason.loggedOut, DisconnectReason.forbidden, DisconnectReason.connectionReplaced, DisconnectReason.badSession];
@@ -848,14 +968,22 @@ export async function connectToWhatsApp() {
             console.log('👉 Status Code:', statusCode);
             console.log('🔄 Reconnect?', shouldReconnect);
             if (shouldReconnect) {
-                reconnectWithBackoff();
+                reconnectSuspended = false;
+                reconnectWithBackoff(`connection-close status=${statusCode ?? 'unknown'}`);
             } else {
+                reconnectSuspended = true;
                 retryCount = 0;
+                clearPendingReconnect();
                 console.log('⛔ Sesi logout/invalid. Hapus folder auth_info_baileys dan scan ulang.');
             }
         } else if (connection === 'open') {
+            reconnectSuspended = false;
             retryCount = 0; // Reset backoff counter saat koneksi berhasil
+            clearPendingReconnect();
+            lastConnectionState = 'open';
             console.log('✅ WhatsApp Terhubung! Siap menerima pesan.');
+        } else if (connection) {
+            lastConnectionState = connection;
         }
     });
 
@@ -5686,6 +5814,13 @@ Ketik MENU untuk bantuan.`;
             }
         }
     });
+    } catch (error) {
+        lastConnectionState = 'connect_error';
+        console.error('❌ Gagal inisialisasi koneksi WA:', error);
+        throw error;
+    } finally {
+        isConnecting = false;
+    }
 }
 
 // --- HELPER FUNCTION: EXECUTE BROADCAST ---
