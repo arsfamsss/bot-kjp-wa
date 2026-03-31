@@ -2,7 +2,7 @@
 import 'dotenv/config';
 import { createClient } from '@supabase/supabase-js';
 import type { LogItem, LogJson, DuplicateKind, DuplicateInfo } from './types';
-import { getWibTimeHHmm } from './time';
+import { getStartOfNextWibMonthUTC, getStartOfWibMonthUTC, getWibParts, getWibTimeHHmm, isLastDayOfWibMonth } from './time';
 
 const url = process.env.SUPABASE_URL!;
 const anonKey = process.env.SUPABASE_ANON_KEY!;
@@ -2301,20 +2301,43 @@ export async function markOfferedReregister(senderPhone: string): Promise<void> 
 
 
 export function getStartOfCurrentMonthUTC(): string {
+    return getStartOfWibMonthUTC(new Date());
+}
+
+let lastBlockedKtpCleanupMonthKey: string | null = null;
+
+function getWibMonthKey(date: Date): string {
+    const p = getWibParts(date);
+    return `${String(p.year).padStart(4, '0')}-${String(p.month).padStart(2, '0')}`;
+}
+
+async function cleanupBlockedKtpAtEndOfMonthWib(): Promise<void> {
     const now = new Date();
-    const wibYear = parseInt(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Jakarta', year: 'numeric' }).format(now));
-    const wibMonth = parseInt(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Jakarta', month: 'numeric' }).format(now));
-    const isoStringWIB = `${wibYear}-${String(wibMonth).padStart(2, '0')}-01T00:00:00.000+07:00`;
-    return new Date(isoStringWIB).toISOString();
+    if (!isLastDayOfWibMonth(now)) return;
+
+    const monthKey = getWibMonthKey(now);
+    if (lastBlockedKtpCleanupMonthKey === monthKey) return;
+
+    const startOfNextMonth = getStartOfNextWibMonthUTC(now);
+    const { count, error } = await supabase
+        .from('blocked_ktp')
+        .delete({ count: 'exact' })
+        .lt('created_at', startOfNextMonth);
+
+    if (error) {
+        if (error.code !== '42P01') {
+            console.error('Auto-cleanup blocked KTP (EOM WIB) error:', error);
+        }
+        return;
+    }
+
+    lastBlockedKtpCleanupMonthKey = monthKey;
+    console.log(`🧹 Cleanup blocked KTP EOM WIB selesai (${monthKey}), terhapus: ${count || 0}`);
 }
 
 export async function getBlockedKtpList(limit: number = 50): Promise<BlockedKtpItem[]> {
     const startOfMonth = getStartOfCurrentMonthUTC();
-
-    // Auto-cleanup fire and forget
-    supabase.from('blocked_ktp').delete().lt('created_at', startOfMonth).then(({ error }) => {
-        if (error && error.code !== '42P01') console.error('Auto-cleanup blocked KTP error:', error);
-    });
+    await cleanupBlockedKtpAtEndOfMonthWib();
 
     const { data, error } = await supabase
         .from('blocked_ktp')
@@ -2386,6 +2409,8 @@ export async function removeBlockedKtp(noKtpRaw: string): Promise<{ success: boo
 }
 
 export async function checkBlockedKtpBatch(items: LogItem[]): Promise<LogItem[]> {
+    await cleanupBlockedKtpAtEndOfMonthWib();
+
     const activeItems = items.filter(it => it.status === 'OK' && it.parsed.no_ktp);
     if (activeItems.length === 0) return items;
 

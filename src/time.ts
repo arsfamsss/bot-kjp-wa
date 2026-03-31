@@ -27,6 +27,26 @@ export function getWibIsoDate(date: Date): string {
     return formatIsoDateFromParts(getWibParts(date));
 }
 
+export function getStartOfWibMonthUTC(date: Date): string {
+    const p = getWibParts(date);
+    const isoStringWIB = `${String(p.year).padStart(4, '0')}-${String(p.month).padStart(2, '0')}-01T00:00:00.000+07:00`;
+    return new Date(isoStringWIB).toISOString();
+}
+
+export function getStartOfNextWibMonthUTC(date: Date): string {
+    const p = getWibParts(date);
+    const nextMonth = p.month === 12 ? 1 : p.month + 1;
+    const nextYear = p.month === 12 ? p.year + 1 : p.year;
+    const isoStringWIB = `${String(nextYear).padStart(4, '0')}-${String(nextMonth).padStart(2, '0')}-01T00:00:00.000+07:00`;
+    return new Date(isoStringWIB).toISOString();
+}
+
+export function isLastDayOfWibMonth(date: Date): boolean {
+    const p = getWibParts(date);
+    const lastDay = new Date(Date.UTC(p.year, p.month, 0)).getUTCDate();
+    return p.day === lastDay;
+}
+
 export function getWibTimeHHmm(date: Date): string {
     const p = getWibParts(date);
     return `${String(p.hour).padStart(2, '0')}.${String(p.minute).padStart(2, '0')}`;
