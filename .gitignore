@@ -11,3 +11,8 @@ baileys_store_multi.json
 
 # Windows reserved device name (tidak bisa dihapus)
 nul
+
+# Local reference repos and planning docs (not for production branch)
+_tmp_refs/
+plan.md
+.sisyphus/plans/plan.md
