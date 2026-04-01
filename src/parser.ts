@@ -1,7 +1,7 @@
 // src/parser.ts
 
 import type { LogItem, ParsedFields, ItemError, LogJson, LogStats } from './types';
-import { checkBlockedKkBatch, checkBlockedKtpBatch, checkBlockedLocationBatch, checkDuplicateForItem, checkDuplicatesBatch } from './supabase';
+import { checkBlockedKjpBatch, checkBlockedKkBatch, checkBlockedKtpBatch, checkBlockedLocationBatch, checkDuplicateForItem, checkDuplicatesBatch } from './supabase';
 import { parseFlexibleDate } from './utils/dateParser';
 import { normalizeCardTypeName, getCardTypeChoicesText } from './utils/cardTypeRules';
 import { getCardPrefixType } from './utils/cardPrefixConfig';
@@ -761,6 +761,7 @@ export async function processRawMessageToLogJson(params: {
 
     items = applyDuplicateNameHardBlockInMessage(items);
 
+    items = await checkBlockedKjpBatch(items);
     items = await checkBlockedKkBatch(items);
     items = await checkBlockedKtpBatch(items);
     items = await checkBlockedLocationBatch(items);

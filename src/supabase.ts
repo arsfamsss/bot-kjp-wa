@@ -329,6 +329,12 @@ export type BlockedKkItem = {
     created_at?: string | null;
 };
 
+export type BlockedKjpItem = {
+    no_kjp: string;
+    reason?: string | null;
+    created_at?: string | null;
+};
+
 export type BlockedPhoneItem = {
     phone_number: string;
     reason?: string | null;
@@ -386,6 +392,10 @@ function normalizeNameForDedup(raw: string): string {
 }
 
 function normalizeKk(raw: string): string {
+    return (raw || '').replace(/\D/g, '');
+}
+
+function normalizeKjp(raw: string): string {
     return (raw || '').replace(/\D/g, '');
 }
 
@@ -866,6 +876,124 @@ export async function getBlockedKkList(limit: number = 200): Promise<BlockedKkIt
     }
 
     return (data || []) as BlockedKkItem[];
+}
+
+export async function getBlockedKjpList(limit: number = 200): Promise<BlockedKjpItem[]> {
+    const { data, error } = await supabase
+        .from('blocked_kjp')
+        .select('no_kjp, reason, created_at')
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+    if (error) {
+        if (error.code !== '42P01') {
+            console.error('Error getBlockedKjpList:', error);
+        }
+        return [];
+    }
+
+    return (data || []) as BlockedKjpItem[];
+}
+
+export async function addBlockedKjp(noKjpRaw: string, reason?: string): Promise<{ success: boolean; message: string }> {
+    const noKjp = normalizeKjp(noKjpRaw);
+    if (noKjp.length < 16 || noKjp.length > 18) {
+        return { success: false, message: 'No KJP harus 16-18 digit.' };
+    }
+
+    const payload: any = {
+        no_kjp: noKjp,
+        reason: (reason || '').trim() || null,
+    };
+
+    const { error } = await supabase
+        .from('blocked_kjp')
+        .upsert(payload, { onConflict: 'no_kjp' });
+
+    if (error) {
+        if (error.code === '42P01') {
+            return { success: false, message: 'Tabel blocked_kjp belum dibuat di database.' };
+        }
+        console.error('Error addBlockedKjp:', error);
+        return { success: false, message: 'Gagal menyimpan KJP ke daftar blokir.' };
+    }
+
+    return { success: true, message: `No KJP ${noKjp} berhasil diblokir.` };
+}
+
+export async function removeBlockedKjp(noKjpRaw: string): Promise<{ success: boolean; message: string }> {
+    const noKjp = normalizeKjp(noKjpRaw);
+    if (noKjp.length < 16 || noKjp.length > 18) {
+        return { success: false, message: 'No KJP harus 16-18 digit.' };
+    }
+
+    const { count, error } = await supabase
+        .from('blocked_kjp')
+        .delete({ count: 'exact' })
+        .eq('no_kjp', noKjp);
+
+    if (error) {
+        if (error.code === '42P01') {
+            return { success: false, message: 'Tabel blocked_kjp belum dibuat di database.' };
+        }
+        console.error('Error removeBlockedKjp:', error);
+        return { success: false, message: 'Gagal menghapus KJP dari daftar blokir.' };
+    }
+
+    if ((count || 0) === 0) {
+        return { success: false, message: `No KJP ${noKjp} tidak ditemukan di daftar blokir.` };
+    }
+
+    return { success: true, message: `No KJP ${noKjp} berhasil dibuka blokirnya.` };
+}
+
+export async function checkBlockedKjpBatch(items: LogItem[]): Promise<LogItem[]> {
+    const activeItems = items.filter((it) => it.status === 'OK' && it.parsed.no_kjp);
+    if (activeItems.length === 0) return items;
+
+    const kjpValues = Array.from(new Set(activeItems.map((it) => it.parsed.no_kjp)));
+    const { data, error } = await supabase
+        .from('blocked_kjp')
+        .select('no_kjp, reason')
+        .in('no_kjp', kjpValues);
+
+    if (error) {
+        if (error.code !== '42P01') {
+            console.error('Error checkBlockedKjpBatch:', error);
+        }
+        return items;
+    }
+
+    const blockedMap = new Map<string, string | null>();
+    (data || []).forEach((row: any) => {
+        blockedMap.set(row.no_kjp, row.reason || null);
+    });
+
+    if (blockedMap.size === 0) return items;
+
+    return items.map((item) => {
+        if (item.status !== 'OK') return item;
+
+        const reason = blockedMap.get(item.parsed.no_kjp);
+        if (reason === undefined) return item;
+
+        const detail = reason
+            ? `Nomor KJP terblokir (${reason}). Silakan ganti data lain.`
+            : 'Nomor KJP terblokir. Silakan ganti data lain.';
+
+        return {
+            ...item,
+            status: 'SKIP_FORMAT',
+            errors: [
+                ...item.errors,
+                {
+                    field: 'no_kjp',
+                    type: 'blocked_kjp',
+                    detail,
+                },
+            ],
+        };
+    });
 }
 
 export async function addBlockedKk(noKkRaw: string, reason?: string): Promise<{ success: boolean; message: string }> {

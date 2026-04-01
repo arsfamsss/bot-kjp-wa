@@ -57,10 +57,13 @@ import {
     renderCloseMessage,
     clearBotSettingsCache,
     updateDailyDataField, // PATCH 2
+    getBlockedKjpList,
     getBlockedKkList,
     getBlockedKtpList,
+    addBlockedKjp,
     addBlockedKtp,
     removeBlockedKtp,
+    removeBlockedKjp,
     addBlockedKk,
     removeBlockedKk,
     getBlockedPhoneList,
@@ -462,6 +465,18 @@ function buildBlockedKtpMenuText(): string {
         '1️⃣ Tambah No KTP ke blokir',
         '2️⃣ Lihat daftar No KTP terblokir',
         '3️⃣ Buka blokir No KTP',
+        '',
+        '0️⃣ Kembali ke Menu Admin',
+    ].join('\n');
+}
+
+function buildBlockedKjpMenuText(): string {
+    return [
+        '🛡️ *KELOLA BLOKIR NO KJP*',
+        '',
+        '1️⃣ Tambah No KJP ke blokir',
+        '2️⃣ Lihat daftar No KJP terblokir',
+        '3️⃣ Buka blokir No KJP',
         '',
         '0️⃣ Kembali ke Menu Admin',
     ].join('\n');
@@ -3356,8 +3371,8 @@ export async function connectToWhatsApp() {
                                 '_Ketik 0 untuk batal._'
                             ].join('\n');
                         } else if (normalized === '14') {
-                            adminFlowByPhone.set(senderPhone, 'BLOCKED_PHONE_MENU');
-                            replyText = buildBlockedPhoneMenuText();
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_KJP_MENU');
+                            replyText = buildBlockedKjpMenuText();
                         } else if (normalized === '15') {
                             adminFlowByPhone.set(senderPhone, 'BLOCKED_KTP_MENU');
                             replyText = buildBlockedKtpMenuText();
@@ -3365,16 +3380,19 @@ export async function connectToWhatsApp() {
                             adminFlowByPhone.set(senderPhone, 'BLOCKED_KK_MENU');
                             replyText = buildBlockedKkMenuText();
                         } else if (normalized === '17') {
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_PHONE_MENU');
+                            replyText = buildBlockedPhoneMenuText();
+                        } else if (normalized === '18') {
                             adminFlowByPhone.set(senderPhone, 'CARD_PREFIX_MENU');
                             replyText = buildCardPrefixMenuText();
-                        } else if (normalized === '18') {
+                        } else if (normalized === '19') {
                             adminFlowByPhone.set(senderPhone, 'BLOCKED_LOCATION_MENU');
                             replyText = buildBlockedLocationMenuText();
-                        } else if (normalized === '19') {
+                        } else if (normalized === '20') {
                             locationQuotaDraftByPhone.delete(senderPhone);
                             adminFlowByPhone.set(senderPhone, 'LOCATION_QUOTA_MENU');
                             replyText = buildLocationQuotaMenuText();
-                        } else if (normalized === '20') {
+                        } else if (normalized === '21') {
                             globalLocationQuotaDraftByPhone.delete(senderPhone);
                             adminFlowByPhone.set(senderPhone, 'GLOBAL_LOCATION_QUOTA_MENU');
                             replyText = buildGlobalLocationQuotaMenuText();
@@ -3919,6 +3937,69 @@ export async function connectToWhatsApp() {
                             }
                         }
 
+                    } else if (currentAdminFlow === 'BLOCKED_KJP_MENU') {
+                        if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'MENU');
+                            replyText = ADMIN_MENU_MESSAGE;
+                        } else if (normalized === '1') {
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_KJP_ADD');
+                            replyText = [
+                                '🛡️ *TAMBAH BLOKIR NO KJP*',
+                                '',
+                                'Ketik No KJP yang ingin diblokir (16-18 digit).',
+                                'Anda bisa tambah alasan setelah tanda |',
+                                'Contoh: 5049489000000001 | KJP bermasalah',
+                                '',
+                                '_Ketik 0 untuk kembali._'
+                            ].join('\n');
+                        } else if (normalized === '2') {
+                            const list = await getBlockedKjpList(200);
+                            if (list.length === 0) {
+                                replyText = '📂 Belum ada No KJP yang diblokir.';
+                            } else {
+                                const lines = ['📋 *DAFTAR NO KJP TERBLOKIR*', ''];
+                                list.forEach((row, idx) => {
+                                    const reasonText = row.reason ? ` - ${row.reason}` : '';
+                                    lines.push(`${idx + 1}. ${row.no_kjp}${reasonText}`);
+                                });
+                                lines.push('');
+                                lines.push('_Ketik 3 untuk buka blokir._');
+                                replyText = lines.join('\n');
+                            }
+                        } else if (normalized === '3') {
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_KJP_DELETE');
+                            replyText = [
+                                '♻️ *BUKA BLOKIR NO KJP*',
+                                '',
+                                'Ketik No KJP yang ingin dibuka blokirnya (16-18 digit).',
+                                '',
+                                '_Ketik 0 untuk kembali._'
+                            ].join('\n');
+                        } else {
+                            replyText = '⚠️ Pilihan tidak dikenali. Ketik 1, 2, 3, atau 0.';
+                        }
+                    } else if (currentAdminFlow === 'BLOCKED_KJP_ADD') {
+                        if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_KJP_MENU');
+                            replyText = buildBlockedKjpMenuText();
+                        } else {
+                            const [rawKjp, ...reasonParts] = rawTrim.split('|');
+                            const reason = reasonParts.join('|').trim();
+                            const result = await addBlockedKjp(rawKjp, reason);
+                            replyText = result.success ? `✅ ${result.message}` : `❌ ${result.message}`;
+                            replyText += '\n\n' + buildBlockedKjpMenuText();
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_KJP_MENU');
+                        }
+                    } else if (currentAdminFlow === 'BLOCKED_KJP_DELETE') {
+                        if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_KJP_MENU');
+                            replyText = buildBlockedKjpMenuText();
+                        } else {
+                            const result = await removeBlockedKjp(rawTrim);
+                            replyText = result.success ? `✅ ${result.message}` : `❌ ${result.message}`;
+                            replyText += '\n\n' + buildBlockedKjpMenuText();
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_KJP_MENU');
+                        }
                     } else if (currentAdminFlow === 'BLOCKED_KTP_MENU') {
                         if (normalized === '0') {
                             adminFlowByPhone.set(senderPhone, 'MENU');

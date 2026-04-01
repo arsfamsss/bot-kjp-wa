@@ -171,6 +171,8 @@ export function buildReplyForNewData(
                         friendlyMsg = 'Nomor ada yang sama';
                     } else if (err.type === 'blocked_kk') {
                         friendlyMsg = 'No KK terblokir. Silakan ganti data KK lain yang valid.';
+                    } else if (err.type === 'blocked_kjp') {
+                        friendlyMsg = 'No KJP terblokir. Silakan ganti data KJP lain yang valid.';
                     } else if (err.type === 'blocked_location') {
                         const locationLabel = item.parsed.lokasi
                             ? item.parsed.lokasi.replace(/^(PASARJAYA|DHARMAJAYA)\s*-\s*/i, '').trim()

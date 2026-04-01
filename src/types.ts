@@ -31,6 +31,7 @@ export interface ItemError {
     | "duplicate"
     | "duplicate_in_message"
     | "blocked_kk"
+    | "blocked_kjp"
     | "ktp_blocked"
     | "same_as_other"
     | "wrong_order"
