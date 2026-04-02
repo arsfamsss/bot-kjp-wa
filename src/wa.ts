@@ -1323,7 +1323,7 @@ export async function connectToWhatsApp() {
                     const closeMessage = [
                         renderCloseMessage(botSettings),
                         '',
-                        '📌 Mohon maaf, saat ini layanan sedang tutup.',
+                        'Catatan:',
                         'Saat tutup, yang bisa diakses hanya menu *5*.',
                         'Silakan ketik *5* untuk *Cek Status Pendaftaran*.',
                     ].join('\n');
