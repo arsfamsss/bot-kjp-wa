@@ -1084,7 +1084,7 @@ export async function connectToWhatsApp() {
                     console.log(`🔄 Mapping LID detect: ${rawRemoteJid} -> ${remoteJid} (${senderPhone})`);
                 }
 
-                const isAdmin = ADMIN_PHONES.has(normalizePhone(senderPhone));
+                const isAdminEarly = ADMIN_PHONES.has(normalizePhone(senderPhone));
 
                 const receivedAt = getMessageDate(msg);
                 const tanggalWib = getWibIsoDate(receivedAt);
@@ -1122,7 +1122,7 @@ export async function connectToWhatsApp() {
 
                 const senderPhoneAtEarlyCheck = senderPhone;
 
-                if (!isAdmin) {
+                if (!isAdminEarly) {
                     const blockedPhoneEarly = await isPhoneBlocked(senderPhone);
                     if (blockedPhoneEarly.blocked) {
                         const reasonText = blockedPhoneEarly.reason ? `\nAlasan: ${blockedPhoneEarly.reason}` : '';
@@ -1300,6 +1300,7 @@ export async function connectToWhatsApp() {
                 }
 
                 const isAdminByCurrentPhone = ADMIN_PHONES.has(normalizePhone(senderPhone));
+                const isAdmin = isAdminByCurrentPhone;
                 const currentUserFlow = userFlowByPhone.get(senderPhone) || 'NONE';
                 if (!isAdminByCurrentPhone && senderPhone !== senderPhoneAtEarlyCheck) {
                     const blockedPhone = await isPhoneBlocked(senderPhone);
