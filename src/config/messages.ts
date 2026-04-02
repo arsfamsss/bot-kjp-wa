@@ -279,12 +279,12 @@ export const ADMIN_MENU_MESSAGE = [
 export const ADMIN_PHONES_RAW = ['085641411818', '08568511113'];
 
 export const CLOSE_MESSAGE_TEMPLATE_UNIFIED = [
-    '⛔ *MOHON MAAF, SISTEM SEDANG TUTUP (Maintenance dan rekap Harian) ⛔*',
+    '⛔ *MOHON MAAF, Layanan Sedang Tutup ⛔*',
     '',
-    '🕒 Jam Tutup: 00.00 - 06.05 WIB',
-    '✅ Buka Kembali: Pukul 06.05 WIB',
+    '🕒 Jam Tutup: *00.00 - 06.05 WIB*',
+    '✅ Buka Kembali: *Pukul 06.05 WIB*',
     '',
-    '📌 Data yang Anda kirim sekarang tidak akan diproses. Silakan kirim ulang setelah jam buka untuk pendaftaran besok.',
+    '📌 Data yang Anda kirim sekarang *tidak akan diproses*. Silakan kirim ulang setelah jam buka untuk pendaftaran besok.',
     '',
     'Terima kasih atas pengertiannya. 🙏'
 ].join('\n');

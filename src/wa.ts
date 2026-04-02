@@ -1133,28 +1133,6 @@ export async function connectToWhatsApp() {
                     }
                 }
 
-                // 🔧 ADMIN SHORTCUT: #TEMPLATE (Anti State-Loss)
-                // Kebal restart karena tidak butuh state/flow
-                if (isAdmin && rawInput && rawInput.toString().trim().toUpperCase().startsWith('#TEMPLATE')) {
-                    const templateBody = rawInput.toString().trim().replace(/^#TEMPLATE\s*/i, '').trim();
-
-                    if (!templateBody || templateBody.toUpperCase() === 'RESET') {
-                        // Reset ke template standar
-                        await updateBotSettings({ close_message_template: CLOSE_MESSAGE_TEMPLATE_UNIFIED });
-                        clearBotSettingsCache();
-                        await sock.sendMessage(remoteJid, { text: '✅ Template pesan tutup direset ke *Template Standar*.' });
-                    } else if (templateBody.length < 10) {
-                        await sock.sendMessage(remoteJid, { text: '⚠️ Template terlalu pendek (min 10 karakter).\nFormat: #TEMPLATE (isi pesan)' });
-                    } else {
-                        await updateBotSettings({ close_message_template: templateBody });
-                        clearBotSettingsCache();
-                        await sock.sendMessage(remoteJid, {
-                            text: `✅ *TEMPLATE CUSTOM DISIMPAN*\n\n📝 Preview:\n─────────────────\n${templateBody}\n─────────────────`
-                        });
-                    }
-                    continue;
-                }
-
                 // ✅ KHUSUS AKUN @lid: kalau belum ada mapping nomor, minta user ketik nomor manual
                 // PENTING: Hanya proses jika input SATU BARIS (bukan data sembako multi-baris)
                 const inputLines = String(rawInput).trim().split('\n').filter(l => l.trim());
@@ -3025,6 +3003,78 @@ export async function connectToWhatsApp() {
                 let currentAdminFlow = adminFlowByPhone.get(senderPhone) ?? 'NONE';
 
                 const rawUpper = rawTrim.toUpperCase();
+
+                if (isAdmin && rawUpper === '#TEMPLATE RESET') {
+                    const ok = await updateBotSettings({ close_message_template: CLOSE_MESSAGE_TEMPLATE_UNIFIED });
+                    if (ok) {
+                        adminFlowByPhone.set(senderPhone, 'MENU');
+                        await sock.sendMessage(remoteJid, {
+                            text: [
+                                '✅ *TEMPLATE PESAN TUTUP BERHASIL DI-RESET*',
+                                '',
+                                'Template sudah kembali ke versi default.',
+                                '',
+                                'Ketik *#TEMPLATE* untuk ubah lagi, atau ketik *0* untuk kembali ke menu utama.'
+                            ].join('\n')
+                        });
+                    } else {
+                        await sock.sendMessage(remoteJid, {
+                            text: '❌ Gagal reset template pesan tutup. Silakan coba lagi.'
+                        });
+                    }
+                    continue;
+                }
+
+                if (isAdmin && rawUpper === '#TEMPLATE') {
+                    adminFlowByPhone.set(senderPhone, 'SETTING_CLOSE_TEMPLATE');
+                    await sock.sendMessage(remoteJid, {
+                        text: [
+                            '📝 *EDIT TEMPLATE PESAN TUTUP*',
+                            '',
+                            'Silakan kirim teks template baru untuk pesan tutup.',
+                            'Gunakan placeholder berikut agar jam terisi otomatis:',
+                            '• *{JAM_TUTUP}*',
+                            '• *{JAM_BUKA}*',
+                            '',
+                            'Contoh:',
+                            '⛔ Layanan sedang tutup',
+                            'Jam tutup: {JAM_TUTUP}',
+                            'Buka kembali: Pukul {JAM_BUKA} WIB',
+                            '',
+                            '_Ketik 0 untuk batal. Ketik #TEMPLATE RESET untuk kembali ke default._'
+                        ].join('\n')
+                    });
+                    continue;
+                }
+
+                if (isAdmin && rawUpper.startsWith('#TEMPLATE ')) {
+                    const templateText = rawTrim.slice('#TEMPLATE'.length).trim();
+                    if (!templateText) {
+                        await sock.sendMessage(remoteJid, {
+                            text: '⚠️ Template kosong. Ketik *#TEMPLATE* lalu kirim isi template Anda.'
+                        });
+                        continue;
+                    }
+
+                    const ok = await updateBotSettings({ close_message_template: templateText });
+                    if (ok) {
+                        adminFlowByPhone.set(senderPhone, 'MENU');
+                        await sock.sendMessage(remoteJid, {
+                            text: [
+                                '✅ *TEMPLATE PESAN TUTUP BERHASIL DIUBAH*',
+                                '',
+                                'Perubahan sudah tersimpan.',
+                                'Ketik *#TEMPLATE RESET* jika ingin kembali ke default.',
+                            ].join('\n')
+                        });
+                    } else {
+                        await sock.sendMessage(remoteJid, {
+                            text: '❌ Gagal menyimpan template. Silakan coba lagi.'
+                        });
+                    }
+                    continue;
+                }
+
                 const shouldExitAdminFlowToUserMenu =
                     isAdmin &&
                     currentAdminFlow !== 'NONE' &&
@@ -3115,7 +3165,30 @@ export async function connectToWhatsApp() {
                         return c?.name || c?.notify || null;
                     };
 
-                    if (currentAdminFlow === 'MENU') {
+                    if (currentAdminFlow === 'SETTING_CLOSE_TEMPLATE') {
+                        if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'MENU');
+                            replyText = ADMIN_MENU_MESSAGE;
+                        } else {
+                            const templateText = rawInput.trim();
+                            if (!templateText) {
+                                replyText = '⚠️ Template tidak boleh kosong. Silakan kirim teks template, atau ketik 0 untuk batal.';
+                            } else {
+                                const ok = await updateBotSettings({ close_message_template: templateText });
+                                if (ok) {
+                                    adminFlowByPhone.set(senderPhone, 'MENU');
+                                    replyText = [
+                                        '✅ *TEMPLATE PESAN TUTUP BERHASIL DIUBAH*',
+                                        '',
+                                        'Perubahan sudah tersimpan.',
+                                        'Ketik *#TEMPLATE RESET* jika ingin kembali ke default.'
+                                    ].join('\n');
+                                } else {
+                                    replyText = '❌ Gagal menyimpan template. Silakan coba lagi.';
+                                }
+                            }
+                        }
+                    } else if (currentAdminFlow === 'MENU') {
                         // MENU ADMIN BARU:
                         // 1 = Hapus Data User (per orang)
                         // 2 = Rekap Hari Ini

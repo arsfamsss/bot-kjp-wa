@@ -2082,16 +2082,14 @@ const DEFAULT_BOT_SETTINGS: BotSettings = {
     close_minute_start: 0,
     close_hour_end: 6,
     close_minute_end: 5,
-    close_message_template: `⛔ *MOHON MAAF, SISTEM SEDANG TUTUP*
-(Maintenance Harian)
+    close_message_template: `⛔ *MOHON MAAF, Layanan Sedang Tutup ⛔*
 
-🕒 Jam Tutup: *{JAM_TUTUP}*
-✅ Buka Kembali: *Pukul {JAM_BUKA} WIB*
+🕒 Jam Tutup: *00.00 - 06.05 WIB*
+✅ Buka Kembali: *Pukul 06.05 WIB*
 
-📌 Data yang Anda kirim sekarang *tidak akan diproses*.
-Silakan kirim ulang setelah jam buka untuk pendaftaran besok.
+📌 Data yang Anda kirim sekarang *tidak akan diproses*. Silakan kirim ulang setelah jam buka untuk pendaftaran besok.
 
-_Terima kasih atas pengertiannya._ 🙏`,
+Terima kasih atas pengertiannya. 🙏`,
     // NOTE: Template di atas adalah DEFAULT jika database kosong.
     // Pesan aktual diambil dari database (bot_settings.close_message_template).
     manual_close_start: null,
@@ -2183,6 +2181,14 @@ export function formatOpenTimeString(settings: BotSettings): string {
 // Render template pesan tutup dengan placeholder
 // Render template pesan tutup dengan placeholder
 export function renderCloseMessage(settings: BotSettings): string {
+    const applyCloseTemplate = (template: string, jamTutup: string, jamBuka: string): string => {
+        return template
+            .split('{JAM_TUTUP}').join(jamTutup)
+            .split('{JAM_BUKA}').join(jamBuka);
+    };
+
+    const effectiveTemplate = (settings.close_message_template || DEFAULT_BOT_SETTINGS.close_message_template || '').trim() || DEFAULT_BOT_SETTINGS.close_message_template;
+
     // Cek apakah sedang dalam MODE TUTUP PANJANG (Manual Override).
     // Pesan manual hanya dipakai jika waktu sekarang benar-benar berada
     // di rentang [manual_close_start, manual_close_end].
@@ -2198,16 +2204,10 @@ export function renderCloseMessage(settings: BotSettings): string {
             const timeStr = end.toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', hour12: false }).replace(':', '.');
 
             const jamBuka = `${dateStr} Pukul ${timeStr} WIB`;
+            const jamTutup = formatCloseTimeString(settings);
 
             // Custom Message for Long Term Close
-            return `⛔ *MOHON MAAF, SISTEM SEDANG TUTUP (Maintenance dan rekap Harian) ⛔*
-
-🕒 Jam Tutup: *00.00 - 06.05 WIB*
-✅ Buka Kembali: *${jamBuka}*
-
-📌 Data yang Anda kirim sekarang *tidak akan diproses*. Silakan kirim ulang setelah jam buka untuk pendaftaran besok.
-
-Terima kasih atas pengertiannya. 🙏`;
+            return applyCloseTemplate(effectiveTemplate, jamTutup, jamBuka);
         }
     }
 
@@ -2215,14 +2215,7 @@ Terima kasih atas pengertiannya. 🙏`;
     const jamTutup = formatCloseTimeString(settings);
     const jamBuka = formatOpenTimeString(settings);
 
-    return `⛔ *MOHON MAAF, SISTEM SEDANG TUTUP (Maintenance dan rekap Harian) ⛔*
-
-🕒 Jam Tutup: *${jamTutup}*
-✅ Buka Kembali: *Pukul ${jamBuka} WIB*
-
-📌 Data yang Anda kirim sekarang *tidak akan diproses*. Silakan kirim ulang setelah jam buka untuk pendaftaran besok.
-
-Terima kasih atas pengertiannya. 🙏`;
+    return applyCloseTemplate(effectiveTemplate, jamTutup, jamBuka);
 }
 
 // Refresh cache settings (dipanggil setelah admin update)
