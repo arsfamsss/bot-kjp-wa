@@ -530,8 +530,21 @@ function buildBlockedLocationMenuText(): string {
     ].join('\n');
 }
 
+const CLOSED_MODE_MENU_5_ALLOWLIST = new Set([
+    '5',
+    'STATUS',
+    'CEK STATUS',
+    'STATUS PENDAFTARAN',
+    'CEK STATUS PENDAFTARAN',
+]);
+
 function normalizeIncomingCommand(raw: string): string {
-    const up = (raw || '').trim().toUpperCase();
+    const normalizedRaw = (raw || '').toString().normalize('NFKC').trim();
+    const up = normalizedRaw
+        .toUpperCase()
+        .split(/\s+/)
+        .filter(Boolean)
+        .join(' ');
     if (up === 'MENU_DAFTAR') return '1';
     if (up === 'MENU_CEK') return '2';
     if (up === 'MENU_HAPUS') return '3';
@@ -539,6 +552,14 @@ function normalizeIncomingCommand(raw: string): string {
     if (up === 'MENU_BANTUAN') return '6';
     if (up === 'HAPUS') return '3'; // Support keyword "HAPUS" langsung
     return up;
+}
+
+function isAllowedWhenClosed(normalizedCommand: string, currentUserFlow: string): boolean {
+    if (currentUserFlow === 'CHECK_STATUS_PICK_ITEMS') {
+        return true;
+    }
+
+    return CLOSED_MODE_MENU_5_ALLOWLIST.has(normalizedCommand);
 }
 
 function buildLocationQuotaMenuText(): string {
@@ -1301,6 +1322,7 @@ export async function connectToWhatsApp() {
                 }
 
                 const isAdminByCurrentPhone = ADMIN_PHONES.has(normalizePhone(senderPhone));
+                const currentUserFlow = userFlowByPhone.get(senderPhone) || 'NONE';
                 if (!isAdminByCurrentPhone && senderPhone !== senderPhoneAtEarlyCheck) {
                     const blockedPhone = await isPhoneBlocked(senderPhone);
                     if (blockedPhone.blocked) {
@@ -1318,8 +1340,15 @@ export async function connectToWhatsApp() {
 
                 // 🛑 CEK JAM TUTUP (PRIORITAS UTAMA)
                 // Jika tutup, langsung tolak (kecuali Admin)
-                if (closed && !isAdminByCurrentPhone) {
-                    const closeMessage = renderCloseMessage(botSettings);
+                const allowWhenClosed = isAllowedWhenClosed(normalized, currentUserFlow);
+                if (closed && !isAdminByCurrentPhone && !allowWhenClosed) {
+                    const closeMessage = [
+                        renderCloseMessage(botSettings),
+                        '',
+                        '📌 Mohon maaf, saat ini layanan sedang tutup.',
+                        'Saat tutup, yang bisa diakses hanya menu *5*.',
+                        'Silakan ketik *5* untuk *Cek Status Pendaftaran*.',
+                    ].join('\n');
                     await sock.sendMessage(remoteJid, { text: closeMessage });
                     continue; // STOP PROCESSING
                 }
@@ -1448,7 +1477,6 @@ export async function connectToWhatsApp() {
                     return { sourceDate, items };
                 };
 
-                const currentUserFlow = userFlowByPhone.get(senderPhone) || 'NONE';
                 const currentLocation = userLocationChoice.get(senderPhone) || 'DHARMAJAYA'; // Default to old style (Dharmajaya) if unknown
 
                 // --- EDIT FLOW HANDLER (PATCH 1 START) ---
