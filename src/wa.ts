@@ -1321,14 +1321,7 @@ export async function connectToWhatsApp() {
                 // Jika tutup, langsung tolak (kecuali Admin)
                 const allowWhenClosed = isAllowedWhenClosed(normalized, currentUserFlow);
                 if (closed && !isAdminByCurrentPhone && !allowWhenClosed) {
-                    const closeMessage = [
-                        renderCloseMessage(botSettings),
-                        '',
-                        'Catatan:',
-                        'Saat tutup, yang bisa diakses hanya menu *5*.',
-                        'Silakan ketik *5* untuk *Cek Status Pendaftaran*.',
-                    ].join('\n');
-                    await sock.sendMessage(remoteJid, { text: closeMessage });
+                    await sock.sendMessage(remoteJid, { text: renderCloseMessage(botSettings) });
                     continue; // STOP PROCESSING
                 }
 

@@ -2178,6 +2178,16 @@ export function formatOpenTimeString(settings: BotSettings): string {
     return `${String(settings.close_hour_end).padStart(2, '0')}.${String(settings.close_minute_end).padStart(2, '0')}`;
 }
 
+function stripLegacyCloseNote(template: string): string {
+    const withoutLegacyLines = template
+        .replace(/(?:^|\n)\s*Catatan:\s*Saat tutup,\s*yang bisa diakses hanya menu\s*\*?5\*?\.\s*(?=\n|$)/gi, '')
+        .replace(/(?:^|\n)\s*Silakan ketik\s*\*?5\*?\s*untuk Cek Status Pendaftaran\.\s*(?=\n|$)/gi, '');
+
+    return withoutLegacyLines
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+}
+
 // Render template pesan tutup dengan placeholder
 // Render template pesan tutup dengan placeholder
 export function renderCloseMessage(settings: BotSettings): string {
@@ -2187,7 +2197,8 @@ export function renderCloseMessage(settings: BotSettings): string {
             .split('{JAM_BUKA}').join(jamBuka);
     };
 
-    const effectiveTemplate = (settings.close_message_template || DEFAULT_BOT_SETTINGS.close_message_template || '').trim() || DEFAULT_BOT_SETTINGS.close_message_template;
+    const rawTemplate = (settings.close_message_template || DEFAULT_BOT_SETTINGS.close_message_template || '').trim() || DEFAULT_BOT_SETTINGS.close_message_template;
+    const effectiveTemplate = stripLegacyCloseNote(rawTemplate);
 
     // Cek apakah sedang dalam MODE TUTUP PANJANG (Manual Override).
     // Pesan manual hanya dipakai jika waktu sekarang benar-benar berada
