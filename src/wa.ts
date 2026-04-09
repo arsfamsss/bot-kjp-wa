@@ -23,6 +23,7 @@ import {
     ValidItemDetail,
     getGlobalRecap,
     generateExportData,
+    generateRegionTxtExport,
     getEditableItemsForSender
 } from './recap';
 import {
@@ -4987,9 +4988,10 @@ export async function connectToWhatsApp() {
                             }
                         }
                     } else if (currentAdminFlow === 'EXPORT_SELECT_DATE') {
-                        // Admin pilih export hari ini atau tanggal lain
-                        if (normalized === '1') {
-                            // Export hari ini
+                        if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'MENU');
+                            replyText = ADMIN_MENU_MESSAGE;
+                        } else if (normalized === '1') {
                             await sock.sendMessage(remoteJid, { text: '⏳ Sedang menyiapkan file export...' });
 
                             const lookupNameFn = (ph: string) => getRegisteredUserNameSync(ph) || undefined;
@@ -4998,7 +5000,6 @@ export async function connectToWhatsApp() {
                             if (!exportResult || exportResult.count === 0) {
                                 replyText = '📂 Belum ada data pendaftaran hari ini untuk diexport.';
                             } else {
-                                // 1. Kirim TXT
                                 const txtBuffer = Buffer.from(exportResult.txt, 'utf-8');
                                 await sock.sendMessage(remoteJid, {
                                     document: txtBuffer,
@@ -5007,7 +5008,6 @@ export async function connectToWhatsApp() {
                                     caption: `📄 Laporan Detail Data (${exportResult.count} data)`
                                 });
 
-                                // 2. Kirim Excel
                                 const { data: excelDataRaw } = await supabase
                                     .from('data_harian')
                                     .select('*')
@@ -5016,8 +5016,6 @@ export async function connectToWhatsApp() {
                                     .order('received_at', { ascending: true });
 
                                 if (excelDataRaw && excelDataRaw.length > 0) {
-                                    // ENRICH & SORT BY NAME
-                                    // PRIORITAS: 1. contacts_data.ts (manual), 2. Cache/LID (Nama Terbaru), 3. DB History, 4. No HP
                                     const enriched = excelDataRaw.map((row: any) => {
                                         const contactName = getContactName(row.sender_phone);
                                         const currentName = getRegisteredUserNameSync(row.sender_phone);
@@ -5025,7 +5023,6 @@ export async function connectToWhatsApp() {
                                         return { ...row, sender_name: finalSender };
                                     });
 
-                                    // Sort A-Z
                                     enriched.sort((a, b) => {
                                         const nA = (a.sender_name || '').toUpperCase();
                                         const nB = (b.sender_name || '').toUpperCase();
@@ -5041,11 +5038,36 @@ export async function connectToWhatsApp() {
                                     });
                                 }
 
+                                const regionExports = [
+                                    { keyword: 'KAPUK', filename: 'kjp_kapuk', label: 'Kapuk' },
+                                    { keyword: 'DURI KOSAMBI', filename: 'kjp_durikosambi', label: 'Duri Kosambi' },
+                                    { keyword: 'CAKUNG', filename: 'kjp_cakung', label: 'Cakung' },
+                                    { keyword: 'PULOGADUNG', filename: 'kjp_pulogadung', label: 'Pulogadung' },
+                                ];
+
+                                for (const region of regionExports) {
+                                    const regionResult = await generateRegionTxtExport(
+                                        processingDayKey,
+                                        region.keyword,
+                                        region.filename,
+                                        lookupNameFn
+                                    );
+                                    if (!regionResult || regionResult.count === 0) {
+                                        continue;
+                                    }
+                                    const regionTxtBuffer = Buffer.from(regionResult.txt, 'utf-8');
+                                    await sock.sendMessage(remoteJid, {
+                                        document: regionTxtBuffer,
+                                        mimetype: 'text/plain',
+                                        fileName: `${regionResult.filenameBase}.txt`,
+                                        caption: `📄 ${regionResult.filenameBase}.txt (${regionResult.count} data)`
+                                    });
+                                }
+
                                 replyText = '✅ Export data (TXT & Excel) selesai.';
                             }
                             adminFlowByPhone.set(senderPhone, 'MENU');
                         } else if (normalized === '2') {
-                            // Export Kemarin
                             const yesterday = shiftIsoDate(processingDayKey, -1);
                             await sock.sendMessage(remoteJid, { text: '⏳ Sedang menyiapkan file export kemarin...' });
 
@@ -5056,7 +5078,6 @@ export async function connectToWhatsApp() {
                             if (!exportResult || exportResult.count === 0) {
                                 replyText = `📂 Tidak ada data pendaftaran kemarin (${displayDate}).`;
                             } else {
-                                // 1. Kirim TXT
                                 const txtBuffer = Buffer.from(exportResult.txt, 'utf-8');
                                 await sock.sendMessage(remoteJid, {
                                     document: txtBuffer,
@@ -5065,7 +5086,6 @@ export async function connectToWhatsApp() {
                                     caption: `📄 Laporan Detail Data ${displayDate} (${exportResult.count} data)`
                                 });
 
-                                // 2. Kirim Excel
                                 const { data: excelDataRaw } = await supabase
                                     .from('data_harian')
                                     .select('*')
@@ -5095,11 +5115,37 @@ export async function connectToWhatsApp() {
                                         caption: `📊 Laporan Excel ${displayDate} (${enriched.length} data)`
                                     });
                                 }
+
+                                const regionExports = [
+                                    { keyword: 'KAPUK', filename: 'kjp_kapuk', label: 'Kapuk' },
+                                    { keyword: 'DURI KOSAMBI', filename: 'kjp_durikosambi', label: 'Duri Kosambi' },
+                                    { keyword: 'CAKUNG', filename: 'kjp_cakung', label: 'Cakung' },
+                                    { keyword: 'PULOGADUNG', filename: 'kjp_pulogadung', label: 'Pulogadung' },
+                                ];
+
+                                for (const region of regionExports) {
+                                    const regionResult = await generateRegionTxtExport(
+                                        yesterday,
+                                        region.keyword,
+                                        region.filename,
+                                        lookupNameFn
+                                    );
+                                    if (!regionResult || regionResult.count === 0) {
+                                        continue;
+                                    }
+                                    const regionTxtBuffer = Buffer.from(regionResult.txt, 'utf-8');
+                                    await sock.sendMessage(remoteJid, {
+                                        document: regionTxtBuffer,
+                                        mimetype: 'text/plain',
+                                        fileName: `${regionResult.filenameBase}.txt`,
+                                        caption: `📄 ${regionResult.filenameBase}.txt ${displayDate} (${regionResult.count} data)`
+                                    });
+                                }
+
                                 replyText = '✅ Export data kemarin selesai.';
                             }
                             adminFlowByPhone.set(senderPhone, 'MENU');
                         } else if (normalized === '3') {
-                            // Pilih tanggal lain
                             adminFlowByPhone.set(senderPhone, 'EXPORT_CUSTOM_DATE');
                             replyText = [
                                 '📅 *EXPORT TANGGAL LAIN*',
@@ -5116,67 +5162,91 @@ export async function connectToWhatsApp() {
                             replyText = '⚠️ Pilih 1, 2, atau 3. Ketik 0 untuk batal.';
                         }
                     } else if (currentAdminFlow === 'EXPORT_CUSTOM_DATE') {
-                        // Admin ketik tanggal custom untuk export - FLEXIBLE FORMAT
-                        // parseFlexibleDate returns YYYY-MM-DD or null
-                        const iso = parseFlexibleDate(rawTrim);
-                        if (!iso) {
-                            replyText = '⚠️ Format tanggal tidak dikenali.\n\nContoh format yang diterima:\n• 22-01-2026\n• 22/01/2026\n• 22012026\n• 22 Januari 2026\n\nKetik 0 untuk batal.';
-                        } else {
-                            await sock.sendMessage(remoteJid, { text: '⏳ Sedang menyiapkan file export...' });
-
-                            const lookupNameFn = (ph: string) => getRegisteredUserNameSync(ph) || undefined;
-                            const exportResult = await generateExportData(iso, lookupNameFn);
-
-                            const displayDate = iso.split('-').reverse().join('-');
-                            if (!exportResult || exportResult.count === 0) {
-                                replyText = `📂 Tidak ada data pendaftaran pada tanggal ${displayDate}.`;
-                            } else {
-                                // 1. Kirim TXT
-                                const txtBuffer = Buffer.from(exportResult.txt, 'utf-8');
-                                await sock.sendMessage(remoteJid, {
-                                    document: txtBuffer,
-                                    mimetype: 'text/plain',
-                                    fileName: `${exportResult.filenameBase}.txt`,
-                                    caption: `📄 Laporan Detail Data ${displayDate} (${exportResult.count} data)`
-                                });
-
-                                // 2. Kirim Excel
-                                const { data: excelDataRaw } = await supabase
-                                    .from('data_harian')
-                                    .select('*')
-                                    .eq('processing_day_key', iso)
-                                    .order('sender_phone', { ascending: true })
-                                    .order('received_at', { ascending: true });
-
-                                if (excelDataRaw && excelDataRaw.length > 0) {
-                                    // ENRICH & SORT BY NAME
-                                    // PRIORITAS: 1. Cache/LID (Nama Terbaru), 2. DB History (Nama Lama/Snapshot), 3. No HP
-                                    const enriched = excelDataRaw.map((row: any) => {
-                                        const contactName = getContactName(row.sender_phone);
-                                        const currentName = getRegisteredUserNameSync(row.sender_phone);
-                                        const finalSender = contactName || currentName || row.sender_name || row.sender_phone;
-                                        return { ...row, sender_name: finalSender };
-                                    });
-
-                                    // Sort Array by sender_name A-Z
-                                    enriched.sort((a, b) => {
-                                        const nA = (a.sender_name || '').toUpperCase();
-                                        const nB = (b.sender_name || '').toUpperCase();
-                                        return nA.localeCompare(nB);
-                                    });
-
-                                    const excelBuffer = generateKJPExcel(enriched);
-                                    await sock.sendMessage(remoteJid, {
-                                        document: excelBuffer,
-                                        mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                                        fileName: `${exportResult.filenameBase}.xlsx`,
-                                        caption: `📊 Laporan Excel ${displayDate} (${enriched.length} data)`
-                                    });
-                                }
-
-                                replyText = '✅ Export data (TXT & Excel) selesai.';
-                            }
+                        if (normalized === '0') {
                             adminFlowByPhone.set(senderPhone, 'MENU');
+                            replyText = ADMIN_MENU_MESSAGE;
+                        } else {
+                            const iso = parseFlexibleDate(rawTrim);
+                            if (!iso) {
+                                replyText = '⚠️ Format tanggal tidak dikenali.\n\nContoh format yang diterima:\n• 22-01-2026\n• 22/01/2026\n• 22012026\n• 22 Januari 2026\n\nKetik 0 untuk batal.';
+                            } else {
+                                await sock.sendMessage(remoteJid, { text: '⏳ Sedang menyiapkan file export...' });
+
+                                const lookupNameFn = (ph: string) => getRegisteredUserNameSync(ph) || undefined;
+                                const exportResult = await generateExportData(iso, lookupNameFn);
+
+                                const displayDate = iso.split('-').reverse().join('-');
+                                if (!exportResult || exportResult.count === 0) {
+                                    replyText = `📂 Tidak ada data pendaftaran pada tanggal ${displayDate}.`;
+                                } else {
+                                    const txtBuffer = Buffer.from(exportResult.txt, 'utf-8');
+                                    await sock.sendMessage(remoteJid, {
+                                        document: txtBuffer,
+                                        mimetype: 'text/plain',
+                                        fileName: `${exportResult.filenameBase}.txt`,
+                                        caption: `📄 Laporan Detail Data ${displayDate} (${exportResult.count} data)`
+                                    });
+
+                                    const { data: excelDataRaw } = await supabase
+                                        .from('data_harian')
+                                        .select('*')
+                                        .eq('processing_day_key', iso)
+                                        .order('sender_phone', { ascending: true })
+                                        .order('received_at', { ascending: true });
+
+                                    if (excelDataRaw && excelDataRaw.length > 0) {
+                                        const enriched = excelDataRaw.map((row: any) => {
+                                            const contactName = getContactName(row.sender_phone);
+                                            const currentName = getRegisteredUserNameSync(row.sender_phone);
+                                            const finalSender = contactName || currentName || row.sender_name || row.sender_phone;
+                                            return { ...row, sender_name: finalSender };
+                                        });
+
+                                        enriched.sort((a, b) => {
+                                            const nA = (a.sender_name || '').toUpperCase();
+                                            const nB = (b.sender_name || '').toUpperCase();
+                                            return nA.localeCompare(nB);
+                                        });
+
+                                        const excelBuffer = generateKJPExcel(enriched);
+                                        await sock.sendMessage(remoteJid, {
+                                            document: excelBuffer,
+                                            mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                                            fileName: `${exportResult.filenameBase}.xlsx`,
+                                            caption: `📊 Laporan Excel ${displayDate} (${enriched.length} data)`
+                                        });
+                                    }
+
+                                    const regionExports = [
+                                        { keyword: 'KAPUK', filename: 'kjp_kapuk', label: 'Kapuk' },
+                                        { keyword: 'DURI KOSAMBI', filename: 'kjp_durikosambi', label: 'Duri Kosambi' },
+                                        { keyword: 'CAKUNG', filename: 'kjp_cakung', label: 'Cakung' },
+                                        { keyword: 'PULOGADUNG', filename: 'kjp_pulogadung', label: 'Pulogadung' },
+                                    ];
+
+                                    for (const region of regionExports) {
+                                        const regionResult = await generateRegionTxtExport(
+                                            iso,
+                                            region.keyword,
+                                            region.filename,
+                                            lookupNameFn
+                                        );
+                                        if (!regionResult || regionResult.count === 0) {
+                                            continue;
+                                        }
+                                        const regionTxtBuffer = Buffer.from(regionResult.txt, 'utf-8');
+                                        await sock.sendMessage(remoteJid, {
+                                            document: regionTxtBuffer,
+                                            mimetype: 'text/plain',
+                                            fileName: `${regionResult.filenameBase}.txt`,
+                                            caption: `📄 ${regionResult.filenameBase}.txt ${displayDate} (${regionResult.count} data)`
+                                        });
+                                    }
+
+                                    replyText = '✅ Export data (TXT & Excel) selesai.';
+                                }
+                                adminFlowByPhone.set(senderPhone, 'MENU');
+                            }
                         }
                     } else if (currentAdminFlow === 'SETTING_CLOSE_TIME_MENU') {
                         // SUB-MENU JAM TUTUP (UPDATED)

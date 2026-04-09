@@ -775,3 +775,79 @@ export async function generateExportData(
         count: data.length
     };
 }
+
+export async function generateRegionTxtExport(
+    processingDayKey: string,
+    locationKeyword: string,
+    filenameBase: string,
+    nameLookup?: (phone: string) => string | undefined
+): Promise<{ txt: string; filenameBase: string; count: number } | null> {
+    const normalizedKeyword = locationKeyword.trim().toUpperCase();
+    if (!normalizedKeyword) {
+        return null;
+    }
+
+    const { data, error } = await supabase
+        .from('data_harian')
+        .select('nama, no_kjp, no_ktp, no_kk, lokasi, sender_phone, received_at')
+        .eq('processing_day_key', processingDayKey)
+        .order('sender_phone', { ascending: true })
+        .order('received_at', { ascending: true });
+
+    if (error || !data || data.length === 0) {
+        return null;
+    }
+
+    const filtered = (data as any[]).filter((row) => {
+        const lokasi = String(row.lokasi || '').toUpperCase();
+        return lokasi.includes(normalizedKeyword);
+    });
+
+    if (filtered.length === 0) {
+        return null;
+    }
+
+    const allPhones = [...new Set(filtered.map((row) => String(row.sender_phone || '').trim()).filter(Boolean))];
+    const dbNamesMap = new Map<string, string>();
+
+    if (allPhones.length > 0) {
+        const { data: mapData } = await supabase
+            .from('lid_phone_map')
+            .select('phone_number, push_name')
+            .in('phone_number', allPhones);
+
+        if (mapData) {
+            mapData.forEach((row: any) => {
+                if (row.phone_number && row.push_name) {
+                    dbNamesMap.set(row.phone_number, row.push_name);
+                }
+            });
+        }
+    }
+
+    const getSenderName = (phone: string): string => {
+        let name: string | null = getContactName(phone);
+        if (!name) name = dbNamesMap.get(phone) || null;
+        if (!name && nameLookup) {
+            name = nameLookup(phone) || null;
+        }
+        return name || 'Unknown';
+    };
+
+    const txtRows: string[] = [];
+    for (const item of filtered) {
+        const senderPhone = String(item.sender_phone || '');
+        const senderName = getSenderName(senderPhone);
+        txtRows.push(`${senderName} (${item.nama || '-'})`);
+        txtRows.push(`   📇 KJP ${item.no_kjp || '-'}`);
+        txtRows.push(`   🪖 KTP ${item.no_ktp || '-'}`);
+        txtRows.push(`   🏠 KK  ${item.no_kk || '-'}`);
+        txtRows.push('');
+    }
+
+    return {
+        txt: txtRows.join('\n').trim(),
+        filenameBase,
+        count: filtered.length,
+    };
+}
