@@ -1753,11 +1753,53 @@ export async function connectToWhatsApp() {
                         userFlowByPhone.set(senderPhone, 'NONE');
                         editSessionMap.delete(senderPhone);
                     } else if (normalized === '1' || normalized === 'OK' || normalized === 'YA' || normalized === 'SIAP') {
+                        if (session.selectedFieldKey === 'lokasi') {
+                            const targetLocation = (session.newValue || '').toString().trim();
+                            const record = session.recordsToday.find(r => r.id === session.selectedRecordId);
+                            const currentLocation = (record?.lokasi || '').toString().trim();
+                            const normalizedTarget = targetLocation.replace(/\s+/g, ' ');
+                            const normalizedCurrent = currentLocation.replace(/\s+/g, ' ');
+
+                            if (normalizedTarget && normalizedTarget !== normalizedCurrent) {
+                                const limitTarget = getLocationQuotaLimit(normalizedTarget);
+                                if (limitTarget !== null) {
+                                    const usedTarget = await getTotalDataTodayForSenderByLocation(
+                                        senderPhone,
+                                        processingDayKey,
+                                        normalizedTarget
+                                    );
+
+                                    if (usedTarget < 0) {
+                                        replyText = '⚠️ Sistem kuota sedang bermasalah. Silakan coba lagi beberapa saat.';
+                                        await sock.sendMessage(remoteJid, { text: replyText });
+                                        continue;
+                                    }
+
+                                    if (usedTarget >= limitTarget) {
+                                        const locationLabel = normalizedTarget.replace(/^DHARMAJAYA\s*-\s*/i, '').trim() || normalizedTarget;
+                                        replyText = [
+                                            `⛔ Limit Kirim Data ${locationLabel} sudah penuh.`,
+                                            `Limit: *${limitTarget}*`,
+                                            `Sudah terpakai: *${usedTarget} data*`,
+                                            '',
+                                            'Ketik *0* untuk batal, lalu EDIT lagi dengan lokasi lain.'
+                                        ].join('\n');
+                                        await sock.sendMessage(remoteJid, { text: replyText });
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
+
                         // EKSEKUSI SIMPAN KE DB
                         const { success, error } = await updateDailyDataField(
                             session.selectedRecordId!,
                             session.selectedFieldKey!,
-                            session.newValue!
+                            session.newValue!,
+                            {
+                                senderPhone,
+                                processingDayKey,
+                            }
                         );
 
                         // Ambil fieldLabel untuk reply (PATCH 3: Tambah lokasi)
@@ -1800,7 +1842,25 @@ export async function connectToWhatsApp() {
                             ].join('\n');
                         } else {
                             console.error('Gagal update data:', error);
-                            replyText = '❌ Gagal menyimpan perubahan. Silakan coba lagi nanti.';
+                            const errorCode = typeof error === 'object' && error !== null && 'code' in error
+                                ? String((error as { code?: unknown }).code || '')
+                                : '';
+                            const errorMessage = typeof error === 'object' && error !== null && 'message' in error
+                                ? String((error as { message?: unknown }).message || '')
+                                : '';
+
+                            if (
+                                errorCode === 'LOCATION_QUOTA_EXCEEDED' ||
+                                errorCode === 'LOCATION_QUOTA_CHECK_FAILED' ||
+                                errorCode === 'UPDATE_CONFLICT' ||
+                                errorCode === 'PROCESSING_DAY_MISMATCH' ||
+                                errorCode === 'EDIT_OWNER_MISMATCH' ||
+                                errorCode === 'LOCATION_QUOTA_CONTEXT_MISSING'
+                            ) {
+                                replyText = errorMessage || '❌ Gagal menyimpan perubahan. Silakan cek ulang lalu coba lagi.';
+                            } else {
+                                replyText = '❌ Gagal menyimpan perubahan. Silakan coba lagi nanti.';
+                            }
                         }
 
                         // Bersihkan sesi

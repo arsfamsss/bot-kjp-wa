@@ -3,6 +3,7 @@ import 'dotenv/config';
 import { createClient } from '@supabase/supabase-js';
 import type { LogItem, LogJson, DuplicateKind, DuplicateInfo } from './types';
 import { getStartOfNextWibMonthUTC, getStartOfWibMonthUTC, getWibParts, getWibTimeHHmm, isLastDayOfWibMonth } from './time';
+import { getLocationQuotaLimit } from './services/locationQuota';
 
 const url = process.env.SUPABASE_URL!;
 const anonKey = process.env.SUPABASE_ANON_KEY!;
@@ -2238,16 +2239,25 @@ export function clearBotSettingsCache(): void {
 export async function updateDailyDataField(
     id: number,
     field: string,
-    value: string
+    value: string,
+    options?: {
+        senderPhone?: string;
+        processingDayKey?: string;
+    }
 ): Promise<{ success: boolean; error: any }> {
     try {
         let previousLocation: string | null = null;
         let processingDayKey: string | null = null;
+        let dbSenderPhone: string | null = null;
+        let quotaCheckTargetLocation: string | null = null;
+        let quotaCheckLimitTarget: number | null = null;
+        const requestedSenderPhone = normalizePhoneNumber(options?.senderPhone || '');
+        const requestedProcessingDayKey = (options?.processingDayKey || '').trim();
 
         if (field === 'lokasi') {
             const { data: existing, error: readError } = await supabase
                 .from('data_harian')
-                .select('processing_day_key, lokasi')
+                .select('processing_day_key, lokasi, sender_phone')
                 .eq('id', id)
                 .maybeSingle();
 
@@ -2262,16 +2272,175 @@ export async function updateDailyDataField(
 
             previousLocation = (existing as { lokasi?: string | null }).lokasi || null;
             processingDayKey = (existing as { processing_day_key?: string | null }).processing_day_key || null;
+            dbSenderPhone = normalizePhoneNumber((existing as { sender_phone?: string | null }).sender_phone || '');
+
+            if (requestedProcessingDayKey && processingDayKey && requestedProcessingDayKey !== processingDayKey) {
+                return {
+                    success: false,
+                    error: { code: 'PROCESSING_DAY_MISMATCH', message: 'Sesi edit kedaluwarsa. Silakan ulangi dari menu EDIT.' },
+                };
+            }
+
+            if (requestedSenderPhone && dbSenderPhone && requestedSenderPhone !== dbSenderPhone) {
+                return {
+                    success: false,
+                    error: { code: 'EDIT_OWNER_MISMATCH', message: 'Data tidak dapat diedit oleh nomor ini.' },
+                };
+            }
+
+            const previousLocationNormalized = normalizeLocationKey(previousLocation || '');
+            const nextLocation = normalizeLocationKey(value || '');
+            const effectiveSenderPhone = requestedSenderPhone || dbSenderPhone;
+            const effectiveProcessingDayKey = (processingDayKey || '').trim();
+
+            if (nextLocation && previousLocationNormalized !== nextLocation) {
+                const limitTarget = getLocationQuotaLimit(nextLocation);
+                if (limitTarget !== null) {
+                    if (!effectiveSenderPhone || !effectiveProcessingDayKey) {
+                        return {
+                            success: false,
+                            error: { code: 'LOCATION_QUOTA_CONTEXT_MISSING', message: 'Konteks kuota tidak lengkap untuk edit lokasi.' },
+                        };
+                    }
+
+                    const usedTarget = await getTotalDataTodayForSenderByLocation(
+                        effectiveSenderPhone,
+                        effectiveProcessingDayKey,
+                        nextLocation
+                    );
+
+                    if (usedTarget < 0) {
+                        return {
+                            success: false,
+                            error: {
+                                code: 'LOCATION_QUOTA_CHECK_FAILED',
+                                message: 'Sistem kuota sedang bermasalah. Silakan coba lagi beberapa saat.',
+                            },
+                        };
+                    }
+
+                    if (usedTarget >= limitTarget) {
+                        const locationLabel = nextLocation.replace(/^DHARMAJAYA\s*-\s*/i, '').trim() || nextLocation;
+                        return {
+                            success: false,
+                            error: {
+                                code: 'LOCATION_QUOTA_EXCEEDED',
+                                message: `⛔ Limit Kirim Data ${locationLabel} sudah penuh (${limitTarget}).`,
+                            },
+                        };
+                    }
+
+                    quotaCheckTargetLocation = nextLocation;
+                    quotaCheckLimitTarget = limitTarget;
+                }
+            }
         }
 
-        const { error } = await supabase
+        const updatePayload: Record<string, string> = { [field]: value };
+        let updateQuery = supabase
             .from('data_harian')
-            .update({ [field]: value })
+            .update(updatePayload)
             .eq('id', id);
+
+        if (field === 'lokasi' && requestedProcessingDayKey) {
+            updateQuery = updateQuery.eq('processing_day_key', requestedProcessingDayKey);
+        } else if (field === 'lokasi' && processingDayKey) {
+            updateQuery = updateQuery.eq('processing_day_key', processingDayKey);
+        }
+
+        if (field === 'lokasi' && requestedSenderPhone) {
+            updateQuery = updateQuery.eq('sender_phone', requestedSenderPhone);
+        } else if (field === 'lokasi' && dbSenderPhone) {
+            updateQuery = updateQuery.eq('sender_phone', dbSenderPhone);
+        }
+
+        if (field === 'lokasi') {
+            if (previousLocation === null) {
+                updateQuery = updateQuery.is('lokasi', null);
+            } else {
+                updateQuery = updateQuery.eq('lokasi', previousLocation);
+            }
+        }
+
+        const { data: updatedRows, error } = await updateQuery
+            .select('id')
+            .limit(1);
 
         if (error) {
             console.error('Error updateDailyDataField:', error);
             return { success: false, error };
+        }
+
+        if (!updatedRows || updatedRows.length === 0) {
+            return {
+                success: false,
+                error: {
+                    code: 'UPDATE_CONFLICT',
+                    message: 'Data berubah saat diproses. Silakan cek ulang lalu coba edit lagi.',
+                },
+            };
+        }
+
+        if (field === 'lokasi' && quotaCheckTargetLocation && quotaCheckLimitTarget !== null) {
+            const effectiveSenderPhone = requestedSenderPhone || dbSenderPhone;
+            const effectiveProcessingDayKey = (processingDayKey || '').trim();
+
+            if (!effectiveSenderPhone || !effectiveProcessingDayKey) {
+                return {
+                    success: false,
+                    error: {
+                        code: 'LOCATION_QUOTA_CONTEXT_MISSING',
+                        message: 'Konteks kuota tidak lengkap untuk edit lokasi.',
+                    },
+                };
+            }
+
+            const usedAfterUpdate = await getTotalDataTodayForSenderByLocation(
+                effectiveSenderPhone,
+                effectiveProcessingDayKey,
+                quotaCheckTargetLocation
+            );
+
+            if (usedAfterUpdate < 0) {
+                return {
+                    success: false,
+                    error: {
+                        code: 'LOCATION_QUOTA_CHECK_FAILED',
+                        message: 'Sistem kuota sedang bermasalah. Silakan coba lagi beberapa saat.',
+                    },
+                };
+            }
+
+            if (usedAfterUpdate > quotaCheckLimitTarget) {
+                let rollbackQuery = supabase
+                    .from('data_harian')
+                    .update({ lokasi: previousLocation })
+                    .eq('id', id)
+                    .eq('processing_day_key', effectiveProcessingDayKey)
+                    .eq('sender_phone', effectiveSenderPhone)
+                    .eq('lokasi', quotaCheckTargetLocation);
+
+                const { error: rollbackError } = await rollbackQuery;
+                if (rollbackError) {
+                    console.error('Error rollback updateDailyDataField after quota race:', rollbackError);
+                    return {
+                        success: false,
+                        error: {
+                            code: 'UPDATE_CONFLICT',
+                            message: 'Terjadi bentrok data saat update. Silakan cek ulang lalu coba lagi.',
+                        },
+                    };
+                }
+
+                const locationLabel = quotaCheckTargetLocation.replace(/^DHARMAJAYA\s*-\s*/i, '').trim() || quotaCheckTargetLocation;
+                return {
+                    success: false,
+                    error: {
+                        code: 'LOCATION_QUOTA_EXCEEDED',
+                        message: `⛔ Limit Kirim Data ${locationLabel} sudah penuh (${quotaCheckLimitTarget}).`,
+                    },
+                };
+            }
         }
 
         if (field === 'lokasi' && processingDayKey) {
