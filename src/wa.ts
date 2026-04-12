@@ -333,20 +333,28 @@ async function buildSelectLocationFirstPromptText(): Promise<string> {
         ? availableSubLocations.join('\n')
         : '   - Saat ini semua sub-lokasi DHARMAJAYA sedang TUTUP.';
 
+    const locationOptionText = PASARJAYA_DISABLED
+        ? 'Saat ini yang tersedia: *2. DHARMAJAYA*'
+        : 'Saat ini yang tersedia: *1. PASARJAYA* dan *2. DHARMAJAYA*';
+
+    const firstStepText = PASARJAYA_DISABLED
+        ? '1) Ketik *2* untuk pilih DHARMAJAYA'
+        : '1) Ketik *1* atau *2* untuk pilih lokasi';
+
     return [
         '⚠️ *Mohon Pilih Lokasi Dulu*',
         '',
         'Data Anda sudah valid, tapi lokasi pengambilan belum dipilih.',
         'Silakan pilih lokasi dulu agar data bisa diproses.',
         '',
-        'Saat ini yang tersedia: *2. DHARMAJAYA*',
+        locationOptionText,
         '',
-        '*Sub-lokasi yang masih tersedia:*',
+        '*Sub-lokasi DHARMAJAYA yang masih tersedia:*',
         availableSection,
         '',
         'Balas bertahap:',
-        '1) Ketik *2* untuk pilih DHARMAJAYA',
-        '2) Lalu ketik angka sub-lokasi (1-4) sesuai daftar di atas',
+        firstStepText,
+        '2) Lalu ketik angka sub-lokasi sesuai menu yang muncul',
         '',
         '_Ketik 0 untuk batal._',
     ].join('\n');
@@ -2608,7 +2616,9 @@ export async function connectToWhatsApp() {
                         pendingRegistrationData.delete(senderPhone);
                         replyText = '✅ Pendaftaran dibatalkan.';
                     } else {
-                        replyText = '⚠️ Ketik Angka *2* (Dharmajaya).\nKetik *0* untuk batal.';
+                        replyText = PASARJAYA_DISABLED
+                            ? '⚠️ Ketik Angka *2* (Dharmajaya).\nKetik *0* untuk batal.'
+                            : '⚠️ Ketik Angka *1* (Pasarjaya) atau *2* (Dharmajaya).\nKetik *0* untuk batal.';
                     }
                     if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
                     continue;
