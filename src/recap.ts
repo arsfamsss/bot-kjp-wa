@@ -790,7 +790,7 @@ export async function generateRegionTxtExport(
 
     const { data, error } = await supabase
         .from('data_harian')
-        .select('nama, no_kjp, no_ktp, no_kk, jenis_kartu, lokasi, sender_phone, received_at')
+        .select('nama, no_kjp, no_ktp, no_kk, jenis_kartu, tanggal_lahir, lokasi, sender_phone, received_at')
         .eq('processing_day_key', processingDayKey)
         .order('sender_phone', { ascending: true })
         .order('received_at', { ascending: true });
@@ -843,6 +843,7 @@ export async function generateRegionTxtExport(
     };
 
     const txtRows: string[] = [];
+    const isPasarjayaRegion = parentRegion === 'PASARJAYA';
     for (const item of filtered) {
         const senderPhone = String(item.sender_phone || '');
         const senderName = getSenderName(senderPhone);
@@ -851,6 +852,12 @@ export async function generateRegionTxtExport(
         txtRows.push(`   📇 ${jenisKartu} ${item.no_kjp || '-'}`);
         txtRows.push(`   🪖 KTP ${item.no_ktp || '-'}`);
         txtRows.push(`   🏠 KK  ${item.no_kk || '-'}`);
+        if (isPasarjayaRegion) {
+            const tglLahir = item.tanggal_lahir ? formatDateDMY(item.tanggal_lahir) : '';
+            const cleanLokasi = String(item.lokasi || 'PASARJAYA').replace(/^PASARJAYA\s*-\s*/i, '');
+            if (tglLahir) txtRows.push(`   📅 ${tglLahir}`);
+            txtRows.push(`   📍 ${cleanLokasi}`);
+        }
         txtRows.push('');
     }
 
