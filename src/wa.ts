@@ -5108,11 +5108,12 @@ export async function connectToWhatsApp() {
                                     });
                                 }
 
-                                const regionExports = [
-                                    { keyword: 'KAPUK', filename: 'kjp_kapuk', label: 'Kapuk' },
-                                    { keyword: 'DURI KOSAMBI', filename: 'kjp_durikosambi', label: 'Duri Kosambi' },
-                                    { keyword: 'CAKUNG', filename: 'kjp_cakung', label: 'Cakung' },
-                                    { keyword: 'PULOGADUNG', filename: 'kjp_pulogadung', label: 'Pulogadung' },
+                                const regionExports: { keyword: string; filename: string; label: string; parentRegion: 'DHARMAJAYA' | 'PASARJAYA' }[] = [
+                                    { keyword: 'KAPUK', filename: 'kjp_kapuk', label: 'Kapuk', parentRegion: 'DHARMAJAYA' },
+                                    { keyword: 'DURI KOSAMBI', filename: 'kjp_durikosambi', label: 'Duri Kosambi', parentRegion: 'DHARMAJAYA' },
+                                    { keyword: 'CAKUNG', filename: 'kjp_cakung', label: 'Cakung', parentRegion: 'DHARMAJAYA' },
+                                    { keyword: 'PULOGADUNG', filename: 'kjp_pulogadung', label: 'Pulogadung', parentRegion: 'DHARMAJAYA' },
+                                    { keyword: 'PASARJAYA', filename: 'kjp_pasarjaya', label: 'Pasarjaya', parentRegion: 'PASARJAYA' },
                                 ];
 
                                 for (const region of regionExports) {
@@ -5120,7 +5121,8 @@ export async function connectToWhatsApp() {
                                         processingDayKey,
                                         region.keyword,
                                         region.filename,
-                                        lookupNameFn
+                                        lookupNameFn,
+                                        region.parentRegion
                                     );
                                     if (!regionResult || regionResult.count === 0) {
                                         continue;
@@ -5186,11 +5188,12 @@ export async function connectToWhatsApp() {
                                     });
                                 }
 
-                                const regionExports = [
-                                    { keyword: 'KAPUK', filename: 'kjp_kapuk', label: 'Kapuk' },
-                                    { keyword: 'DURI KOSAMBI', filename: 'kjp_durikosambi', label: 'Duri Kosambi' },
-                                    { keyword: 'CAKUNG', filename: 'kjp_cakung', label: 'Cakung' },
-                                    { keyword: 'PULOGADUNG', filename: 'kjp_pulogadung', label: 'Pulogadung' },
+                                const regionExports: { keyword: string; filename: string; label: string; parentRegion: 'DHARMAJAYA' | 'PASARJAYA' }[] = [
+                                    { keyword: 'KAPUK', filename: 'kjp_kapuk', label: 'Kapuk', parentRegion: 'DHARMAJAYA' },
+                                    { keyword: 'DURI KOSAMBI', filename: 'kjp_durikosambi', label: 'Duri Kosambi', parentRegion: 'DHARMAJAYA' },
+                                    { keyword: 'CAKUNG', filename: 'kjp_cakung', label: 'Cakung', parentRegion: 'DHARMAJAYA' },
+                                    { keyword: 'PULOGADUNG', filename: 'kjp_pulogadung', label: 'Pulogadung', parentRegion: 'DHARMAJAYA' },
+                                    { keyword: 'PASARJAYA', filename: 'kjp_pasarjaya', label: 'Pasarjaya', parentRegion: 'PASARJAYA' },
                                 ];
 
                                 for (const region of regionExports) {
@@ -5198,7 +5201,8 @@ export async function connectToWhatsApp() {
                                         yesterday,
                                         region.keyword,
                                         region.filename,
-                                        lookupNameFn
+                                        lookupNameFn,
+                                        region.parentRegion
                                     );
                                     if (!regionResult || regionResult.count === 0) {
                                         continue;
@@ -5287,11 +5291,12 @@ export async function connectToWhatsApp() {
                                         });
                                     }
 
-                                    const regionExports = [
-                                        { keyword: 'KAPUK', filename: 'kjp_kapuk', label: 'Kapuk' },
-                                        { keyword: 'DURI KOSAMBI', filename: 'kjp_durikosambi', label: 'Duri Kosambi' },
-                                        { keyword: 'CAKUNG', filename: 'kjp_cakung', label: 'Cakung' },
-                                        { keyword: 'PULOGADUNG', filename: 'kjp_pulogadung', label: 'Pulogadung' },
+                                    const regionExports: { keyword: string; filename: string; label: string; parentRegion: 'DHARMAJAYA' | 'PASARJAYA' }[] = [
+                                        { keyword: 'KAPUK', filename: 'kjp_kapuk', label: 'Kapuk', parentRegion: 'DHARMAJAYA' },
+                                        { keyword: 'DURI KOSAMBI', filename: 'kjp_durikosambi', label: 'Duri Kosambi', parentRegion: 'DHARMAJAYA' },
+                                        { keyword: 'CAKUNG', filename: 'kjp_cakung', label: 'Cakung', parentRegion: 'DHARMAJAYA' },
+                                        { keyword: 'PULOGADUNG', filename: 'kjp_pulogadung', label: 'Pulogadung', parentRegion: 'DHARMAJAYA' },
+                                        { keyword: 'PASARJAYA', filename: 'kjp_pasarjaya', label: 'Pasarjaya', parentRegion: 'PASARJAYA' },
                                     ];
 
                                     for (const region of regionExports) {
@@ -5299,7 +5304,8 @@ export async function connectToWhatsApp() {
                                             iso,
                                             region.keyword,
                                             region.filename,
-                                            lookupNameFn
+                                            lookupNameFn,
+                                            region.parentRegion
                                         );
                                         if (!regionResult || regionResult.count === 0) {
                                             continue;

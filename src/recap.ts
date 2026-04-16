@@ -780,7 +780,8 @@ export async function generateRegionTxtExport(
     processingDayKey: string,
     locationKeyword: string,
     filenameBase: string,
-    nameLookup?: (phone: string) => string | undefined
+    nameLookup?: (phone: string) => string | undefined,
+    parentRegion?: 'DHARMAJAYA' | 'PASARJAYA'
 ): Promise<{ txt: string; filenameBase: string; count: number } | null> {
     const normalizedKeyword = locationKeyword.trim().toUpperCase();
     if (!normalizedKeyword) {
@@ -800,6 +801,13 @@ export async function generateRegionTxtExport(
 
     const filtered = (data as any[]).filter((row) => {
         const lokasi = String(row.lokasi || '').toUpperCase();
+        // Guard: jika parentRegion ditentukan, pastikan lokasi sesuai parent-nya
+        if (parentRegion === 'DHARMAJAYA') {
+            // DHARMAJAYA: lokasi diawali 'DHARMAJAYA' ATAU kosong (legacy)
+            if (lokasi && !lokasi.startsWith('DHARMAJAYA')) return false;
+        } else if (parentRegion === 'PASARJAYA') {
+            if (!lokasi.startsWith('PASARJAYA')) return false;
+        }
         return lokasi.includes(normalizedKeyword);
     });
 
