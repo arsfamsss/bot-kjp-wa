@@ -183,7 +183,7 @@ export function buildStatusSummaryMessage(results: StatusCheckResult[], dateIso:
         lines.push('-');
     } else {
         failedResults.forEach((entry, idx) => {
-            lines.push(`${idx + 1}. ${entry.item.nama} - Belum terdaftar`);
+            lines.push(`${idx + 1}. ${entry.item.nama} - Sedang ada kendala, mohon ulangi dalam beberapa menit.`);
         });
     }
 
