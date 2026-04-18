@@ -183,14 +183,14 @@ export function buildStatusSummaryMessage(results: StatusCheckResult[], dateIso:
         lines.push('-');
     } else {
         failedResults.forEach((entry, idx) => {
-            lines.push(`${idx + 1}. ${entry.item.nama} - Sedang ada kendala, mohon ulangi dalam beberapa menit.`);
+            lines.push(`${idx + 1}. ${entry.item.nama} - Belum terdaftar`);
         });
     }
 
     if (errorCount > 0) {
         lines.push('', `⚠️ *PERLU DI CEK ULANG: ${errorCount} Data*`);
         errorResults.forEach((entry, idx) => {
-            lines.push(`${idx + 1}. ${entry.item.nama} - Kendala API/jaringan`);
+            lines.push(`${idx + 1}. ${entry.item.nama} - Sedang ada kendala, mohon ulangi dalam beberapa menit.`);
         });
     }
 
@@ -198,7 +198,7 @@ export function buildStatusSummaryMessage(results: StatusCheckResult[], dateIso:
 }
 
 export function buildFailedDataCopyMessage(results: StatusCheckResult[]): { header: string; body: string } | null {
-    const failedResults = results.filter((x) => x.state !== 'BERHASIL');
+    const failedResults = results.filter((x) => x.state === 'GAGAL');
     if (failedResults.length === 0) {
         return null;
     }
