@@ -597,6 +597,28 @@ export async function generateExportData(
         return name || 'Unknown';
     };
 
+    const compareRowsForExport = (a: any, b: any): number => {
+        const senderPhoneA = String(a.sender_phone || '');
+        const senderPhoneB = String(b.sender_phone || '');
+        const senderNameA = getSenderName(senderPhoneA);
+        const senderNameB = getSenderName(senderPhoneB);
+        const senderCompare = senderNameA.localeCompare(senderNameB, 'id-ID', { sensitivity: 'base' });
+        if (senderCompare !== 0) {
+            return senderCompare;
+        }
+
+        const childNameA = String(a.nama || '');
+        const childNameB = String(b.nama || '');
+        const childCompare = childNameA.localeCompare(childNameB, 'id-ID', { sensitivity: 'base' });
+        if (childCompare !== 0) {
+            return childCompare;
+        }
+
+        const receivedAtA = String(a.received_at || '');
+        const receivedAtB = String(b.received_at || '');
+        return receivedAtA.localeCompare(receivedAtB);
+    };
+
     const displayDate = processingDayKey.split('-').reverse().join('-');
 
     // --- Group by Lokasi terlebih dahulu, lalu by Sender ---
@@ -641,7 +663,11 @@ export async function generateExportData(
         }
 
         // Tampilkan per lokasi spesifik
-        for (const [locName, locItems] of Object.entries(dharmajayaByLocation)) {
+        const sortedDharmajayaLocations = Object.entries(dharmajayaByLocation).sort(([locNameA], [locNameB]) =>
+            locNameA.localeCompare(locNameB, 'id-ID', { sensitivity: 'base' })
+        );
+
+        for (const [locName, locItems] of sortedDharmajayaLocations) {
             txtRows.push(`*Gerai ${locName}*`);
             txtRows.push('');
 
@@ -661,7 +687,7 @@ export async function generateExportData(
             });
 
             for (const phone of sortedPhones) {
-                const items = bySender[phone];
+                const items = [...bySender[phone]].sort(compareRowsForExport);
                 const senderName = getSenderName(phone);
 
                 // TIDAK ADA HEADER PENGIRIM, LANGSUNG ITEM
@@ -690,7 +716,7 @@ export async function generateExportData(
         });
 
         for (const phone of sortedPhones) {
-            const items = pasarjayaBySender[phone];
+            const items = [...pasarjayaBySender[phone]].sort(compareRowsForExport);
             const senderName = getSenderName(phone);
 
             items.forEach((item: any) => {
@@ -751,7 +777,11 @@ export async function generateExportData(
         stats.locations.set(locationName, currentCount + 1);
     }
 
-    summaryMap.forEach((stats) => {
+    const sortedSummaryEntries = Array.from(summaryMap.values()).sort((a, b) =>
+        a.name.localeCompare(b.name, 'id-ID', { sensitivity: 'base' })
+    );
+
+    sortedSummaryEntries.forEach((stats) => {
         txtRows.push(`👤 *${stats.name}* (${stats.total} data)`);
 
         // Urutkan lokasi agar Dharmajaya di atas jika ada? Atau alphabetical?
@@ -842,9 +872,31 @@ export async function generateRegionTxtExport(
         return name || 'Unknown';
     };
 
+    const sortedItems = [...filtered].sort((a, b) => {
+        const senderPhoneA = String(a.sender_phone || '');
+        const senderPhoneB = String(b.sender_phone || '');
+        const senderNameA = getSenderName(senderPhoneA);
+        const senderNameB = getSenderName(senderPhoneB);
+        const senderCompare = senderNameA.localeCompare(senderNameB, 'id-ID', { sensitivity: 'base' });
+        if (senderCompare !== 0) {
+            return senderCompare;
+        }
+
+        const childNameA = String(a.nama || '');
+        const childNameB = String(b.nama || '');
+        const childCompare = childNameA.localeCompare(childNameB, 'id-ID', { sensitivity: 'base' });
+        if (childCompare !== 0) {
+            return childCompare;
+        }
+
+        const receivedAtA = String(a.received_at || '');
+        const receivedAtB = String(b.received_at || '');
+        return receivedAtA.localeCompare(receivedAtB);
+    });
+
     const txtRows: string[] = [];
     const isPasarjayaRegion = parentRegion === 'PASARJAYA';
-    for (const item of filtered) {
+    for (const item of sortedItems) {
         const senderPhone = String(item.sender_phone || '');
         const senderName = getSenderName(senderPhone);
         const jenisKartu = resolveCardTypeLabel(item.no_kjp, item.jenis_kartu);
