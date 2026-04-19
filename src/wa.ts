@@ -2275,12 +2275,13 @@ export async function connectToWhatsApp() {
                 // Basic check: Minimal 4 baris
                 const potentialData = dataLines.length >= 4;
                 const isTemplateCommand = rawTrim.toUpperCase().startsWith('#TEMPLATE');
+                const activeAdminFlow = adminFlowByPhone.get(senderPhone) ?? 'NONE';
 
                 // Skip validation block jika user sedang dalam flow yang butuh memilih sub-lokasi
                 // Biar handler flow yang proses data-nya
                 const skipDataValidation = (currentUserFlow as string) === 'SELECT_PASARJAYA_SUB' || (currentUserFlow as string) === 'SELECT_DHARMAJAYA_SUB' || (currentUserFlow as string) === 'INPUT_MANUAL_LOCATION';
 
-                if (potentialData && !skipDataValidation && !isTemplateCommand) {
+                if (potentialData && !skipDataValidation && !isTemplateCommand && activeAdminFlow === 'NONE') {
                     const existingLocation = userLocationChoice.get(senderPhone);
 
 
@@ -3285,6 +3286,8 @@ export async function connectToWhatsApp() {
 
 
                 const openAdminMenu = async () => {
+                    userFlowByPhone.set(senderPhone, 'NONE');
+                    pendingRegistrationData.delete(senderPhone);
                     adminFlowByPhone.set(senderPhone, 'MENU');
                     pendingDelete.delete(senderPhone);
                     await sock.sendMessage(remoteJid, { text: ADMIN_MENU_MESSAGE });
