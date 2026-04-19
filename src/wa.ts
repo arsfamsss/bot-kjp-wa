@@ -1200,19 +1200,6 @@ export async function connectToWhatsApp() {
                 const processingDayKey = getProcessingDayKey(receivedAt);
                 processingDayKeyForLock = processingDayKey;
 
-                // Helper untuk membersihkan input user
-                // (Variables normalized, rawTrim are declared later)
-
-                // Jika pesan adalah gambar/video tanpa caption, beritahu user
-                if (!rawInput && (mAny?.imageMessage || mAny?.videoMessage)) {
-                    await sock.sendMessage(remoteJid, {
-                        text: `⚠️ Maaf, saya tidak bisa membaca gambar/foto\n\nFormat yang diterima seperti ini:\nKirim data dengan urutan 4 baris ke bawah:\n\n1. Nama\n2. Jenis Kartu + Nomor Kartu\n3. KTP + Nomor KTP (NIK)\n4. KK + Nomor KK\n\n✅ Contoh 1 (KJP):\nBudi\nKJP 5049488500001111\nKTP 3173444455556666\nKK 3173555566667777\n\n✅ Contoh 2 (LANSIA):\nBudi\nLANSIA 5049441234567890\nKTP 3173444455556666\nKK 3173555566667777\n\nJenis kartu yang didukung:\nKJP · LANSIA · RUSUN · DISABILITAS · DASAWISMA\nPEKERJA · GURU HONORER · PJLP · KAJ\n\nSilakan ketik pesan teks atau kirim MENU untuk melihat pilihan.`
-                    });
-                    continue;
-                }
-
-                if (!rawInput) continue;
-
                 const senderPhoneAtEarlyCheck = senderPhone;
 
                 if (!isAdminEarly) {
@@ -1230,6 +1217,19 @@ export async function connectToWhatsApp() {
                     console.log(`⛔ Ignored non-whitelisted sender: ${senderPhone}`);
                     continue;
                 }
+
+                // Helper untuk membersihkan input user
+                // (Variables normalized, rawTrim are declared later)
+
+                // Jika pesan adalah gambar/video tanpa caption, beritahu user
+                if (!rawInput && (mAny?.imageMessage || mAny?.videoMessage)) {
+                    await sock.sendMessage(remoteJid, {
+                        text: `⚠️ Maaf, saya tidak bisa membaca gambar/foto\n\nFormat yang diterima seperti ini:\nKirim data dengan urutan 4 baris ke bawah:\n\n1. Nama\n2. Jenis Kartu + Nomor Kartu\n3. KTP + Nomor KTP (NIK)\n4. KK + Nomor KK\n\n✅ Contoh 1 (KJP):\nBudi\nKJP 5049488500001111\nKTP 3173444455556666\nKK 3173555566667777\n\n✅ Contoh 2 (LANSIA):\nBudi\nLANSIA 5049441234567890\nKTP 3173444455556666\nKK 3173555566667777\n\nJenis kartu yang didukung:\nKJP · LANSIA · RUSUN · DISABILITAS · DASAWISMA\nPEKERJA · GURU HONORER · PJLP · KAJ\n\nSilakan ketik pesan teks atau kirim MENU untuk melihat pilihan.`
+                    });
+                    continue;
+                }
+
+                if (!rawInput) continue;
 
                 // ✅ KHUSUS AKUN @lid: kalau belum ada mapping nomor, minta user ketik nomor manual
                 // PENTING: Hanya proses jika input SATU BARIS (bukan data sembako multi-baris)
