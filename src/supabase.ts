@@ -18,7 +18,11 @@ export const supabase = createClient(url, serviceKey);
 const registeredUsersCache = new Map<string, string>();
 // Map<LidJid, PhoneNumber> -> Untuk resolusi cepat
 const lidToPhoneCache = new Map<string, string>();
+const whitelistedPhonesCache = new Map<string, { phone_number: string; name: string | null }>();
 let isCacheInitialized = false;
+let whitelistCacheLoadedAt = 0;
+
+const WHITELIST_CACHE_TTL_MS = 60_000;
 
 export async function initRegisteredUsersCache() {
     if (isCacheInitialized) return;
@@ -103,6 +107,11 @@ export async function getRegisteredUserNameWithFallback(phoneNumber: string): Pr
 export function getPhoneFromLidSync(lid: string): string | null {
     return lidToPhoneCache.get(lid) || null;
 }
+
+export type WhitelistedPhoneEntry = {
+    phone_number: string;
+    name: string | null;
+};
 
 // --- HITUNG TOTAL DATA HARI INI UNTUK PENGIRIM ---
 export async function getTotalDataTodayForSender(
@@ -859,6 +868,102 @@ function buildPhoneCandidates(raw: string): string[] {
     }
 
     return Array.from(set).filter(v => v.length >= 9);
+}
+
+function cacheWhitelistedPhoneEntry(entry: WhitelistedPhoneEntry): void {
+    const canonicalPhone = normalizePhoneNumber(entry.phone_number);
+    if (!canonicalPhone) return;
+
+    const cachedEntry: WhitelistedPhoneEntry = {
+        phone_number: canonicalPhone,
+        name: entry.name ?? null,
+    };
+
+    for (const candidate of buildPhoneCandidates(entry.phone_number)) {
+        whitelistedPhonesCache.set(candidate, cachedEntry);
+    }
+
+    whitelistedPhonesCache.set(canonicalPhone, cachedEntry);
+}
+
+export async function initWhitelistedPhonesCache(forceRefresh: boolean = false): Promise<void> {
+    const cacheIsFresh = whitelistCacheLoadedAt > 0 && (Date.now() - whitelistCacheLoadedAt) < WHITELIST_CACHE_TTL_MS;
+    if (!forceRefresh && cacheIsFresh) {
+        return;
+    }
+
+    const { data, error } = await supabase
+        .from('whitelisted_phones')
+        .select('phone_number, name');
+
+    if (error) {
+        if (!isMissingTableError(error, 'whitelisted_phones')) {
+            console.error('Error initWhitelistedPhonesCache:', error);
+        }
+        return;
+    }
+
+    whitelistedPhonesCache.clear();
+    for (const row of (data || []) as Array<{ phone_number?: string | null; name?: string | null }>) {
+        if (!row.phone_number) continue;
+        cacheWhitelistedPhoneEntry({
+            phone_number: row.phone_number,
+            name: row.name ?? null,
+        });
+    }
+
+    whitelistCacheLoadedAt = Date.now();
+    console.log(`✅ Cache whitelist dimuat: ${(data || []).length} nomor.`);
+}
+
+export async function getWhitelistedPhoneEntry(phoneRaw: string): Promise<WhitelistedPhoneEntry | null> {
+    const candidates = buildPhoneCandidates(phoneRaw);
+    if (candidates.length === 0) {
+        return null;
+    }
+
+    await initWhitelistedPhonesCache();
+
+    for (const candidate of candidates) {
+        const cached = whitelistedPhonesCache.get(candidate);
+        if (cached) {
+            return cached;
+        }
+    }
+
+    const { data, error } = await supabase
+        .from('whitelisted_phones')
+        .select('phone_number, name')
+        .in('phone_number', candidates)
+        .limit(1)
+        .maybeSingle();
+
+    if (error) {
+        if (!isMissingTableError(error, 'whitelisted_phones')) {
+            console.error('Error getWhitelistedPhoneEntry:', error);
+        }
+        return null;
+    }
+
+    if (!data?.phone_number) {
+        return null;
+    }
+
+    const entry: WhitelistedPhoneEntry = {
+        phone_number: normalizePhoneNumber(data.phone_number),
+        name: data.name ?? null,
+    };
+    cacheWhitelistedPhoneEntry(entry);
+    return entry;
+}
+
+export async function isPhoneWhitelisted(phoneRaw: string): Promise<{ allowed: boolean; entry?: WhitelistedPhoneEntry }> {
+    const entry = await getWhitelistedPhoneEntry(phoneRaw);
+    if (!entry) {
+        return { allowed: false };
+    }
+
+    return { allowed: true, entry };
 }
 
 export async function getBlockedKkList(limit: number = 200): Promise<BlockedKkItem[]> {

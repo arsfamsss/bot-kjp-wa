@@ -41,6 +41,7 @@ import {
     deleteLidPhoneMap,
     getAllLidPhoneMap,
     initRegisteredUsersCache,
+    initWhitelistedPhonesCache,
     getRegisteredUserNameSync,
     deleteLastSubmission,
     getStatistics,
@@ -107,6 +108,7 @@ import {
     checkRegistrationStatuses,
 } from './services/statusCheckService';
 import { warmupKtpMasterCsvLookup } from './services/ktpMasterLookup';
+import { isAdminPhone, resolveSenderAccess } from './services/whitelistGate';
 import {
     MENU_MESSAGE,
     FORMAT_DAFTAR_MESSAGE,
@@ -297,8 +299,6 @@ function getPhoneFromLid(lidJid: string): string | null {
     }
     return null;
 }
-
-const ADMIN_PHONES = new Set(ADMIN_PHONES_RAW.map(normalizePhone));
 
 const DEFAULT_CLOSE_START_HOUR = 0;
 const DEFAULT_CLOSE_START_MINUTE = 0;
@@ -638,6 +638,11 @@ function normalizeIncomingCommand(raw: string): string {
     if (up === 'MENU_BANTUAN') return '6';
     if (up === 'HAPUS') return '3'; // Support keyword "HAPUS" langsung
     return up;
+}
+
+function isValidIdPhone(phoneRaw: string): boolean {
+    const normalized = normalizePhone(phoneRaw);
+    return normalized.startsWith('62') && normalized.length >= 10 && normalized.length <= 15;
 }
 
 function isAllowedWhenClosed(normalizedCommand: string, currentUserFlow: string): boolean {
@@ -1015,6 +1020,7 @@ export async function connectToWhatsApp() {
     try {
     warmupKtpMasterCsvLookup();
     await initRegisteredUsersCache(); // Inisialisasi cache user terdaftar
+    await initWhitelistedPhonesCache();
     const { state, saveCreds } = await useMultiFileAuthState(AUTH_FOLDER);
     const { version } = await fetchLatestBaileysVersion();
     console.log(`🔗 Menghubungkan ke WA v${version.join('.')}...`);
@@ -1185,7 +1191,8 @@ export async function connectToWhatsApp() {
                     mAny?.templateButtonReplyMessage?.selectedId;
 
                 const rawInput = selectedRowId || selectedButtonId || messageText;
-                const isAdminEarly = ADMIN_PHONES.has(normalizePhone(senderPhone));
+                let senderAccess = await resolveSenderAccess(senderPhone);
+                const isAdminEarly = senderAccess.via === 'admin';
 
                 const receivedAt = getMessageDate(msg);
                 const tanggalWib = getWibIsoDate(receivedAt);
@@ -1219,6 +1226,11 @@ export async function connectToWhatsApp() {
                     }
                 }
 
+                if (!isAdminEarly && isValidIdPhone(senderPhone) && !senderAccess.allowed) {
+                    console.log(`⛔ Ignored non-whitelisted sender: ${senderPhone}`);
+                    continue;
+                }
+
                 // ✅ KHUSUS AKUN @lid: kalau belum ada mapping nomor, minta user ketik nomor manual
                 // PENTING: Hanya proses jika input SATU BARIS (bukan data sembako multi-baris)
                 const inputLines = String(rawInput).trim().split('\n').filter(l => l.trim());
@@ -1233,6 +1245,12 @@ export async function connectToWhatsApp() {
                     const phoneFound = extractManualPhone(text);
 
                     if (phoneFound) {
+                        const candidateAccess = await resolveSenderAccess(phoneFound);
+                        if (!candidateAccess.allowed) {
+                            console.log(`⛔ Ignored non-whitelisted verification phone: ${phoneFound}`);
+                            continue;
+                        }
+
                         // Cek apakah nomor ini sudah terdaftar
                         const existingUser = await getRegisteredUserByPhone(phoneFound);
                         if (existingUser && existingUser.lid_jid && existingUser.lid_jid !== chatJid) {
@@ -1267,13 +1285,14 @@ export async function connectToWhatsApp() {
                         if (cleanName) {
                             candidateName = cleanName;
                         }
+                        candidateName = existingUser?.push_name || candidateAccess.name || candidateName;
                     }
 
                     if (candidatePhone) {
                         try {
                             await upsertLidPhoneMap({ lid_jid: chatJid, phone_number: candidatePhone, push_name: candidateName });
                             senderPhone = candidatePhone;
-                            const sapa = candidateName ? `, ${candidateName}` : '';
+                            senderAccess = await resolveSenderAccess(senderPhone);
                             await sock.sendMessage(remoteJid, { text: `✅ Nomor kamu sudah dicatat: ${candidatePhone}\nSilakan lanjut.` });
                             // lanjutkan proses setelah nomor ada (tidak continue)
                         } catch (e: any) {
@@ -1289,18 +1308,13 @@ export async function connectToWhatsApp() {
                 // --- 🛡️ CEK REGISTRASI WAJIB (BLOCKING FILTER) ---
                 // Cek apakah user sudah punya nama di database
                 // PRIORITAS: 1) Cache, 2) Direct DB query by phone (untuk fix setelah ganti nomor bot)
-                let existingName = getRegisteredUserNameSync(senderPhone);
-
-                // Helper: Cek apakah valid phone number Indonesia/Internasional (bukan LID acak)
-                const isValidIdPhone = (p: string) => {
-                    return (p.startsWith('62') || p.startsWith('08')) && p.length >= 10 && p.length <= 15;
-                };
+                let existingName = getRegisteredUserNameSync(senderPhone) || senderAccess.name || null;
 
                 // Jika cache miss, coba query langsung ke DB by phone_number (fix untuk LID yang berubah setelah ganti nomor bot)
                 if (!existingName && senderPhone) {
                     const dbLookup = await getRegisteredUserByPhone(senderPhone);
-                    if (dbLookup && dbLookup.push_name) {
-                        existingName = dbLookup.push_name;
+                    if (dbLookup) {
+                        existingName = dbLookup.push_name || senderAccess.name || existingName;
                         console.log(`✅ User ditemukan via DB lookup: ${senderPhone} -> ${existingName}`);
 
                         // Auto-update LID jika berubah 
@@ -1324,15 +1338,20 @@ export async function connectToWhatsApp() {
                     if (possiblePhoneVerify && rawTrim.split('\n').length === 1 && rawTrim.length < 50) {
                         // Validasi format nomor
                         if (isValidIdPhone(possiblePhoneVerify)) {
+                            const verifiedAccess = await resolveSenderAccess(possiblePhoneVerify);
+                            if (!verifiedAccess.allowed) {
+                                console.log(`⛔ Ignored non-whitelisted verification phone: ${possiblePhoneVerify}`);
+                                continue;
+                            }
+
                             // Cek apakah nomor ini ada di DB?
                             const targetUser = await getRegisteredUserByPhone(possiblePhoneVerify);
 
-                            let finalName = '';
+                            let finalName = verifiedAccess.name || msg.pushName || 'User Baru';
                             if (targetUser && targetUser.push_name) {
                                 finalName = targetUser.push_name;
                                 console.log(`♻️ Verifikasi LID (Existing): ${chatJid} -> ${possiblePhoneVerify} (${finalName})`);
                             } else {
-                                finalName = msg.pushName || 'User Baru';
                                 console.log(`🆕 Verifikasi LID (New): ${chatJid} -> ${possiblePhoneVerify} (Name: ${finalName})`);
                             }
 
@@ -1345,6 +1364,7 @@ export async function connectToWhatsApp() {
 
                             // Update Context Saat Ini
                             senderPhone = possiblePhoneVerify;
+                            senderAccess = verifiedAccess;
                             existingName = finalName;
 
                             // Reply Sukses & Panduan Input
@@ -1367,7 +1387,12 @@ export async function connectToWhatsApp() {
                 if (!existingName) {
                     // KASUS 1: Sender Phone VALID (Misal user chat biasa/android)
                     if (senderPhone && isValidIdPhone(senderPhone)) {
-                        const autoName = msg.pushName || 'User Baru';
+                        if (!senderAccess.allowed) {
+                            console.log(`⛔ Ignored non-whitelisted sender after verification: ${senderPhone}`);
+                            continue;
+                        }
+
+                        const autoName = senderAccess.name || msg.pushName || 'User Baru';
                         await upsertLidPhoneMap({
                             lid_jid: chatJid,
                             phone_number: senderPhone,
@@ -1385,7 +1410,8 @@ export async function connectToWhatsApp() {
                     }
                 }
 
-                const isAdminByCurrentPhone = ADMIN_PHONES.has(normalizePhone(senderPhone));
+                senderAccess = await resolveSenderAccess(senderPhone);
+                const isAdminByCurrentPhone = isAdminPhone(senderPhone);
                 const isAdmin = isAdminByCurrentPhone;
                 const currentUserFlow = userFlowByPhone.get(senderPhone) || 'NONE';
                 if (!isAdminByCurrentPhone && senderPhone !== senderPhoneAtEarlyCheck) {
@@ -1397,6 +1423,11 @@ export async function connectToWhatsApp() {
                         });
                         continue;
                     }
+                }
+
+                if (!isAdminByCurrentPhone && isValidIdPhone(senderPhone) && !senderAccess.allowed) {
+                    console.log(`⛔ Ignored non-whitelisted sender after phone update: ${senderPhone}`);
+                    continue;
                 }
 
                 // Ambil pengaturan bot dari database
