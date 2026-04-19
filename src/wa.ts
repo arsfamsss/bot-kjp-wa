@@ -479,6 +479,83 @@ function buildBlockedKtpMenuText(): string {
     ].join('\n');
 }
 
+type BlockedBulkAddItem = { nomor: string; alasan?: string };
+
+const MAX_BLOCKED_BULK_LINES = 50;
+const MAX_BLOCKED_BULK_TOTAL_CHARS = 5000;
+
+function validateBlockedBulkAddInput(rawText: string): string | null {
+    if (rawText.length > MAX_BLOCKED_BULK_TOTAL_CHARS) {
+        return `⚠️ Maksimal ${MAX_BLOCKED_BULK_TOTAL_CHARS} karakter per kiriman.`;
+    }
+
+    const lineCount = rawText
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0).length;
+
+    if (lineCount > MAX_BLOCKED_BULK_LINES) {
+        return `⚠️ Maksimal ${MAX_BLOCKED_BULK_LINES} baris per kiriman.`;
+    }
+
+    return null;
+}
+
+function parseBlockedBulkAddInput(rawText: string): BlockedBulkAddItem[] {
+    return rawText
+        .split(/\r?\n/)
+        .map((line) => line.replace(/[\u0000-\u001F\u007F]+/g, ' ').trim())
+        .filter((line) => line.length > 0)
+        .map((line) => {
+            const commaIndex = line.indexOf(',');
+            const nomor = (commaIndex >= 0 ? line.slice(0, commaIndex) : line).trim();
+            const alasan = commaIndex >= 0 ? line.slice(commaIndex + 1).trim() : '';
+            return {
+                nomor,
+                ...(alasan ? { alasan } : {}),
+            };
+        });
+}
+
+async function buildBlockedBulkAddSummary(
+    title: string,
+    items: BlockedBulkAddItem[],
+    addItem: (nomor: string, alasan?: string) => Promise<{ success: boolean; message: string }>
+): Promise<string> {
+    const results: Array<{ nomor: string; success: boolean; message: string }> = [];
+    let successCount = 0;
+    let failureCount = 0;
+
+    for (const item of items) {
+        if (!item.nomor) {
+            results.push({ nomor: '', success: false, message: 'Nomor tidak boleh kosong.' });
+            failureCount += 1;
+            continue;
+        }
+
+        const result = await addItem(item.nomor, item.alasan);
+        results.push({ nomor: item.nomor, success: result.success, message: result.message });
+        if (result.success) {
+            successCount += 1;
+        } else {
+            failureCount += 1;
+        }
+    }
+
+    const lines = [
+        `🛡️ *${title}*`,
+        `Berhasil: ${successCount}`,
+        `Gagal: ${failureCount}`,
+        '',
+    ];
+
+    results.forEach((result, index) => {
+        lines.push(`${index + 1}. ${result.nomor || '(kosong)'} — ${result.success ? '✅' : '❌'} ${result.message}`);
+    });
+
+    return lines.join('\n');
+}
+
 function buildBlockedKjpMenuText(): string {
     return [
         '🛡️ *KELOLA BLOKIR NO KJP*',
@@ -4113,9 +4190,11 @@ export async function connectToWhatsApp() {
                             replyText = [
                                 '🛡️ *TAMBAH BLOKIR NO KJP*',
                                 '',
-                                'Ketik No KJP yang ingin diblokir (16-18 digit).',
-                                'Anda bisa tambah alasan setelah tanda |',
-                                'Contoh: 5049489000000001 | KJP bermasalah',
+                                'Ketik satu atau beberapa baris.',
+                                'Format tiap baris: nomor, alasan (opsional)',
+                                'Contoh:',
+                                '5049489000000001, KJP bermasalah',
+                                '5049489000000002',
                                 '',
                                 '_Ketik 0 untuk kembali._'
                             ].join('\n');
@@ -4150,12 +4229,27 @@ export async function connectToWhatsApp() {
                             adminFlowByPhone.set(senderPhone, 'BLOCKED_KJP_MENU');
                             replyText = buildBlockedKjpMenuText();
                         } else {
-                            const [rawKjp, ...reasonParts] = rawTrim.split('|');
-                            const reason = reasonParts.join('|').trim();
-                            const result = await addBlockedKjp(rawKjp, reason);
-                            replyText = result.success ? `✅ ${result.message}` : `❌ ${result.message}`;
-                            replyText += '\n\n' + buildBlockedKjpMenuText();
-                            adminFlowByPhone.set(senderPhone, 'BLOCKED_KJP_MENU');
+                            const bulkValidationError = validateBlockedBulkAddInput(rawTrim);
+                            if (bulkValidationError) {
+                                replyText = `${bulkValidationError}\n\n${buildBlockedKjpMenuText()}`;
+                                adminFlowByPhone.set(senderPhone, 'BLOCKED_KJP_MENU');
+                            } else {
+                                const items = parseBlockedBulkAddInput(rawTrim);
+                                if (items.length === 0) {
+                                    replyText = [
+                                        '⚠️ Tidak ada baris yang bisa diproses.',
+                                        '',
+                                        'Ketik satu atau beberapa baris.',
+                                        'Format tiap baris: nomor, alasan (opsional)',
+                                        '',
+                                        '_Ketik 0 untuk kembali._'
+                                    ].join('\n');
+                                } else {
+                                    const summary = await buildBlockedBulkAddSummary('HASIL TAMBAH BLOKIR NO KJP', items, addBlockedKjp);
+                                    replyText = `${summary}\n\n${buildBlockedKjpMenuText()}`;
+                                    adminFlowByPhone.set(senderPhone, 'BLOCKED_KJP_MENU');
+                                }
+                            }
                         }
                     } else if (currentAdminFlow === 'BLOCKED_KJP_DELETE') {
                         if (normalized === '0') {
@@ -4176,9 +4270,11 @@ export async function connectToWhatsApp() {
                             replyText = [
                                 '🛡️ *TAMBAH BLOKIR NO KTP*',
                                 '',
-                                'Ketik No KTP yang ingin diblokir (16 digit).',
-                                'Anda bisa tambah alasan setelah tanda |',
-                                'Contoh: 3173010202020001 | KTP bermasalah',
+                                'Ketik satu atau beberapa baris.',
+                                'Format tiap baris: nomor, alasan (opsional)',
+                                'Contoh:',
+                                '3173010202020001, KTP bermasalah',
+                                '3173010202020002',
                                 '',
                                 '_Ketik 0 untuk kembali._'
                             ].join('\n');
@@ -4213,16 +4309,27 @@ export async function connectToWhatsApp() {
                             adminFlowByPhone.set(senderPhone, 'BLOCKED_KTP_MENU');
                             replyText = buildBlockedKtpMenuText();
                         } else {
-                            const [rawKtp, ...reasonParts] = rawTrim.split('|');
-                            const reason = reasonParts.join('|').trim();
-                            const result = await addBlockedKtp(rawKtp, reason);
-                            if (result.success) {
-                                replyText = `✅ ${result.message}`;
+                            const bulkValidationError = validateBlockedBulkAddInput(rawTrim);
+                            if (bulkValidationError) {
+                                replyText = `${bulkValidationError}\n\n${buildBlockedKtpMenuText()}`;
+                                adminFlowByPhone.set(senderPhone, 'BLOCKED_KTP_MENU');
                             } else {
-                                replyText = `❌ ${result.message}`;
+                                const items = parseBlockedBulkAddInput(rawTrim);
+                                if (items.length === 0) {
+                                    replyText = [
+                                        '⚠️ Tidak ada baris yang bisa diproses.',
+                                        '',
+                                        'Ketik satu atau beberapa baris.',
+                                        'Format tiap baris: nomor, alasan (opsional)',
+                                        '',
+                                        '_Ketik 0 untuk kembali._'
+                                    ].join('\n');
+                                } else {
+                                    const summary = await buildBlockedBulkAddSummary('HASIL TAMBAH BLOKIR NO KTP', items, addBlockedKtp);
+                                    replyText = `${summary}\n\n${buildBlockedKtpMenuText()}`;
+                                    adminFlowByPhone.set(senderPhone, 'BLOCKED_KTP_MENU');
+                                }
                             }
-                            replyText += '\n\n' + buildBlockedKtpMenuText();
-                            adminFlowByPhone.set(senderPhone, 'BLOCKED_KTP_MENU');
                         }
                     } else if (currentAdminFlow === 'BLOCKED_KTP_DELETE') {
                         if (normalized === '0') {
@@ -4247,9 +4354,11 @@ export async function connectToWhatsApp() {
                             replyText = [
                                 '🛡️ *TAMBAH BLOKIR NO KK*',
                                 '',
-                                'Ketik No KK yang ingin diblokir (16 digit).',
-                                'Anda bisa tambah alasan setelah tanda |',
-                                'Contoh: 3173010202020001 | KK bermasalah',
+                                'Ketik satu atau beberapa baris.',
+                                'Format tiap baris: nomor, alasan (opsional)',
+                                'Contoh:',
+                                '3173010202020001, KK bermasalah',
+                                '3173010202020002',
                                 '',
                                 '_Ketik 0 untuk kembali._'
                             ].join('\n');
@@ -4284,16 +4393,27 @@ export async function connectToWhatsApp() {
                             adminFlowByPhone.set(senderPhone, 'BLOCKED_KK_MENU');
                             replyText = buildBlockedKkMenuText();
                         } else {
-                            const [rawKk, ...reasonParts] = rawTrim.split('|');
-                            const reason = reasonParts.join('|').trim();
-                            const result = await addBlockedKk(rawKk, reason);
-                            if (result.success) {
-                                replyText = `✅ ${result.message}`;
+                            const bulkValidationError = validateBlockedBulkAddInput(rawTrim);
+                            if (bulkValidationError) {
+                                replyText = `${bulkValidationError}\n\n${buildBlockedKkMenuText()}`;
+                                adminFlowByPhone.set(senderPhone, 'BLOCKED_KK_MENU');
                             } else {
-                                replyText = `❌ ${result.message}`;
+                                const items = parseBlockedBulkAddInput(rawTrim);
+                                if (items.length === 0) {
+                                    replyText = [
+                                        '⚠️ Tidak ada baris yang bisa diproses.',
+                                        '',
+                                        'Ketik satu atau beberapa baris.',
+                                        'Format tiap baris: nomor, alasan (opsional)',
+                                        '',
+                                        '_Ketik 0 untuk kembali._'
+                                    ].join('\n');
+                                } else {
+                                    const summary = await buildBlockedBulkAddSummary('HASIL TAMBAH BLOKIR NO KK', items, addBlockedKk);
+                                    replyText = `${summary}\n\n${buildBlockedKkMenuText()}`;
+                                    adminFlowByPhone.set(senderPhone, 'BLOCKED_KK_MENU');
+                                }
                             }
-                            replyText += '\n\n' + buildBlockedKkMenuText();
-                            adminFlowByPhone.set(senderPhone, 'BLOCKED_KK_MENU');
                         }
                     } else if (currentAdminFlow === 'BLOCKED_KK_DELETE') {
                         if (normalized === '0') {
