@@ -20,10 +20,6 @@ const registeredUsersCache = new Map<string, string>();
 const lidToPhoneCache = new Map<string, string>();
 let isCacheInitialized = false;
 
-function normalizeWhitelistPhone(phone: string): string {
-    return String(phone || '').trim().replace(/\D/g, '');
-}
-
 export async function initRegisteredUsersCache() {
     if (isCacheInitialized) return;
     console.log('🔄 Memuat cache pengguna terdaftar...');
@@ -109,15 +105,15 @@ export function getPhoneFromLidSync(lid: string): string | null {
 }
 
 export async function isPhoneWhitelisted(phoneNumber: string): Promise<boolean> {
-    const normalizedPhone = normalizeWhitelistPhone(phoneNumber);
-    if (!normalizedPhone) {
+    const candidates = buildPhoneCandidates(phoneNumber);
+    if (candidates.length === 0) {
         return false;
     }
 
     const { data, error } = await supabase
         .from('whitelisted_phones')
         .select('phone_number')
-        .eq('phone_number', normalizedPhone)
+        .in('phone_number', candidates)
         .maybeSingle();
 
     if (error) {
