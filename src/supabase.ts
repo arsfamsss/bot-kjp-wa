@@ -104,26 +104,6 @@ export function getPhoneFromLidSync(lid: string): string | null {
     return lidToPhoneCache.get(lid) || null;
 }
 
-export async function isPhoneWhitelisted(phoneNumber: string): Promise<boolean> {
-    const candidates = buildPhoneCandidates(phoneNumber);
-    if (candidates.length === 0) {
-        return false;
-    }
-
-    const { data, error } = await supabase
-        .from('whitelisted_phones')
-        .select('phone_number')
-        .in('phone_number', candidates)
-        .maybeSingle();
-
-    if (error) {
-        console.error('❌ isPhoneWhitelisted error:', error.message);
-        return false;
-    }
-
-    return Boolean(data?.phone_number);
-}
-
 // --- HITUNG TOTAL DATA HARI INI UNTUK PENGIRIM ---
 export async function getTotalDataTodayForSender(
     senderPhone: string,

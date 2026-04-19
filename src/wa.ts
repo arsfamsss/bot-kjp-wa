@@ -71,7 +71,6 @@ import {
     addBlockedPhone,
     removeBlockedPhone,
     isPhoneBlocked,
-    isPhoneWhitelisted,
     hasProcessedMessageById,
     disableGlobalLocationQuotaLimit,
     setGlobalLocationQuotaLimit,
@@ -299,8 +298,7 @@ function getPhoneFromLid(lidJid: string): string | null {
     return null;
 }
 
-const ADMIN_PHONE_FALLBACKS = ['6285641411818', '628568511113'];
-const ADMIN_PHONES = new Set([...ADMIN_PHONES_RAW, ...ADMIN_PHONE_FALLBACKS].map(normalizePhone));
+const ADMIN_PHONES = new Set(ADMIN_PHONES_RAW.map(normalizePhone));
 
 const DEFAULT_CLOSE_START_HOUR = 0;
 const DEFAULT_CLOSE_START_MINUTE = 0;
@@ -1187,33 +1185,7 @@ export async function connectToWhatsApp() {
                     mAny?.templateButtonReplyMessage?.selectedId;
 
                 const rawInput = selectedRowId || selectedButtonId || messageText;
-                const rawTrimEarly = (rawInput || '').toString().trim();
-
                 const isAdminEarly = ADMIN_PHONES.has(normalizePhone(senderPhone));
-
-                if (!isAdminEarly) {
-                    let isAllowedSender = await isPhoneWhitelisted(senderPhone);
-
-                    const senderNeedsWhitelistVerification =
-                        senderIsLid && (!senderPhone || senderPhone === chatJid.replace('@lid', ''));
-
-                    if (!isAllowedSender && senderNeedsWhitelistVerification && rawTrimEarly) {
-                        const earlyInputLines = rawTrimEarly.split('\n').filter((line: string) => line.trim());
-                        const isSingleLineVerificationAttempt = earlyInputLines.length === 1 && rawTrimEarly.length < 50;
-                        const verificationCandidatePhone = isSingleLineVerificationAttempt
-                            ? extractManualPhone(earlyInputLines[0])
-                            : null;
-
-                        if (verificationCandidatePhone) {
-                            const isAdminVerificationCandidate = ADMIN_PHONES.has(normalizePhone(verificationCandidatePhone));
-                            isAllowedSender = isAdminVerificationCandidate || await isPhoneWhitelisted(verificationCandidatePhone);
-                        }
-                    }
-
-                    if (!isAllowedSender) {
-                        continue;
-                    }
-                }
 
                 const receivedAt = getMessageDate(msg);
                 const tanggalWib = getWibIsoDate(receivedAt);
