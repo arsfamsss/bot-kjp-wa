@@ -18,8 +18,11 @@ export const supabase = createClient(url, serviceKey);
 const registeredUsersCache = new Map<string, string>();
 // Map<LidJid, PhoneNumber> -> Untuk resolusi cepat
 const lidToPhoneCache = new Map<string, string>();
-
 let isCacheInitialized = false;
+
+function normalizeWhitelistPhone(phone: string): string {
+    return String(phone || '').trim().replace(/\D/g, '');
+}
 
 export async function initRegisteredUsersCache() {
     if (isCacheInitialized) return;
@@ -103,6 +106,26 @@ export async function getRegisteredUserNameWithFallback(phoneNumber: string): Pr
 
 export function getPhoneFromLidSync(lid: string): string | null {
     return lidToPhoneCache.get(lid) || null;
+}
+
+export async function isPhoneWhitelisted(phoneNumber: string): Promise<boolean> {
+    const normalizedPhone = normalizeWhitelistPhone(phoneNumber);
+    if (!normalizedPhone) {
+        return false;
+    }
+
+    const { data, error } = await supabase
+        .from('whitelisted_phones')
+        .select('phone_number')
+        .eq('phone_number', normalizedPhone)
+        .maybeSingle();
+
+    if (error) {
+        console.error('❌ isPhoneWhitelisted error:', error.message);
+        return false;
+    }
+
+    return Boolean(data?.phone_number);
 }
 
 // --- HITUNG TOTAL DATA HARI INI UNTUK PENGIRIM ---
