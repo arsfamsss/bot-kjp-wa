@@ -638,25 +638,30 @@ function buildWhitelistDetailText(entry: { phone_number: string; name: string | 
 function buildWhitelistSelectionListText(
     title: string,
     list: { phone_number: string; name: string | null }[],
-    promptLine: string
+    promptLine: string,
+    page: number = 0
 ): string {
-    const lines = [`📂 *${title} (${list.length})*`, ''];
-    let currentLength = lines.join('\n').length;
+    const safePage = clampWhitelistPage(page, list.length);
+    const totalPages = getWhitelistTotalPages(list.length);
+    const startIndex = safePage * WHITELIST_PAGE_SIZE;
+    const endIndexExclusive = Math.min(startIndex + WHITELIST_PAGE_SIZE, list.length);
+    const lines = [
+        `📂 *${title} (${list.length})*`,
+        `📄 Halaman ${safePage + 1}/${totalPages}`,
+        '',
+    ];
 
-    for (let index = 0; index < list.length; index += 1) {
+    for (let index = startIndex; index < endIndexExclusive; index += 1) {
         const item = list[index];
         const phoneDisplay = formatWhitelistedPhoneDisplay(item.phone_number);
-        const line = `${index + 1}. ${item.name || '(Tanpa Nama)'} (${phoneDisplay})`;
-        if (currentLength + line.length > 3500) {
-            lines.push('...(List dipotong, terlalu panjang)...');
-            break;
-        }
-        lines.push(line);
-        currentLength += line.length + 1;
+        lines.push(`${index + 1}. ${item.name || '(Tanpa Nama)'} (${phoneDisplay})`);
     }
 
     lines.push('');
     lines.push(promptLine);
+    if (totalPages > 1) {
+        lines.push('Ketik *N* untuk halaman berikutnya, *P* untuk halaman sebelumnya.');
+    }
     lines.push('_Ketik 0 untuk kembali._');
     return lines.join('\n');
 }
@@ -678,6 +683,17 @@ type WhitelistBulkDeleteItem = { nomor: string };
 
 const MAX_WHITELIST_BULK_LINES = 50;
 const MAX_WHITELIST_BULK_TOTAL_CHARS = 5000;
+const WHITELIST_PAGE_SIZE = 25;
+
+function getWhitelistTotalPages(listLength: number): number {
+    return Math.max(1, Math.ceil(listLength / WHITELIST_PAGE_SIZE));
+}
+
+function clampWhitelistPage(page: number, listLength: number): number {
+    const totalPages = getWhitelistTotalPages(listLength);
+    if (!Number.isFinite(page)) return 0;
+    return Math.min(Math.max(0, page), totalPages - 1);
+}
 
 function validateWhitelistBulkInput(rawText: string): string | null {
     if (rawText.length > MAX_WHITELIST_BULK_TOTAL_CHARS) {
@@ -4824,12 +4840,12 @@ export async function connectToWhatsApp() {
                             if (list.length === 0) {
                                 replyText = '📂 Belum ada nomor di whitelist.';
                             } else {
-                                whitelistSessionByPhone.set(senderPhone, { searchResults: list });
+                                whitelistSessionByPhone.set(senderPhone, { searchResults: list, currentPage: 0 });
                                 adminFlowByPhone.set(senderPhone, 'WHITELIST_SELECT');
                                 const promptLine = normalized === '1'
                                     ? '👇 Ketik nomor urut untuk melihat detail.'
                                     : '👇 Ketik nomor urut untuk mengubah data.';
-                                replyText = buildWhitelistSelectionListText('DAFTAR WHITELIST', list, promptLine);
+                                replyText = buildWhitelistSelectionListText('DAFTAR WHITELIST', list, promptLine, 0);
                             }
                         } else if (normalized === '2') {
                             adminFlowByPhone.set(senderPhone, 'WHITELIST_ADD');
@@ -4894,10 +4910,21 @@ export async function connectToWhatsApp() {
                             whitelistSessionByPhone.delete(senderPhone);
                             adminFlowByPhone.set(senderPhone, 'WHITELIST_MENU');
                             replyText = '❌ Sesi whitelist hilang. Silakan buka ulang menu whitelist.';
+                        } else if (normalized === 'N') {
+                            const nextPage = clampWhitelistPage((session.currentPage ?? 0) + 1, session.searchResults.length);
+                            session.currentPage = nextPage;
+                            whitelistSessionByPhone.set(senderPhone, session);
+                            replyText = buildWhitelistSelectionListText('DAFTAR WHITELIST', session.searchResults, '👇 Ketik nomor urut untuk melihat detail.', nextPage);
+                        } else if (normalized === 'P') {
+                            const prevPage = clampWhitelistPage((session.currentPage ?? 0) - 1, session.searchResults.length);
+                            session.currentPage = prevPage;
+                            whitelistSessionByPhone.set(senderPhone, session);
+                            replyText = buildWhitelistSelectionListText('DAFTAR WHITELIST', session.searchResults, '👇 Ketik nomor urut untuk melihat detail.', prevPage);
                         } else {
                             const choice = Number.parseInt(normalized, 10);
                             if (Number.isNaN(choice) || choice < 1 || choice > session.searchResults.length) {
-                                replyText = `⚠️ Nomor urut tidak valid (1 - ${session.searchResults.length}).\n_Ketik 0 untuk kembali._`;
+                                const currentPage = clampWhitelistPage(session.currentPage ?? 0, session.searchResults.length);
+                                replyText = `⚠️ Nomor urut tidak valid (1 - ${session.searchResults.length}).\n\n${buildWhitelistSelectionListText('DAFTAR WHITELIST', session.searchResults, '👇 Ketik nomor urut untuk melihat detail.', currentPage)}`;
                             } else {
                                 const selected = session.searchResults[choice - 1];
                                 session.selectedWhitelist = selected;
@@ -4920,7 +4947,10 @@ export async function connectToWhatsApp() {
                                 replyText = buildWhitelistMenuText();
                             } else {
                                 adminFlowByPhone.set(senderPhone, 'WHITELIST_SELECT');
-                                replyText = buildWhitelistSelectionListText('DAFTAR WHITELIST', list, '👇 Ketik nomor urut untuk melihat detail.');
+                                const currentPage = clampWhitelistPage(session.currentPage ?? 0, list.length);
+                                session.currentPage = currentPage;
+                                whitelistSessionByPhone.set(senderPhone, session);
+                                replyText = buildWhitelistSelectionListText('DAFTAR WHITELIST', list, '👇 Ketik nomor urut untuk melihat detail.', currentPage);
                             }
                         } else if (normalized === '1') {
                             adminFlowByPhone.set(senderPhone, 'WHITELIST_EDIT_NAME');

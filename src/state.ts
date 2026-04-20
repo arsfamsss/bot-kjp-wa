@@ -189,6 +189,7 @@ export const contactSessionByPhone = new Map<string, ContactSession>();
 export type WhitelistSession = {
     searchResults?: { phone_number: string; name: string | null }[];
     selectedWhitelist?: { phone_number: string; name: string | null };
+    currentPage?: number;
 };
 
 export const whitelistSessionByPhone = new Map<string, WhitelistSession>();
