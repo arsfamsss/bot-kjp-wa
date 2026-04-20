@@ -72,6 +72,11 @@ import {
     addBlockedPhone,
     removeBlockedPhone,
     isPhoneBlocked,
+    getWhitelistedPhoneList,
+    addWhitelistedPhone,
+    removeWhitelistedPhone,
+    updateWhitelistedPhoneName,
+    updateWhitelistedPhone,
     hasProcessedMessageById,
     disableGlobalLocationQuotaLimit,
     setGlobalLocationQuotaLimit,
@@ -152,6 +157,7 @@ import {
     EditSession,
     editSessionByPhone as editSessionMap,
     contactSessionByPhone, // NEW: Kelola Kontak
+    whitelistSessionByPhone,
     closeWindowDraftByPhone,
     locationQuotaDraftByPhone,
     globalLocationQuotaDraftByPhone,
@@ -592,6 +598,69 @@ function buildBlockedPhoneMenuText(): string {
     ].join('\n');
 }
 
+function buildWhitelistMenuText(): string {
+    return [
+        '✅ *KELOLA WHITELIST NO HP*',
+        '',
+        '1️⃣ Lihat daftar whitelist',
+        '2️⃣ Tambah nomor whitelist',
+        '3️⃣ Ubah data whitelist',
+        '4️⃣ Hapus nomor whitelist',
+        '5️⃣ Bulk tambah whitelist',
+        '6️⃣ Bulk hapus whitelist',
+        '',
+        '0️⃣ Kembali ke Menu Admin',
+    ].join('\n');
+}
+
+function formatWhitelistedPhoneDisplay(phoneNumber: string): string {
+    return phoneNumber.startsWith('62') ? `0${phoneNumber.slice(2)}` : phoneNumber;
+}
+
+function buildWhitelistDetailText(entry: { phone_number: string; name: string | null }): string {
+    const displayPhone = formatWhitelistedPhoneDisplay(entry.phone_number);
+    return [
+        '👤 *DETAIL WHITELIST*',
+        '━━━━━━━━━━━━━━━━━━━━━',
+        `📱 Nomor: *${displayPhone}*`,
+        `🪪 Nama: *${entry.name || '(Tanpa Nama)'}*`,
+        `🔢 Canonical: ${entry.phone_number}`,
+        '━━━━━━━━━━━━━━━━━━━━━',
+        '',
+        '1️⃣ ✏️ Edit nama',
+        '2️⃣ 📱 Edit nomor HP',
+        '3️⃣ 🗑️ Hapus dari whitelist',
+        '',
+        '0️⃣ 🔙 Kembali',
+    ].join('\n');
+}
+
+function buildWhitelistSelectionListText(
+    title: string,
+    list: { phone_number: string; name: string | null }[],
+    promptLine: string
+): string {
+    const lines = [`📂 *${title} (${list.length})*`, ''];
+    let currentLength = lines.join('\n').length;
+
+    for (let index = 0; index < list.length; index += 1) {
+        const item = list[index];
+        const phoneDisplay = formatWhitelistedPhoneDisplay(item.phone_number);
+        const line = `${index + 1}. ${item.name || '(Tanpa Nama)'} (${phoneDisplay})`;
+        if (currentLength + line.length > 3500) {
+            lines.push('...(List dipotong, terlalu panjang)...');
+            break;
+        }
+        lines.push(line);
+        currentLength += line.length + 1;
+    }
+
+    lines.push('');
+    lines.push(promptLine);
+    lines.push('_Ketik 0 untuk kembali._');
+    return lines.join('\n');
+}
+
 function buildCardPrefixMenuText(): string {
     return [
         '🏷️ *KELOLA PREFIX KARTU*',
@@ -602,6 +671,147 @@ function buildCardPrefixMenuText(): string {
         '',
         '0️⃣ Kembali ke Menu Admin',
     ].join('\n');
+}
+
+type WhitelistBulkAddItem = { nomor: string; nama?: string };
+type WhitelistBulkDeleteItem = { nomor: string };
+
+const MAX_WHITELIST_BULK_LINES = 50;
+const MAX_WHITELIST_BULK_TOTAL_CHARS = 5000;
+
+function validateWhitelistBulkInput(rawText: string): string | null {
+    if (rawText.length > MAX_WHITELIST_BULK_TOTAL_CHARS) {
+        return `⚠️ Maksimal ${MAX_WHITELIST_BULK_TOTAL_CHARS} karakter per kiriman.`;
+    }
+
+    const lineCount = rawText
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0).length;
+
+    if (lineCount > MAX_WHITELIST_BULK_LINES) {
+        return `⚠️ Maksimal ${MAX_WHITELIST_BULK_LINES} baris per kiriman.`;
+    }
+
+    return null;
+}
+
+function parseWhitelistBulkAddInput(rawText: string): WhitelistBulkAddItem[] {
+    return rawText
+        .split(/\r?\n/)
+        .map((line) => line.replace(/[\u0000-\u001F\u007F]+/g, ' ').trim())
+        .filter((line) => line.length > 0)
+        .map((line) => {
+            const commaIndex = line.indexOf(',');
+            const nomor = (commaIndex >= 0 ? line.slice(0, commaIndex) : line).trim();
+            const nama = commaIndex >= 0 ? line.slice(commaIndex + 1).trim() : '';
+            return {
+                nomor,
+                ...(nama ? { nama } : {}),
+            };
+        });
+}
+
+function parseWhitelistBulkDeleteInput(rawText: string): WhitelistBulkDeleteItem[] {
+    return rawText
+        .split(/\r?\n/)
+        .map((line) => line.replace(/[\u0000-\u001F\u007F]+/g, ' ').trim())
+        .filter((line) => line.length > 0)
+        .map((line) => ({ nomor: line }));
+}
+
+async function buildWhitelistBulkAddSummary(title: string, items: WhitelistBulkAddItem[]): Promise<string> {
+    const results: Array<{ nomor: string; status: 'success' | 'fail' | 'skip'; message: string }> = [];
+    const seen = new Set<string>();
+    let successCount = 0;
+    let failureCount = 0;
+    let skipCount = 0;
+
+    for (const item of items) {
+        const normalizedPhone = normalizeManualPhone(item.nomor);
+        if (!normalizedPhone) {
+            results.push({ nomor: item.nomor || '(kosong)', status: 'fail', message: 'Nomor HP tidak valid.' });
+            failureCount += 1;
+            continue;
+        }
+
+        if (seen.has(normalizedPhone)) {
+            results.push({ nomor: formatWhitelistedPhoneDisplay(normalizedPhone), status: 'skip', message: 'Duplikat di dalam input.' });
+            skipCount += 1;
+            continue;
+        }
+        seen.add(normalizedPhone);
+
+        const result = await addWhitelistedPhone(normalizedPhone, item.nama || null);
+        results.push({ nomor: formatWhitelistedPhoneDisplay(normalizedPhone), status: result.success ? 'success' : 'fail', message: result.message });
+        if (result.success) {
+            successCount += 1;
+        } else {
+            failureCount += 1;
+        }
+    }
+
+    const lines = [
+        `✅ *${title}*`,
+        `Berhasil: ${successCount}`,
+        `Gagal: ${failureCount}`,
+        `Dilewati: ${skipCount}`,
+        '',
+    ];
+
+    results.forEach((result, index) => {
+        const icon = result.status === 'success' ? '✅' : result.status === 'skip' ? '⏭️' : '❌';
+        lines.push(`${index + 1}. ${result.nomor} — ${icon} ${result.message}`);
+    });
+
+    return lines.join('\n');
+}
+
+async function buildWhitelistBulkDeleteSummary(title: string, items: WhitelistBulkDeleteItem[]): Promise<string> {
+    const results: Array<{ nomor: string; status: 'success' | 'fail' | 'skip'; message: string }> = [];
+    const seen = new Set<string>();
+    let successCount = 0;
+    let failureCount = 0;
+    let skipCount = 0;
+
+    for (const item of items) {
+        const normalizedPhone = normalizeManualPhone(item.nomor);
+        if (!normalizedPhone) {
+            results.push({ nomor: item.nomor || '(kosong)', status: 'fail', message: 'Nomor HP tidak valid.' });
+            failureCount += 1;
+            continue;
+        }
+
+        if (seen.has(normalizedPhone)) {
+            results.push({ nomor: formatWhitelistedPhoneDisplay(normalizedPhone), status: 'skip', message: 'Duplikat di dalam input.' });
+            skipCount += 1;
+            continue;
+        }
+        seen.add(normalizedPhone);
+
+        const result = await removeWhitelistedPhone(normalizedPhone);
+        results.push({ nomor: formatWhitelistedPhoneDisplay(normalizedPhone), status: result.success ? 'success' : 'fail', message: result.message });
+        if (result.success) {
+            successCount += 1;
+        } else {
+            failureCount += 1;
+        }
+    }
+
+    const lines = [
+        `✅ *${title}*`,
+        `Berhasil: ${successCount}`,
+        `Gagal: ${failureCount}`,
+        `Dilewati: ${skipCount}`,
+        '',
+    ];
+
+    results.forEach((result, index) => {
+        const icon = result.status === 'success' ? '✅' : result.status === 'skip' ? '⏭️' : '❌';
+        lines.push(`${index + 1}. ${result.nomor} — ${icon} ${result.message}`);
+    });
+
+    return lines.join('\n');
 }
 
 function buildBlockedLocationMenuText(): string {
@@ -3674,6 +3884,10 @@ export async function connectToWhatsApp() {
                             globalLocationQuotaDraftByPhone.delete(senderPhone);
                             adminFlowByPhone.set(senderPhone, 'GLOBAL_LOCATION_QUOTA_MENU');
                             replyText = buildGlobalLocationQuotaMenuText();
+                        } else if (normalized === '22') {
+                            whitelistSessionByPhone.delete(senderPhone);
+                            adminFlowByPhone.set(senderPhone, 'WHITELIST_MENU');
+                            replyText = buildWhitelistMenuText();
                         } else replyText = '⚠️ Pilihan tidak dikenali.';
                     } else if (currentAdminFlow === 'SETTING_OPERATION_MENU') {
                         if (normalized === '0') {
@@ -4599,6 +4813,290 @@ export async function connectToWhatsApp() {
                             replyText = result.success ? `✅ ${result.message}` : `❌ ${result.message}`;
                             replyText += '\n\n' + buildBlockedPhoneMenuText();
                             adminFlowByPhone.set(senderPhone, 'BLOCKED_PHONE_MENU');
+                        }
+                    } else if (currentAdminFlow === 'WHITELIST_MENU') {
+                        if (normalized === '0') {
+                            whitelistSessionByPhone.delete(senderPhone);
+                            adminFlowByPhone.set(senderPhone, 'MENU');
+                            replyText = ADMIN_MENU_MESSAGE;
+                        } else if (normalized === '1' || normalized === '3') {
+                            const list = await getWhitelistedPhoneList(200);
+                            if (list.length === 0) {
+                                replyText = '📂 Belum ada nomor di whitelist.';
+                            } else {
+                                whitelistSessionByPhone.set(senderPhone, { searchResults: list });
+                                adminFlowByPhone.set(senderPhone, 'WHITELIST_SELECT');
+                                const promptLine = normalized === '1'
+                                    ? '👇 Ketik nomor urut untuk melihat detail.'
+                                    : '👇 Ketik nomor urut untuk mengubah data.';
+                                replyText = buildWhitelistSelectionListText('DAFTAR WHITELIST', list, promptLine);
+                            }
+                        } else if (normalized === '2') {
+                            adminFlowByPhone.set(senderPhone, 'WHITELIST_ADD');
+                            replyText = [
+                                '➕ *TAMBAH WHITELIST*',
+                                '',
+                                'Ketik nomor HP yang ingin dimasukkan ke whitelist.',
+                                'Opsional nama dapat ditulis setelah koma.',
+                                'Contoh:',
+                                '08123456789, Budi',
+                                '6281234567890, Admin Lapangan',
+                                '08123456789',
+                                '',
+                                '_Ketik 0 untuk batal._',
+                            ].join('\n');
+                        } else if (normalized === '4') {
+                            adminFlowByPhone.set(senderPhone, 'WHITELIST_DELETE');
+                            replyText = [
+                                '🗑️ *HAPUS WHITELIST*',
+                                '',
+                                'Ketik nomor HP yang ingin dihapus dari whitelist.',
+                                'Contoh: 08123456789',
+                                '',
+                                '_Ketik 0 untuk batal._',
+                            ].join('\n');
+                        } else if (normalized === '5') {
+                            adminFlowByPhone.set(senderPhone, 'WHITELIST_BULK_ADD');
+                            replyText = [
+                                '📥 *BULK TAMBAH WHITELIST*',
+                                '',
+                                'Kirim beberapa baris sekaligus.',
+                                'Format per baris: nomor, nama (nama opsional)',
+                                'Contoh:',
+                                '08123456789, Budi',
+                                '6281234567890, Admin Lapangan',
+                                '08123456789',
+                                '',
+                                '_Ketik 0 untuk batal._',
+                            ].join('\n');
+                        } else if (normalized === '6') {
+                            adminFlowByPhone.set(senderPhone, 'WHITELIST_BULK_DELETE');
+                            replyText = [
+                                '📤 *BULK HAPUS WHITELIST*',
+                                '',
+                                'Kirim beberapa nomor HP dalam baris terpisah.',
+                                'Contoh:',
+                                '08123456789',
+                                '6281234567890',
+                                '',
+                                '_Ketik 0 untuk batal._',
+                            ].join('\n');
+                        } else {
+                            replyText = '⚠️ Pilihan tidak dikenali. Ketik 1-6 atau 0.';
+                        }
+                    } else if (currentAdminFlow === 'WHITELIST_SELECT') {
+                        const session = whitelistSessionByPhone.get(senderPhone);
+                        if (normalized === '0') {
+                            whitelistSessionByPhone.delete(senderPhone);
+                            adminFlowByPhone.set(senderPhone, 'WHITELIST_MENU');
+                            replyText = buildWhitelistMenuText();
+                        } else if (!session || !session.searchResults || session.searchResults.length === 0) {
+                            whitelistSessionByPhone.delete(senderPhone);
+                            adminFlowByPhone.set(senderPhone, 'WHITELIST_MENU');
+                            replyText = '❌ Sesi whitelist hilang. Silakan buka ulang menu whitelist.';
+                        } else {
+                            const choice = Number.parseInt(normalized, 10);
+                            if (Number.isNaN(choice) || choice < 1 || choice > session.searchResults.length) {
+                                replyText = `⚠️ Nomor urut tidak valid (1 - ${session.searchResults.length}).\n_Ketik 0 untuk kembali._`;
+                            } else {
+                                const selected = session.searchResults[choice - 1];
+                                session.selectedWhitelist = selected;
+                                whitelistSessionByPhone.set(senderPhone, session);
+                                adminFlowByPhone.set(senderPhone, 'WHITELIST_DETAIL');
+                                replyText = buildWhitelistDetailText(selected);
+                            }
+                        }
+                    } else if (currentAdminFlow === 'WHITELIST_DETAIL') {
+                        const session = whitelistSessionByPhone.get(senderPhone);
+                        if (!session || !session.selectedWhitelist) {
+                            whitelistSessionByPhone.delete(senderPhone);
+                            adminFlowByPhone.set(senderPhone, 'WHITELIST_MENU');
+                            replyText = '❌ Sesi whitelist hilang. Silakan buka ulang menu whitelist.';
+                        } else if (normalized === '0') {
+                            const list = session.searchResults || [];
+                            if (list.length === 0) {
+                                whitelistSessionByPhone.delete(senderPhone);
+                                adminFlowByPhone.set(senderPhone, 'WHITELIST_MENU');
+                                replyText = buildWhitelistMenuText();
+                            } else {
+                                adminFlowByPhone.set(senderPhone, 'WHITELIST_SELECT');
+                                replyText = buildWhitelistSelectionListText('DAFTAR WHITELIST', list, '👇 Ketik nomor urut untuk melihat detail.');
+                            }
+                        } else if (normalized === '1') {
+                            adminFlowByPhone.set(senderPhone, 'WHITELIST_EDIT_NAME');
+                            replyText = [
+                                '✏️ *EDIT NAMA WHITELIST*',
+                                '',
+                                `Nomor: *${formatWhitelistedPhoneDisplay(session.selectedWhitelist.phone_number)}*`,
+                                `Nama saat ini: *${session.selectedWhitelist.name || '(Tanpa Nama)'}*`,
+                                '',
+                                'Ketik nama baru:',
+                                '',
+                                '_Ketik 0 untuk batal._',
+                            ].join('\n');
+                        } else if (normalized === '2') {
+                            adminFlowByPhone.set(senderPhone, 'WHITELIST_EDIT_PHONE');
+                            replyText = [
+                                '📱 *EDIT NOMOR WHITELIST*',
+                                '',
+                                `Nomor saat ini: *${formatWhitelistedPhoneDisplay(session.selectedWhitelist.phone_number)}*`,
+                                `Nama: *${session.selectedWhitelist.name || '(Tanpa Nama)'}*`,
+                                '',
+                                'Ketik nomor HP baru:',
+                                'Contoh: 08123456789',
+                                '',
+                                '_Ketik 0 untuk batal._',
+                            ].join('\n');
+                        } else if (normalized === '3') {
+                            const target = session.selectedWhitelist;
+                            const result = await removeWhitelistedPhone(target.phone_number);
+                            replyText = result.success ? `✅ ${result.message}` : `❌ ${result.message}`;
+                            replyText += `\n\n${buildWhitelistMenuText()}`;
+                            whitelistSessionByPhone.delete(senderPhone);
+                            adminFlowByPhone.set(senderPhone, 'WHITELIST_MENU');
+                        } else {
+                            replyText = '⚠️ Pilihan tidak dikenali. Ketik 1, 2, 3, atau 0.';
+                        }
+                    } else if (currentAdminFlow === 'WHITELIST_ADD') {
+                        if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'WHITELIST_MENU');
+                            replyText = buildWhitelistMenuText();
+                        } else {
+                            const [rawPhone, ...nameParts] = rawTrim.split(',');
+                            const phoneInput = extractManualPhone(rawPhone || '') || normalizeManualPhone(rawPhone || '');
+                            const name = nameParts.join(',').trim();
+                            if (!phoneInput) {
+                                replyText = '⚠️ Nomor HP tidak valid. Contoh: 08123456789, Budi';
+                            } else {
+                                const result = await addWhitelistedPhone(phoneInput, name || null);
+                                replyText = result.success ? `✅ ${result.message}` : `❌ ${result.message}`;
+                                replyText += `\n\n${buildWhitelistMenuText()}`;
+                                adminFlowByPhone.set(senderPhone, 'WHITELIST_MENU');
+                            }
+                        }
+                    } else if (currentAdminFlow === 'WHITELIST_DELETE') {
+                        if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'WHITELIST_MENU');
+                            replyText = buildWhitelistMenuText();
+                        } else {
+                            const phoneInput = extractManualPhone(rawTrim) || normalizeManualPhone(rawTrim);
+                            if (!phoneInput) {
+                                replyText = '⚠️ Nomor HP tidak valid. Contoh: 08123456789';
+                            } else {
+                                const result = await removeWhitelistedPhone(phoneInput);
+                                replyText = result.success ? `✅ ${result.message}` : `❌ ${result.message}`;
+                                replyText += `\n\n${buildWhitelistMenuText()}`;
+                                adminFlowByPhone.set(senderPhone, 'WHITELIST_MENU');
+                            }
+                        }
+                    } else if (currentAdminFlow === 'WHITELIST_EDIT_NAME') {
+                        const session = whitelistSessionByPhone.get(senderPhone);
+                        if (!session || !session.selectedWhitelist) {
+                            whitelistSessionByPhone.delete(senderPhone);
+                            adminFlowByPhone.set(senderPhone, 'WHITELIST_MENU');
+                            replyText = '❌ Sesi whitelist hilang. Silakan buka ulang menu whitelist.';
+                        } else if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'WHITELIST_DETAIL');
+                            replyText = buildWhitelistDetailText(session.selectedWhitelist);
+                        } else {
+                            const newName = rawTrim.trim();
+                            if (newName.length < 2) {
+                                replyText = '⚠️ Nama terlalu pendek. Minimal 2 karakter.';
+                            } else {
+                                const result = await updateWhitelistedPhoneName(session.selectedWhitelist.phone_number, newName);
+                                if (result.success) {
+                                    session.selectedWhitelist = {
+                                        ...session.selectedWhitelist,
+                                        name: newName,
+                                    };
+                                    whitelistSessionByPhone.set(senderPhone, session);
+                                    adminFlowByPhone.set(senderPhone, 'WHITELIST_DETAIL');
+                                    replyText = `✅ ${result.message}\n\n${buildWhitelistDetailText(session.selectedWhitelist)}`;
+                                } else {
+                                    replyText = `❌ ${result.message}`;
+                                }
+                            }
+                        }
+                    } else if (currentAdminFlow === 'WHITELIST_EDIT_PHONE') {
+                        const session = whitelistSessionByPhone.get(senderPhone);
+                        if (!session || !session.selectedWhitelist) {
+                            whitelistSessionByPhone.delete(senderPhone);
+                            adminFlowByPhone.set(senderPhone, 'WHITELIST_MENU');
+                            replyText = '❌ Sesi whitelist hilang. Silakan buka ulang menu whitelist.';
+                        } else if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'WHITELIST_DETAIL');
+                            replyText = buildWhitelistDetailText(session.selectedWhitelist);
+                        } else {
+                            const newPhone = extractManualPhone(rawTrim) || normalizeManualPhone(rawTrim);
+                            if (!newPhone) {
+                                replyText = '⚠️ Nomor HP baru tidak valid. Contoh: 08123456789';
+                            } else {
+                                const result = await updateWhitelistedPhone(session.selectedWhitelist.phone_number, newPhone, session.selectedWhitelist.name);
+                                if (result.success) {
+                                    session.selectedWhitelist = {
+                                        phone_number: newPhone,
+                                        name: session.selectedWhitelist.name,
+                                    };
+                                    whitelistSessionByPhone.set(senderPhone, session);
+                                    adminFlowByPhone.set(senderPhone, 'WHITELIST_DETAIL');
+                                    replyText = `✅ ${result.message}\n\n${buildWhitelistDetailText(session.selectedWhitelist)}`;
+                                } else {
+                                    replyText = `❌ ${result.message}`;
+                                }
+                            }
+                        }
+                    } else if (currentAdminFlow === 'WHITELIST_BULK_ADD') {
+                        if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'WHITELIST_MENU');
+                            replyText = buildWhitelistMenuText();
+                        } else {
+                            const bulkValidationError = validateWhitelistBulkInput(rawTrim);
+                            if (bulkValidationError) {
+                                replyText = `${bulkValidationError}\n\n${buildWhitelistMenuText()}`;
+                                adminFlowByPhone.set(senderPhone, 'WHITELIST_MENU');
+                            } else {
+                                const items = parseWhitelistBulkAddInput(rawTrim);
+                                if (items.length === 0) {
+                                    replyText = [
+                                        '⚠️ Tidak ada baris yang bisa diproses.',
+                                        '',
+                                        'Kirim beberapa baris sekaligus.',
+                                        'Format per baris: nomor, nama (nama opsional)',
+                                        '',
+                                        '_Ketik 0 untuk kembali._',
+                                    ].join('\n');
+                                } else {
+                                    const summary = await buildWhitelistBulkAddSummary('HASIL BULK TAMBAH WHITELIST', items);
+                                    replyText = `${summary}\n\n${buildWhitelistMenuText()}`;
+                                    adminFlowByPhone.set(senderPhone, 'WHITELIST_MENU');
+                                }
+                            }
+                        }
+                    } else if (currentAdminFlow === 'WHITELIST_BULK_DELETE') {
+                        if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'WHITELIST_MENU');
+                            replyText = buildWhitelistMenuText();
+                        } else {
+                            const bulkValidationError = validateWhitelistBulkInput(rawTrim);
+                            if (bulkValidationError) {
+                                replyText = `${bulkValidationError}\n\n${buildWhitelistMenuText()}`;
+                                adminFlowByPhone.set(senderPhone, 'WHITELIST_MENU');
+                            } else {
+                                const items = parseWhitelistBulkDeleteInput(rawTrim);
+                                if (items.length === 0) {
+                                    replyText = [
+                                        '⚠️ Tidak ada baris yang bisa diproses.',
+                                        '',
+                                        'Kirim beberapa nomor HP dalam baris terpisah.',
+                                        '',
+                                        '_Ketik 0 untuk kembali._',
+                                    ].join('\n');
+                                } else {
+                                    const summary = await buildWhitelistBulkDeleteSummary('HASIL BULK HAPUS WHITELIST', items);
+                                    replyText = `${summary}\n\n${buildWhitelistMenuText()}`;
+                                    adminFlowByPhone.set(senderPhone, 'WHITELIST_MENU');
+                                }
+                            }
                         }
                     } else if (currentAdminFlow === 'BLOCKED_LOCATION_MENU') {
                         if (normalized === '0') {

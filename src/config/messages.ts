@@ -271,6 +271,7 @@ export const ADMIN_MENU_MESSAGE = [
     '1️⃣9️⃣ Kelola Lokasi Penuh',
     '2️⃣0️⃣ Batas per Lokasi (per user/hari)',
     '2️⃣1️⃣ Kuota Global per Lokasi (semua user/hari)',
+    '2️⃣2️⃣ Kelola Whitelist No HP',
     '',
     '💡 _Ketik *#TEMPLATE* untuk edit pesan tutup_',
     '💡 _Ketik *#TEMPLATE RESET* untuk kembali ke default_',

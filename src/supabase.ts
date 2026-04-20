@@ -966,6 +966,226 @@ export async function isPhoneWhitelisted(phoneRaw: string): Promise<{ allowed: b
     return { allowed: true, entry };
 }
 
+function normalizeWhitelistedPhoneForWrite(phoneRaw: string): { success: boolean; phoneNumber?: string; message?: string } {
+    const phoneNumber = normalizePhoneNumber(phoneRaw);
+    if (phoneNumber.length < 10 || phoneNumber.length > 15) {
+        return { success: false, message: 'Nomor HP tidak valid.' };
+    }
+
+    return { success: true, phoneNumber };
+}
+
+async function refreshWhitelistedPhonesCache(): Promise<void> {
+    await initWhitelistedPhonesCache(true);
+}
+
+export async function getWhitelistedPhoneList(limit: number = 200): Promise<WhitelistedPhoneEntry[]> {
+    const { data, error } = await supabase
+        .from('whitelisted_phones')
+        .select('phone_number, name, created_at')
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+    if (error) {
+        if (!isMissingTableError(error, 'whitelisted_phones')) {
+            console.error('Error getWhitelistedPhoneList:', error);
+        }
+        return [];
+    }
+
+    return (data || []).map((row: { phone_number?: string | null; name?: string | null }) => ({
+        phone_number: normalizePhoneNumber(row.phone_number || ''),
+        name: row.name ?? null,
+    })).filter((row) => row.phone_number.length > 0);
+}
+
+export async function addWhitelistedPhone(phoneRaw: string, name?: string | null): Promise<{ success: boolean; message: string }> {
+    const normalized = normalizeWhitelistedPhoneForWrite(phoneRaw);
+    if (!normalized.success || !normalized.phoneNumber) {
+        return { success: false, message: normalized.message || 'Nomor HP tidak valid.' };
+    }
+
+    const payload = {
+        phone_number: normalized.phoneNumber,
+        name: (name || '').trim() || null,
+    };
+
+    const { error } = await supabase
+        .from('whitelisted_phones')
+        .upsert(payload, { onConflict: 'phone_number' });
+
+    if (error) {
+        if (isMissingTableError(error, 'whitelisted_phones')) {
+            return { success: false, message: 'Tabel whitelisted_phones belum dibuat di database.' };
+        }
+        console.error('Error addWhitelistedPhone:', error);
+        return { success: false, message: 'Gagal menyimpan nomor HP ke whitelist.' };
+    }
+
+    await refreshWhitelistedPhonesCache();
+    return { success: true, message: `Nomor HP ${normalized.phoneNumber} berhasil disimpan ke whitelist.` };
+}
+
+export async function removeWhitelistedPhone(phoneRaw: string): Promise<{ success: boolean; message: string }> {
+    const normalized = normalizeWhitelistedPhoneForWrite(phoneRaw);
+    if (!normalized.success || !normalized.phoneNumber) {
+        return { success: false, message: normalized.message || 'Nomor HP tidak valid.' };
+    }
+
+    const { count, error } = await supabase
+        .from('whitelisted_phones')
+        .delete({ count: 'exact' })
+        .eq('phone_number', normalized.phoneNumber);
+
+    if (error) {
+        if (isMissingTableError(error, 'whitelisted_phones')) {
+            return { success: false, message: 'Tabel whitelisted_phones belum dibuat di database.' };
+        }
+        console.error('Error removeWhitelistedPhone:', error);
+        return { success: false, message: 'Gagal menghapus nomor HP dari whitelist.' };
+    }
+
+    if ((count || 0) === 0) {
+        return { success: false, message: `Nomor HP ${normalized.phoneNumber} tidak ditemukan di whitelist.` };
+    }
+
+    await refreshWhitelistedPhonesCache();
+    return { success: true, message: `Nomor HP ${normalized.phoneNumber} berhasil dihapus dari whitelist.` };
+}
+
+export async function updateWhitelistedPhoneName(phoneRaw: string, name: string | null): Promise<{ success: boolean; message: string }> {
+    const normalized = normalizeWhitelistedPhoneForWrite(phoneRaw);
+    if (!normalized.success || !normalized.phoneNumber) {
+        return { success: false, message: normalized.message || 'Nomor HP tidak valid.' };
+    }
+
+    const phoneNumber = normalized.phoneNumber;
+    const nextName = (name || '').trim() || null;
+
+    const { data: existingEntry, error: readError } = await supabase
+        .from('whitelisted_phones')
+        .select('phone_number, name')
+        .eq('phone_number', phoneNumber)
+        .maybeSingle();
+
+    if (readError) {
+        if (isMissingTableError(readError, 'whitelisted_phones')) {
+            return { success: false, message: 'Tabel whitelisted_phones belum dibuat di database.' };
+        }
+        console.error('Error updateWhitelistedPhoneName(read):', readError);
+        return { success: false, message: 'Gagal membaca data whitelist.' };
+    }
+
+    if (!existingEntry?.phone_number) {
+        return { success: false, message: `Nomor HP ${phoneNumber} tidak ditemukan di whitelist.` };
+    }
+
+    const { error: deleteError } = await supabase
+        .from('whitelisted_phones')
+        .delete()
+        .eq('phone_number', phoneNumber);
+
+    if (deleteError) {
+        if (isMissingTableError(deleteError, 'whitelisted_phones')) {
+            return { success: false, message: 'Tabel whitelisted_phones belum dibuat di database.' };
+        }
+        console.error('Error updateWhitelistedPhoneName(delete):', deleteError);
+        return { success: false, message: 'Gagal menyiapkan perubahan nama whitelist.' };
+    }
+
+    const { error: insertError } = await supabase
+        .from('whitelisted_phones')
+        .insert({ phone_number: phoneNumber, name: nextName });
+
+    if (insertError) {
+        console.error('Error updateWhitelistedPhoneName(insert):', insertError);
+
+        const rollbackName = existingEntry.name ?? null;
+        const { error: rollbackError } = await supabase
+            .from('whitelisted_phones')
+            .insert({ phone_number: phoneNumber, name: rollbackName });
+
+        if (rollbackError) {
+            console.error('Error updateWhitelistedPhoneName(rollback):', rollbackError);
+            await refreshWhitelistedPhonesCache();
+            return { success: false, message: `Gagal mengubah nama whitelist dan rollback juga gagal. Mohon cek nomor ${phoneNumber}.` };
+        }
+
+        await refreshWhitelistedPhonesCache();
+        return { success: false, message: 'Gagal mengubah nama whitelist. Data lama sudah dipulihkan.' };
+    }
+
+    await refreshWhitelistedPhonesCache();
+    return { success: true, message: `Nama whitelist untuk ${phoneNumber} berhasil diubah.` };
+}
+
+export async function updateWhitelistedPhone(oldPhoneRaw: string, newPhoneRaw: string, name?: string | null): Promise<{ success: boolean; message: string }> {
+    const oldNormalized = normalizeWhitelistedPhoneForWrite(oldPhoneRaw);
+    if (!oldNormalized.success || !oldNormalized.phoneNumber) {
+        return { success: false, message: oldNormalized.message || 'Nomor lama tidak valid.' };
+    }
+
+    const newNormalized = normalizeWhitelistedPhoneForWrite(newPhoneRaw);
+    if (!newNormalized.success || !newNormalized.phoneNumber) {
+        return { success: false, message: newNormalized.message || 'Nomor baru tidak valid.' };
+    }
+
+    const oldPhoneNumber = oldNormalized.phoneNumber;
+    const newPhoneNumber = newNormalized.phoneNumber;
+
+    if (oldPhoneNumber === newPhoneNumber) {
+        const existingEntry = await getWhitelistedPhoneEntry(oldPhoneNumber);
+        return updateWhitelistedPhoneName(oldPhoneNumber, name !== undefined ? name : (existingEntry?.name ?? null));
+    }
+
+    const { data: existingOld, error: oldError } = await supabase
+        .from('whitelisted_phones')
+        .select('phone_number, name')
+        .eq('phone_number', oldPhoneNumber)
+        .maybeSingle();
+
+    if (oldError) {
+        if (isMissingTableError(oldError, 'whitelisted_phones')) {
+            return { success: false, message: 'Tabel whitelisted_phones belum dibuat di database.' };
+        }
+        console.error('Error updateWhitelistedPhone(old lookup):', oldError);
+        return { success: false, message: 'Gagal membaca data whitelist lama.' };
+    }
+
+    if (!existingOld?.phone_number) {
+        return { success: false, message: `Nomor HP ${oldPhoneNumber} tidak ditemukan di whitelist.` };
+    }
+
+    const nextName = (name !== undefined ? name : existingOld.name) ?? null;
+    const { error: upsertError } = await supabase
+        .from('whitelisted_phones')
+        .upsert({ phone_number: newPhoneNumber, name: (nextName || '').trim() || null }, { onConflict: 'phone_number' });
+
+    if (upsertError) {
+        if (isMissingTableError(upsertError, 'whitelisted_phones')) {
+            return { success: false, message: 'Tabel whitelisted_phones belum dibuat di database.' };
+        }
+        console.error('Error updateWhitelistedPhone(upsert):', upsertError);
+        return { success: false, message: 'Gagal menyimpan nomor whitelist baru.' };
+    }
+
+    const { error: deleteError } = await supabase
+        .from('whitelisted_phones')
+        .delete()
+        .eq('phone_number', oldPhoneNumber);
+
+    if (deleteError) {
+        if (!isMissingTableError(deleteError, 'whitelisted_phones')) {
+            console.error('Error updateWhitelistedPhone(delete old):', deleteError);
+        }
+        await refreshWhitelistedPhonesCache();
+        return { success: false, message: 'Nomor baru tersimpan, tetapi nomor lama gagal dihapus. Mohon cek data whitelist.' };
+    }
+
+    await refreshWhitelistedPhonesCache();
+    return { success: true, message: `Nomor whitelist berhasil diubah dari ${oldPhoneNumber} ke ${newPhoneNumber}.` };
+}
+
 export async function getBlockedKkList(limit: number = 200): Promise<BlockedKkItem[]> {
     const { data, error } = await supabase
         .from('blocked_kk')

@@ -106,6 +106,15 @@ export type AdminFlowState =
     | 'BLOCKED_PHONE_MENU'
     | 'BLOCKED_PHONE_ADD'
     | 'BLOCKED_PHONE_DELETE'
+    | 'WHITELIST_MENU'
+    | 'WHITELIST_ADD'
+    | 'WHITELIST_SELECT'
+    | 'WHITELIST_DETAIL'
+    | 'WHITELIST_EDIT_NAME'
+    | 'WHITELIST_EDIT_PHONE'
+    | 'WHITELIST_DELETE'
+    | 'WHITELIST_BULK_ADD'
+    | 'WHITELIST_BULK_DELETE'
     | 'BLOCKED_LOCATION_MENU'
     | 'BLOCKED_LOCATION_ADD'
     | 'BLOCKED_LOCATION_DELETE'
@@ -176,6 +185,13 @@ export type ContactSession = {
     newContactName?: string; // Sementara simpan nama saat tambah kontak baru
 };
 export const contactSessionByPhone = new Map<string, ContactSession>();
+
+export type WhitelistSession = {
+    searchResults?: { phone_number: string; name: string | null }[];
+    selectedWhitelist?: { phone_number: string; name: string | null };
+};
+
+export const whitelistSessionByPhone = new Map<string, WhitelistSession>();
 
 export type LocationQuotaDraft = {
     locationKey?: string;
