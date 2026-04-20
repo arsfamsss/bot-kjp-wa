@@ -140,6 +140,7 @@ import {
     extractManualPhone,
     isLidJid,
 } from './utils/contactUtils';
+import { sanitizeInboundText } from './utils/textSanitizer';
 import {
     UserFlowState,
     AdminFlowState,
@@ -381,10 +382,7 @@ function formatOperationStatus(settings: {
 }
 
 function parseAdminWibDateTimeToIso(input: string): { iso: string; display: string } | null {
-    const cleaned = (input || '')
-        .normalize('NFKC')
-        .replace(/[\u200E\u200F]/g, '')
-        .replace(/[\u00A0\u2000-\u200D\u202F\u205F\u3000]/g, ' ')
+    const cleaned = sanitizeInboundText(input)
         .replace(/[\u2010-\u2015\u2212\uFE58\uFE63\uFF0D]/g, '-')
         .replace(/[\uA789\u2236\uFF1A]/g, ':')
         .replace(/[/.]/g, '-')
@@ -851,7 +849,7 @@ const CLOSED_MODE_MENU_5_ALLOWLIST = new Set([
 ]);
 
 function normalizeIncomingCommand(raw: string): string {
-    const normalizedRaw = (raw || '').toString().normalize('NFKC').trim();
+    const normalizedRaw = sanitizeInboundText(raw).trim();
     const up = normalizedRaw
         .toUpperCase()
         .split(/\s+/)
@@ -1062,7 +1060,7 @@ function removeUnderageOkItems(logJson: LogJson): LogJson {
 
 function clearUnderageConfirmationSession(senderPhone: string): void {
     pendingUnderageConfirmationByPhone.delete(senderPhone);
-    userFlowByPhone.set(senderPhone, 'NONE');
+    userFlowByPhone.delete(senderPhone);
 }
 
 async function queueUnderageConfirmationIfNeeded(params: {
@@ -1141,7 +1139,43 @@ function removeUnknownRegionOkItems(logJson: LogJson): LogJson {
 
 function clearUnknownRegionConfirmationSession(senderPhone: string): void {
     pendingUnknownRegionConfirmationByPhone.delete(senderPhone);
-    userFlowByPhone.set(senderPhone, 'NONE');
+    userFlowByPhone.delete(senderPhone);
+}
+
+function clearTransientSessionContext(
+    senderPhone: string,
+    options?: { clearFlows?: boolean; clearPendingConfirmations?: boolean; clearLocationChoice?: boolean }
+): void {
+    pendingRegistrationData.delete(senderPhone);
+    editSessionMap.delete(senderPhone);
+    contactSessionByPhone.delete(senderPhone);
+    whitelistSessionByPhone.delete(senderPhone);
+    broadcastDraftMap.delete(senderPhone);
+    locationQuotaDraftByPhone.delete(senderPhone);
+    globalLocationQuotaDraftByPhone.delete(senderPhone);
+    closeWindowDraftByPhone.delete(senderPhone);
+    adminContactCache.delete(senderPhone);
+    adminContactCache.delete(senderPhone + '_data');
+    adminUserListCache.delete(senderPhone);
+    adminUserListCache.delete(senderPhone + '_selected');
+    statusCheckSelectionByPhone.delete(senderPhone);
+    statusCheckInProgressByPhone.delete(senderPhone);
+    pendingDelete.delete(senderPhone);
+
+    if (options?.clearPendingConfirmations) {
+        pendingUnderageConfirmationByPhone.delete(senderPhone);
+        pendingUnknownRegionConfirmationByPhone.delete(senderPhone);
+    }
+
+    if (options?.clearLocationChoice) {
+        userLocationChoice.delete(senderPhone);
+        userSpecificLocationChoice.delete(senderPhone);
+    }
+
+    if (options?.clearFlows) {
+        userFlowByPhone.delete(senderPhone);
+        adminFlowByPhone.delete(senderPhone);
+    }
 }
 
 async function queueUnknownRegionConfirmationIfNeeded(params: {
@@ -2749,7 +2783,7 @@ export async function connectToWhatsApp() {
                         statusCheckSelectionByPhone.delete(senderPhone);
                         statusCheckInProgressByPhone.delete(senderPhone);
                     }
-                    userFlowByPhone.set(senderPhone, 'NONE');
+                    clearTransientSessionContext(senderPhone, { clearFlows: true, clearPendingConfirmations: true });
                     // Lanjut ke handler menu utama di bawah
                 }
 
@@ -3543,10 +3577,8 @@ export async function connectToWhatsApp() {
 
 
                 const openAdminMenu = async () => {
-                    userFlowByPhone.set(senderPhone, 'NONE');
-                    pendingRegistrationData.delete(senderPhone);
+                    clearTransientSessionContext(senderPhone, { clearFlows: true });
                     adminFlowByPhone.set(senderPhone, 'MENU');
-                    pendingDelete.delete(senderPhone);
                     await sock.sendMessage(remoteJid, { text: ADMIN_MENU_MESSAGE });
                 };
 
@@ -3557,7 +3589,7 @@ export async function connectToWhatsApp() {
 
                 if (isAdmin && currentAdminFlow !== 'NONE') {
                     if ((normalized === '0' && !currentAdminFlow.startsWith('CONTACT_') && !currentAdminFlow.startsWith('BLOCKED_KK_') && !currentAdminFlow.startsWith('BLOCKED_PHONE_') && !currentAdminFlow.startsWith('BLOCKED_LOCATION_') && !currentAdminFlow.startsWith('SETTING_')) || isGreetingOrMenu(normalized)) {
-                        adminFlowByPhone.set(senderPhone, 'NONE');
+                        clearTransientSessionContext(senderPhone, { clearFlows: true, clearPendingConfirmations: true });
                         await sendMainMenu(sock, remoteJid, isAdmin);
                         continue;
                     }
@@ -4199,6 +4231,7 @@ export async function connectToWhatsApp() {
                     } else if (currentAdminFlow === 'DELETE_CONTACT') {
                         if (rawTrim === '0') {
                             replyText = '✅ Hapus kontak dibatalkan.';
+                            adminContactCache.delete(senderPhone);
                             adminFlowByPhone.set(senderPhone, 'MENU');
                         } else {
                             // Coba parse index: "1, 2, 5" atau "1 2 5"
@@ -4248,6 +4281,7 @@ export async function connectToWhatsApp() {
                                 if (phoneInput) {
                                     const deleted = await deleteLidPhoneMap(phoneInput);
                                     replyText = deleted ? `✅ Berhasil menghapus data ${phoneInput}` : `❌ Gagal/Data tidak ditemukan.`;
+                                    adminContactCache.delete(senderPhone);
                                     adminFlowByPhone.set(senderPhone, 'MENU');
                                 } else {
                                     replyText = '⚠️ Input tidak valid. Masukkan angka nomor urut (contoh: 1, 3). Ketik 0 untuk batal.';
@@ -5493,6 +5527,7 @@ export async function connectToWhatsApp() {
                             // --- KIRIM SEKARANG ---
                             await executeBroadcast(sock, draft, remoteJid, senderPhone);
                             adminFlowByPhone.set(senderPhone, 'MENU');
+                            broadcastDraftMap.delete(senderPhone);
                         } else if (normalized === '2') {
                             // --- JADWALKAN ---
                             replyText = '📅 Masukkan Tanggal & Jam (Format: DD-MM-YYYY HH:mm)\nContoh: 15-01-2026 08:30';
@@ -5584,6 +5619,8 @@ export async function connectToWhatsApp() {
 
                             if (!userData || userData.length === 0) {
                                 replyText = `❌ Data user tidak ditemukan.\n\n_Debug: phone=${selectedUser.phone}, key=${processingDayKey}_`;
+                                adminUserListCache.delete(senderPhone + '_selected');
+                                adminContactCache.delete(senderPhone + '_data');
                                 adminFlowByPhone.set(senderPhone, 'MENU');
                             } else {
                                 // Cache data untuk delete

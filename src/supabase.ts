@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 import type { LogItem, LogJson, DuplicateKind, DuplicateInfo } from './types';
 import { getStartOfNextWibMonthUTC, getStartOfWibMonthUTC, getWibParts, getWibTimeHHmm, isLastDayOfWibMonth } from './time';
 import { getLocationQuotaLimit } from './services/locationQuota';
+import { sanitizeInlineText } from './utils/textSanitizer';
 
 const url = process.env.SUPABASE_URL!;
 const anonKey = process.env.SUPABASE_ANON_KEY!;
@@ -390,10 +391,7 @@ export type GlobalLocationQuotaReserveResult = {
 function normalizeNameForDedup(raw: string): string {
     if (!raw) return '';
 
-    return raw
-        .normalize('NFKC')
-        .replace(/[\u200B-\u200D\uFEFF]/g, '')
-        .replace(/\u00A0/g, ' ')
+    return sanitizeInlineText(raw)
         .toLowerCase()
         .replace(/[^a-z0-9\s]/g, ' ')
         .replace(/\s+/g, ' ')

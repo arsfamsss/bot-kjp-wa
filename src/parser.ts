@@ -5,6 +5,7 @@ import { checkBlockedKjpBatch, checkBlockedKkBatch, checkBlockedKtpBatch, checkB
 import { parseFlexibleDate } from './utils/dateParser';
 import { normalizeCardTypeName, getCardTypeChoicesText } from './utils/cardTypeRules';
 import { getCardPrefixType } from './utils/cardPrefixConfig';
+import { sanitizeInboundText, sanitizeInlineText } from './utils/textSanitizer';
 import { lookupNikRegionFromMaster } from './services/ktpMasterLookup';
 import { KTP_MASTER_UNAVAILABLE_MESSAGE, KTP_REGION_NOT_FOUND_MESSAGE } from './config/messages';
 
@@ -274,10 +275,7 @@ function cleanName(raw: string): string {
 export function normalizeNameForDedup(raw: string): string {
     if (!raw) return '';
 
-    const normalized = raw
-        .normalize('NFKC')
-        .replace(/[\u200B-\u200D\uFEFF]/g, '')
-        .replace(/\u00A0/g, ' ')
+    const normalized = sanitizeInlineText(raw)
         .toLowerCase()
         .replace(/[^a-z0-9\s]/g, ' ')
         .replace(/\s+/g, ' ')
@@ -334,13 +332,9 @@ export function parseBlockToItem(lines: string[], index: number, processingDayKe
 // Parsing logic with Auto-Split feature
 export function parseRawMessageToLines(text: string): string[] {
     // SANITASI AWAL: Bersihkan karakter invisible dan format aneh
-    let sanitized = (text || '')
-        .replace(/[\u200B-\u200D\uFEFF]/g, '')  // Zero-width characters
-        .replace(/\u00A0/g, ' ')                  // Non-breaking space → normal space
+    const sanitized = sanitizeInboundText(text)
         .replace(/\bdisablitas\b/gi, 'Disabilitas')
-        .replace(/:+/g, ':')                      // :: → :
-        .replace(/\r\n/g, '\n')                   // Windows newline
-        .replace(/\r/g, '\n');                    // Old Mac newline
+        .replace(/:+/g, ':');                     // :: → :
 
     const rawLines = sanitized
         .split('\n')
