@@ -683,7 +683,7 @@ type WhitelistBulkDeleteItem = { nomor: string };
 
 const MAX_WHITELIST_BULK_LINES = 50;
 const MAX_WHITELIST_BULK_TOTAL_CHARS = 5000;
-const WHITELIST_PAGE_SIZE = 25;
+const WHITELIST_PAGE_SIZE = 100;
 
 function getWhitelistTotalPages(listLength: number): number {
     return Math.max(1, Math.ceil(listLength / WHITELIST_PAGE_SIZE));
