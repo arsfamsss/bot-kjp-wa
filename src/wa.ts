@@ -1241,11 +1241,36 @@ function getMessageDate(msg: any): Date {
     return new Date();
 }
 
+function unwrapMessageContent(message: any): any {
+    let current = message;
+    for (let depth = 0; depth < 6; depth += 1) {
+        if (!current || typeof current !== 'object') break;
+
+        const next =
+            current?.ephemeralMessage?.message ||
+            current?.viewOnceMessage?.message ||
+            current?.viewOnceMessageV2?.message ||
+            current?.viewOnceMessageV2Extension?.message ||
+            current?.documentWithCaptionMessage?.message ||
+            current?.editedMessage?.message;
+
+        if (!next || next === current) break;
+        current = next;
+    }
+    return current;
+}
+
 // --- HELPER FILTER ---
 function shouldIgnoreMessage(msg: any): boolean {
     const jid = msg.key?.remoteJid;
-    if (!jid) return true;
-    if (jid === 'status@broadcast') return true;
+    if (!jid) {
+        console.log('[IGNORED] missing remoteJid');
+        return true;
+    }
+    if (jid === 'status@broadcast') {
+        console.log('[IGNORED] status broadcast');
+        return true;
+    }
     if (jid.endsWith('@newsletter')) {
         console.log(`[IGNORED] newsletter: ${jid}`);
         return true;
@@ -1258,7 +1283,10 @@ function shouldIgnoreMessage(msg: any): boolean {
         console.log(`[IGNORED] group: ${jid}`);
         return true;
     }
-    if (!msg.message) return true;
+    if (!msg.message) {
+        console.log(`[IGNORED] empty message payload: ${jid}`);
+        return true;
+    }
     return false;
 }
 
@@ -1381,7 +1409,10 @@ export async function connectToWhatsApp() {
 
     // --- LOGIC UTAMA PROSES PESAN ---
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
-        if (type !== 'notify') return;
+        if (type !== 'notify') {
+            console.log(`[IGNORED] upsert type=${type} count=${messages?.length || 0}`);
+            return;
+        }
 
         for (const msg of messages) {
             if (msg.key.fromMe) continue;
@@ -1436,7 +1467,7 @@ export async function connectToWhatsApp() {
                     console.log(`🔄 Mapping LID detect: ${rawRemoteJid} -> ${remoteJid} (${senderPhone})`);
                 }
 
-                const mAny: any = msg.message as any;
+                const mAny: any = unwrapMessageContent(msg.message as any);
 
                 const messageText =
                     mAny?.conversation ||
@@ -1489,7 +1520,11 @@ export async function connectToWhatsApp() {
                     continue;
                 }
 
-                if (!rawInput) continue;
+                if (!rawInput) {
+                    const keys = Object.keys(mAny || {}).join(',') || 'none';
+                    console.log(`⚠️ Ignored empty rawInput from ${senderPhone} (jid=${chatJid}, keys=${keys})`);
+                    continue;
+                }
 
                 // ✅ KHUSUS AKUN @lid: kalau belum ada mapping nomor, minta user ketik nomor manual
                 // PENTING: Hanya proses jika input SATU BARIS (bukan data sembako multi-baris)
