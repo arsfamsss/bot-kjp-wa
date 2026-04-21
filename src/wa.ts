@@ -300,10 +300,25 @@ export function scheduleReconnectNow(reason = 'manual-trigger'): void {
 // --- UTILS: LID LOOKUP VIA STORE ---
 // Cari nomor HP asli dari database kontak Baileys (store)
 function getPhoneFromLid(lidJid: string): string | null {
-    const contact = store.contacts[lidJid];
-    if (contact && contact.id && contact.id !== lidJid) {
-        return contact.id; // Ini biasanya nomor HP (misal: 628xxx@s.whatsapp.net)
+    const directContact: any = (store.contacts as any)?.[lidJid];
+    if (directContact && directContact.id && directContact.id !== lidJid) {
+        return directContact.id;
     }
+
+    const allContacts = Object.entries((store.contacts as any) || {});
+    for (const [jid, contactAny] of allContacts) {
+        const contact: any = contactAny;
+        if (contact?.lid !== lidJid) continue;
+
+        if (typeof jid === 'string' && jid.endsWith('@s.whatsapp.net')) {
+            return jid;
+        }
+
+        if (typeof contact?.id === 'string' && contact.id.endsWith('@s.whatsapp.net')) {
+            return contact.id;
+        }
+    }
+
     return null;
 }
 
@@ -658,7 +673,7 @@ function buildWhitelistSelectionListText(
     lines.push('');
     lines.push(promptLine);
     if (totalPages > 1) {
-        lines.push('Ketik *N* untuk halaman berikutnya, *P* untuk halaman sebelumnya.');
+        lines.push('Ketik *NEXT* untuk halaman berikutnya, *BACK* untuk halaman sebelumnya.');
     }
     lines.push('_Ketik 0 untuk kembali._');
     return lines.join('\n');
@@ -1409,7 +1424,7 @@ export async function connectToWhatsApp() {
 
     // --- LOGIC UTAMA PROSES PESAN ---
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
-        if (type !== 'notify') {
+        if (type !== 'notify' && type !== 'append') {
             console.log(`[IGNORED] upsert type=${type} count=${messages?.length || 0}`);
             return;
         }
@@ -1504,9 +1519,34 @@ export async function connectToWhatsApp() {
                     }
                 }
 
-                if (!isAdminEarly && isValidIdPhone(senderPhone) && !senderAccess.allowed) {
-                    console.log(`⛔ Ignored non-whitelisted sender: ${senderPhone}`);
-                    continue;
+                if (!isAdminEarly && !senderAccess.allowed) {
+                    const unresolvedLidSender = senderIsLid && !isValidIdPhone(senderPhone);
+
+                    if (unresolvedLidSender) {
+                        const candidatePhone = extractManualPhone(String(rawInput || '').trim());
+
+                        if (!candidatePhone) {
+                            console.log(`⛔ Ignored unresolved LID sender without whitelisted phone: ${chatJid}`);
+                            continue;
+                        }
+
+                        const candidateAccess = await resolveSenderAccess(candidatePhone);
+                        if (!candidateAccess.allowed) {
+                            console.log(`⛔ Ignored non-whitelisted verification phone: ${candidatePhone}`);
+                            continue;
+                        }
+
+                        senderPhone = candidatePhone;
+                        senderAccess = candidateAccess;
+                        await upsertLidPhoneMap({
+                            lid_jid: chatJid,
+                            phone_number: candidatePhone,
+                            push_name: candidateAccess.name || msg.pushName || null,
+                        });
+                    } else {
+                        console.log(`⛔ Ignored non-whitelisted sender: ${senderPhone}`);
+                        continue;
+                    }
                 }
 
                 // Helper untuk membersihkan input user
@@ -1720,7 +1760,7 @@ export async function connectToWhatsApp() {
                     }
                 }
 
-                if (!isAdminByCurrentPhone && isValidIdPhone(senderPhone) && !senderAccess.allowed) {
+                if (!isAdminByCurrentPhone && !senderAccess.allowed) {
                     console.log(`⛔ Ignored non-whitelisted sender after phone update: ${senderPhone}`);
                     continue;
                 }
@@ -4979,12 +5019,12 @@ export async function connectToWhatsApp() {
                             whitelistSessionByPhone.delete(senderPhone);
                             adminFlowByPhone.set(senderPhone, 'WHITELIST_MENU');
                             replyText = '❌ Sesi whitelist hilang. Silakan buka ulang menu whitelist.';
-                        } else if (normalized === 'N') {
+                        } else if (normalized === 'NEXT') {
                             const nextPage = clampWhitelistPage((session.currentPage ?? 0) + 1, session.searchResults.length);
                             session.currentPage = nextPage;
                             whitelistSessionByPhone.set(senderPhone, session);
                             replyText = buildWhitelistSelectionListText('DAFTAR WHITELIST', session.searchResults, '👇 Ketik nomor urut untuk melihat detail.', nextPage);
-                        } else if (normalized === 'P') {
+                        } else if (normalized === 'BACK') {
                             const prevPage = clampWhitelistPage((session.currentPage ?? 0) - 1, session.searchResults.length);
                             session.currentPage = prevPage;
                             whitelistSessionByPhone.set(senderPhone, session);
