@@ -14,7 +14,7 @@ import * as fs from 'fs';
 import { makeInMemoryStore } from './store';
 
 // --- IMPORT LOGIC DARI FILE LAIN ---
-import { processRawMessageToLogJson, parseRawMessageToLines } from './parser';
+import { processRawMessageToLogJson, parseRawMessageToLines, normalizeNameForDedup } from './parser';
 import {
     buildReplyForTodayRecap,
     buildReplyForInvalidDetails,
@@ -2139,6 +2139,29 @@ export async function connectToWhatsApp() {
                                 errorMsg = '⚠️ Format tanggal salah. Gunakan DD-MM-YYYY (Contoh: 15-05-2005).';
                             } else {
                                 cleanVal = iso; // Simpan format ISO untuk display/db (tapi user input DMY)
+                            }
+                        }
+
+                        // DUPLICATE NAME CHECK (EDIT FLOW)
+                        if (isValid && session.selectedFieldKey === 'nama') {
+                            const newCanonical = normalizeNameForDedup(cleanVal);
+                            if (newCanonical) {
+                                // Check against other records from same sender today (exclude the record being edited)
+                                const otherRecords = session.recordsToday.filter(
+                                    (r: any) => r.id !== session.selectedRecordId
+                                );
+                                const duplicateRecord = otherRecords.find((r: any) => {
+                                    const existingCanonical = normalizeNameForDedup(r.nama || '');
+                                    return existingCanonical === newCanonical;
+                                });
+
+                                if (duplicateRecord) {
+                                    const dupIndex = session.recordsToday.findIndex(
+                                        (r: any) => r.id === duplicateRecord.id
+                                    ) + 1;
+                                    isValid = false;
+                                    errorMsg = `⚠️ Nama *${cleanVal}* sudah digunakan di data no. ${dupIndex} Anda hari ini.\n\nTidak bisa menggunakan nama yang sama dalam satu hari.`;
+                                }
                             }
                         }
 
