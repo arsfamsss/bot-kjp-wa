@@ -2,6 +2,7 @@
 import express from 'express';
 import { connectToWhatsApp, scheduleReconnectNow } from './wa';
 import { startCsvContactsSync } from './services/csvContactsSync';
+import { startSchedulePoller } from './services/locationScheduler';
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -22,6 +23,13 @@ app.listen(port, async () => {
         startCsvContactsSync();
     } catch (error) {
         console.error('⚠️ CSV sync gagal start, proses bot tetap lanjut:', error);
+    }
+
+    try {
+        startSchedulePoller();
+        console.log('📅 Schedule poller dimulai');
+    } catch (error) {
+        console.error('⚠️ Schedule poller gagal start, proses bot tetap lanjut:', error);
     }
 
     // JALANKAN BOT WHATSAPP

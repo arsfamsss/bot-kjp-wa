@@ -85,6 +85,7 @@ import {
     releaseGlobalLocationQuotaReservation,
     reconcileGlobalLocationQuotaDay,
     type GlobalLocationQuotaReservation,
+    isProviderBlocked,
 } from './supabase';
 import { getProcessingDayKey, getWibIsoDate, shiftIsoDate, isSystemClosed, getWibParts } from './time';
 import { getContactName } from './contacts_data';
@@ -327,9 +328,7 @@ const DEFAULT_CLOSE_START_HOUR = 0;
 const DEFAULT_CLOSE_START_MINUTE = 0;
 const DEFAULT_CLOSE_END_HOUR = 6;
 const DEFAULT_CLOSE_END_MINUTE = 5;
-const PASARJAYA_DISABLED = ['1', 'true', 'yes', 'on'].includes(
-    (process.env.PASARJAYA_DISABLED ?? 'true').trim().toLowerCase()
-);
+
 const inFlightMessageKeys = new Set<string>();
 
 function buildMessageIdempotencyKey(senderPhone: string, processingDayKey: string, messageId: string): string {
@@ -356,11 +355,12 @@ async function buildSelectLocationFirstPromptText(): Promise<string> {
         ? availableSubLocations.join('\n')
         : '   - Saat ini semua sub-lokasi DHARMAJAYA sedang TUTUP.';
 
-    const locationOptionText = PASARJAYA_DISABLED
+    const pasarjayaBlocked = await isProviderBlocked('PASARJAYA');
+    const locationOptionText = pasarjayaBlocked
         ? 'Saat ini yang tersedia: *2. DHARMAJAYA* dan *3. FOOD STATION*'
         : 'Saat ini yang tersedia: *1. PASARJAYA*, *2. DHARMAJAYA*, dan *3. FOOD STATION*';
 
-    const firstStepText = PASARJAYA_DISABLED
+    const firstStepText = pasarjayaBlocked
         ? '1) Ketik *2* (Dharmajaya) atau *3* (Food Station)'
         : '1) Ketik *1*, *2*, atau *3* untuk pilih lokasi';
 
@@ -3074,8 +3074,8 @@ export async function connectToWhatsApp() {
                 else if (currentUserFlow === 'SELECT_LOCATION') {
                     // Logic Unified: Pilihan 1 -> Menu Pasarjaya, Pilihan 2 -> Dharmajaya (Auto Process Pending)
                     if (normalized === '1') {
-                        if (PASARJAYA_DISABLED) {
-                            replyText = '⚠️ PasarJaya sementara ditutup.\nSilakan pilih lokasi yang tersedia: *2. DHARMAJAYA*.';
+                        if (await isProviderBlocked('PASARJAYA')) {
+                            replyText = '⚠️ PasarJaya sementara ditutup.\nSilakan pilih lokasi yang tersedia: *2. DHARMAJAYA* dan *3. FOOD STATION*.';
                             if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
                             continue;
                         }
@@ -3230,7 +3230,7 @@ export async function connectToWhatsApp() {
                         pendingRegistrationData.delete(senderPhone);
                         replyText = '✅ Pendaftaran dibatalkan.';
                     } else {
-                        replyText = PASARJAYA_DISABLED
+                        replyText = (await isProviderBlocked('PASARJAYA'))
                             ? '⚠️ Ketik Angka *2* (Dharmajaya) atau *3* (Food Station).\nKetik *0* untuk batal.'
                             : '⚠️ Ketik Angka *1* (Pasarjaya), *2* (Dharmajaya), atau *3* (Food Station).\nKetik *0* untuk batal.';
                     }
@@ -3238,9 +3238,9 @@ export async function connectToWhatsApp() {
                     continue;
                 }
                 else if (currentUserFlow === 'SELECT_PASARJAYA_SUB') {
-                    if (PASARJAYA_DISABLED) {
+                    if (await isProviderBlocked('PASARJAYA')) {
                         userFlowByPhone.set(senderPhone, 'SELECT_LOCATION');
-                        replyText = '⚠️ PasarJaya sementara ditutup.\nSilakan pilih lokasi yang tersedia: *2. DHARMAJAYA*.';
+                        replyText = '⚠️ PasarJaya sementara ditutup.\nSilakan pilih lokasi yang tersedia: *2. DHARMAJAYA* dan *3. FOOD STATION*.';
                         if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
                         continue;
                     }
@@ -3387,9 +3387,9 @@ export async function connectToWhatsApp() {
                     continue;
                 }
                 else if (currentUserFlow === 'INPUT_MANUAL_LOCATION') {
-                    if (PASARJAYA_DISABLED) {
+                    if (await isProviderBlocked('PASARJAYA')) {
                         userFlowByPhone.set(senderPhone, 'SELECT_LOCATION');
-                        replyText = '⚠️ PasarJaya sementara ditutup.\nSilakan pilih lokasi yang tersedia: *2. DHARMAJAYA*.';
+                        replyText = '⚠️ PasarJaya sementara ditutup.\nSilakan pilih lokasi yang tersedia: *2. DHARMAJAYA* dan *3. FOOD STATION*.';
                         if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
                         continue;
                     }
@@ -3833,7 +3833,7 @@ export async function connectToWhatsApp() {
                 }
 
                 if (isAdmin && currentAdminFlow !== 'NONE') {
-                    if ((normalized === '0' && !currentAdminFlow.startsWith('CONTACT_') && !currentAdminFlow.startsWith('BLOCKED_KK_') && !currentAdminFlow.startsWith('BLOCKED_PHONE_') && !currentAdminFlow.startsWith('BLOCKED_LOCATION_') && !currentAdminFlow.startsWith('SETTING_')) || isGreetingOrMenu(normalized)) {
+                    if ((normalized === '0' && !currentAdminFlow.startsWith('CONTACT_') && !currentAdminFlow.startsWith('BLOCKED_KK_') && !currentAdminFlow.startsWith('BLOCKED_PHONE_') && !currentAdminFlow.startsWith('BLOCKED_LOCATION_') && !currentAdminFlow.startsWith('LOCATION_MGMT_') && !currentAdminFlow.startsWith('SETTING_')) || isGreetingOrMenu(normalized)) {
                         clearTransientSessionContext(senderPhone, { clearFlows: true, clearPendingConfirmations: true });
                         await sendMainMenu(sock, remoteJid, isAdmin);
                         continue;
@@ -4181,6 +4181,11 @@ export async function connectToWhatsApp() {
                             whitelistSessionByPhone.delete(senderPhone);
                             adminFlowByPhone.set(senderPhone, 'WHITELIST_MENU');
                             replyText = buildWhitelistMenuText();
+                        } else if (normalized === '23') {
+                            const { handleLocationMgmt } = await import('./services/adminLocationMenu');
+                            const result = await handleLocationMgmt('LOCATION_MGMT_MENU', '', senderPhone);
+                            adminFlowByPhone.set(senderPhone, result.nextState ?? 'NONE');
+                            replyText = result.replyText;
                         } else replyText = '⚠️ Pilihan tidak dikenali.';
                     } else if (currentAdminFlow === 'SETTING_OPERATION_MENU') {
                         if (normalized === '0') {
@@ -5491,6 +5496,15 @@ export async function connectToWhatsApp() {
                             }
                             adminFlowByPhone.set(senderPhone, 'BLOCKED_LOCATION_MENU');
                         }
+                    } else if (currentAdminFlow.startsWith('LOCATION_MGMT_')) {
+                        const { handleLocationMgmt } = await import('./services/adminLocationMenu');
+                        const result = await handleLocationMgmt(currentAdminFlow as any, normalized, senderPhone);
+                        if (result.nextState === null) {
+                            adminFlowByPhone.set(senderPhone, 'NONE');
+                        } else {
+                            adminFlowByPhone.set(senderPhone, result.nextState);
+                        }
+                        replyText = result.replyText;
                     } else if (currentAdminFlow === 'LOCATION_QUOTA_MENU') {
                         if (normalized === '0') {
                             locationQuotaDraftByPhone.delete(senderPhone);
@@ -6821,9 +6835,9 @@ export async function connectToWhatsApp() {
                     // --- EXECUTION BLOCKS ---
 
                     if (blockAskLocation) {
-                        if (PASARJAYA_DISABLED && detectedFormat === 'PASARJAYA') {
+                        if ((await isProviderBlocked('PASARJAYA')) && detectedFormat === 'PASARJAYA') {
                             await sock.sendMessage(remoteJid, {
-                                text: '⚠️ PasarJaya sementara ditutup.\nSilakan kirim data format Dharmajaya atau pilih *2. DHARMAJAYA* dari menu.'
+                                text: '⚠️ PasarJaya sementara ditutup.\nSilakan kirim data format Dharmajaya atau Food Station, atau pilih lokasi dari menu.'
                             });
                             userFlowByPhone.set(senderPhone, 'SELECT_LOCATION');
                             continue;
@@ -6872,6 +6886,18 @@ export async function connectToWhatsApp() {
                         finalContext = detectedFormat;
                     }
 
+                    if (finalContext === 'FOOD_STATION') {
+                        const fsCloseStatus = await isSpecificLocationClosed('FOOD_STATION', 'FOD STATION');
+                        if (fsCloseStatus.closed) {
+                            const reasonSuffix = fsCloseStatus.reason ? `\nAlasan: ${fsCloseStatus.reason}` : '';
+                            userFlowByPhone.set(senderPhone, 'SELECT_LOCATION');
+                            await sock.sendMessage(remoteJid, {
+                                text: `⚠️ *Food Station* sedang ditutup sementara.${reasonSuffix}\nSilakan pilih lokasi lain.`
+                            });
+                            continue;
+                        }
+                    }
+
                     const minLines = finalContext === 'PASARJAYA' ? 5 : 4;
 
                     if (lines.length >= minLines) {
@@ -6881,10 +6907,10 @@ export async function connectToWhatsApp() {
 
                         // VALIDASI BARU: Jika PASARJAYA tapi belum pilih lokasi spesifik, minta pilih dulu
                         if (finalContext === 'PASARJAYA' && !storedSpecificLocation) {
-                            if (PASARJAYA_DISABLED) {
+                            if (await isProviderBlocked('PASARJAYA')) {
                                 userLocationChoice.set(senderPhone, 'DHARMAJAYA');
                                 await sock.sendMessage(remoteJid, {
-                                    text: '⚠️ PasarJaya sementara ditutup.\nSilakan kirim ulang dengan format *DHARMAJAYA* (4 baris).'
+                                    text: '⚠️ PasarJaya sementara ditutup.\nSilakan kirim ulang dengan format *DHARMAJAYA* (4 baris) atau *FOOD STATION* (4 baris).'
                                 });
                                 continue;
                             }
@@ -6920,6 +6946,32 @@ export async function connectToWhatsApp() {
                                 const statusMenuText = await buildDharmajayaMenuWithStatus();
                                 await sock.sendMessage(remoteJid, {
                                     text: `⚠️ Lokasi *${subLocation}* sedang penuh dan ditutup sementara.${reasonSuffix}\nSilakan pilih lokasi lain yang tersedia.\n\n${statusMenuText}`
+                                });
+                                continue;
+                            }
+                        }
+
+                        if (storedSpecificLocation && storedSpecificLocation.startsWith('PASARJAYA - ')) {
+                            const subLocation = storedSpecificLocation.replace('PASARJAYA - ', '').trim();
+                            const closeStatus = await isSpecificLocationClosed('PASARJAYA', subLocation);
+                            if (closeStatus.closed) {
+                                pendingRegistrationData.set(senderPhone, messageText);
+                                userFlowByPhone.set(senderPhone, 'SELECT_PASARJAYA_SUB');
+                                const reasonSuffix = closeStatus.reason ? `\nAlasan: ${closeStatus.reason}` : '';
+                                await sock.sendMessage(remoteJid, {
+                                    text: `⚠️ Lokasi *${subLocation}* sedang ditutup sementara.${reasonSuffix}\nSilakan pilih lokasi lain.`
+                                });
+                                continue;
+                            }
+                        }
+
+                        if (storedSpecificLocation && (storedSpecificLocation === 'FOD STATION' || storedSpecificLocation.startsWith('FOOD_STATION'))) {
+                            const closeStatus = await isSpecificLocationClosed('FOOD_STATION', 'FOD STATION');
+                            if (closeStatus.closed) {
+                                const reasonSuffix = closeStatus.reason ? `\nAlasan: ${closeStatus.reason}` : '';
+                                userFlowByPhone.set(senderPhone, 'SELECT_LOCATION');
+                                await sock.sendMessage(remoteJid, {
+                                    text: `⚠️ *Food Station* sedang ditutup sementara.${reasonSuffix}\nSilakan pilih lokasi lain.`
                                 });
                                 continue;
                             }
