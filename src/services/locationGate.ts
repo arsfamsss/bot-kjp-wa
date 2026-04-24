@@ -8,7 +8,7 @@ import {
 import { DHARMAJAYA_MAPPING, PASARJAYA_MAPPING } from '../config/messages';
 import { getProcessingDayKey } from '../time';
 
-export type ProviderType = 'PASARJAYA' | 'DHARMAJAYA';
+export type ProviderType = 'PASARJAYA' | 'DHARMAJAYA' | 'FOOD_STATION';
 
 function buildLocationKey(provider: ProviderType, subLocation: string): string {
     return `${provider} - ${(subLocation || '').trim()}`;
@@ -18,10 +18,17 @@ export function getProviderSubLocations(provider: ProviderType): string[] {
     if (provider === 'DHARMAJAYA') {
         return Object.values(DHARMAJAYA_MAPPING);
     }
+    if (provider === 'FOOD_STATION') {
+        return ['FOOD STATION'];
+    }
     return Object.values(PASARJAYA_MAPPING);
 }
 
 export async function isSpecificLocationClosed(provider: ProviderType, subLocation: string): Promise<{ closed: boolean; reason?: string | null }> {
+    if (provider === 'FOOD_STATION') {
+        return { closed: false, reason: null };
+    }
+
     const locationKey = buildLocationKey(provider, subLocation);
     const blockedResult = await isLocationBlocked(locationKey);
     if (blockedResult.blocked) {

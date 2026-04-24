@@ -31,7 +31,9 @@ export const FORMAT_DAFTAR_MESSAGE = [
     '2️⃣ *DHARMAJAYA*',
     '(Kosambi,Kapuk Jagal,Pulogadung,Cakung)',
     '',
-    'Silakan ketik *1* atau *2* untuk pilih lokasi.',
+    '3️⃣ *FOOD STATION*',
+    '',
+    'Silakan ketik *1*, *2*, atau *3* untuk pilih lokasi.',
     'Ketik 0 kalau batal 😊'
 ].join('\n');
 
@@ -170,6 +172,39 @@ export const FORMAT_DAFTAR_DHARMAJAYA = [
     'Langsung kirim ya Bu~ 🚀',
 ].join('\n');
 
+// --- FORMAT DAFTAR FOOD STATION (4 baris, sama seperti Dharmajaya) ---
+export const FORMAT_DAFTAR_FOOD_STATION = [
+    '✅ *LOKASI TERPILIH: FOOD STATION*',
+    '',
+    '📝 Kirim data dalam *4 BARIS* (wajib urut):',
+    '',
+    '1. Nama',
+    '2. Jenis Kartu + Nomor Kartu',
+    '3. KTP + Nomor KTP (NIK)',
+    '4. KK + Nomor KK',
+    '',
+    '━━━━━━━━━━━━━━━━━━━━',
+    '📌 *CONTOH 1 (KJP):*',
+    '',
+    'Siti Aminah',
+    'KJP 5049488500001234',
+    'KTP 3171234567890123',
+    'KK 3171098765432109',
+    '',
+    '📌 *CONTOH 2 (LANSIA):*',
+    '',
+    'Siti Aminah',
+    'LANSIA 5049441234567890',
+    'KTP 3171234567890123',
+    'KK 3171098765432109',
+    '━━━━━━━━━━━━━━━━━━━━',
+    '',
+    '⚠️ Tulis ke bawah, bukan samping!',
+    'Kalau lebih dari 1 orang, kasih jarak 1 enter',
+    '',
+    'Langsung kirim ya Bu~ 🚀',
+].join('\n');
+
 // --- FAQ / BANTUAN ---
 export const FAQ_MESSAGE = [
     '❓ *BANTUAN SINGKAT*',
@@ -184,7 +219,7 @@ export const FAQ_MESSAGE = [
     '📌 *ALUR CEPAT*',
     '━━━━━━━━━━━━━━━━━━━━',
     '1) Ketik *1* untuk DAFTAR',
-    '2) Pilih lokasi yang tersedia: *PASARJAYA* atau *DHARMAJAYA*',
+    '2) Pilih lokasi yang tersedia: *PASARJAYA*, *DHARMAJAYA*, atau *FOOD STATION*',
     '3) Kirim data sesuai format',
     '4) Ketik *CEK* untuk lihat data masuk',
     '',
@@ -199,6 +234,7 @@ export const FAQ_MESSAGE = [
     '━━━━━━━━━━━━━━━━━━━━',
     '• PASARJAYA: *5 baris* (Nama, Nomor Kartu, Nomor KTP, Nomor KK, Tanggal Lahir)',
     '• DHARMAJAYA: *4 baris* (Nama, Jenis Kartu+Nomor, KTP+Nomor, KK+Nomor KK)',
+    '• FOOD STATION: *4 baris* (Nama, Jenis Kartu+Nomor, KTP+Nomor, KK+Nomor KK)',
     '• Boleh kirim banyak orang, pisahkan 1 baris kosong',
     '',
     '━━━━━━━━━━━━━━━━━━━━',
