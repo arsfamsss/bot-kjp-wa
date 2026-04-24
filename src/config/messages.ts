@@ -1,6 +1,8 @@
 // src/config/messages.ts
 // File ini berisi semua template pesan statis untuk bot WA
 
+type ProviderType = 'PASARJAYA' | 'DHARMAJAYA' | 'FOOD_STATION';
+
 // --- MENU UTAMA USER ---
 export const MENU_MESSAGE = [
     'Hai Ibu/Bapak! 👋',
@@ -78,6 +80,37 @@ export const DHARMAJAYA_MAPPING: Record<string, string> = {
     '3': 'Pulogadung',
     '4': 'Cakung'
 };
+
+export const FOODSTATION_MAPPING: Record<string, string> = {
+    '1': 'FOD STATION'
+};
+
+export const PROVIDER_LIST: Array<{ key: ProviderType; name: string; mapping: Record<string, string> }> = [
+    { key: 'DHARMAJAYA', name: 'Dharmajaya', mapping: DHARMAJAYA_MAPPING },
+    { key: 'PASARJAYA', name: 'Pasarjaya', mapping: PASARJAYA_MAPPING },
+    { key: 'FOOD_STATION', name: 'Food Station', mapping: FOODSTATION_MAPPING },
+];
+
+export const LOCATION_MGMT_MENU_TEXT = ({
+    dharmajayaStatus,
+    pasarjayaStatus,
+    foodStationStatus,
+}: {
+    dharmajayaStatus: string;
+    pasarjayaStatus: string;
+    foodStationStatus: string;
+}): string => [
+    '*📍 Kelola Buka/Tutup Lokasi*',
+    '',
+    'Pilih provider:',
+    `1. Dharmajaya [${dharmajayaStatus}]`,
+    `2. Pasarjaya [${pasarjayaStatus}]`,
+    `3. Food Station [${foodStationStatus}]`,
+    '',
+    '0. Kembali ke menu admin',
+].join('\n');
+
+export const LOCATION_CLOSED_REJECT_TEXT = 'Maaf, lokasi {location} sedang *ditutup*. Silakan coba lagi nanti atau pilih lokasi lain.';
 
 export const UNDERAGE_CONFIRMATION_MESSAGE = [
     '⚠️ *PERLU KONFIRMASI*',
@@ -309,6 +342,7 @@ export const ADMIN_MENU_MESSAGE = [
     '2️⃣0️⃣ Batas per Lokasi (per user/hari)',
     '2️⃣1️⃣ Kuota Global per Lokasi (semua user/hari)',
     '2️⃣2️⃣ Kelola Whitelist No HP',
+    '2️⃣3️⃣ Kelola Buka/Tutup Lokasi',
     '',
     '💡 _Ketik *#TEMPLATE* untuk edit pesan tutup_',
     '💡 _Ketik *#TEMPLATE RESET* untuk kembali ke default_',
