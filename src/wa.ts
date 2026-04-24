@@ -2781,25 +2781,26 @@ export async function connectToWhatsApp() {
                                 isValidFormat = true;
                             }
                         }
-                    } else if (existingLocation === 'DHARMAJAYA') {
+                    } else if (existingLocation === 'DHARMAJAYA' || existingLocation === 'FOOD_STATION') {
                         // WAJIB 4 BARIS per orang
+                        const locationLabel = existingLocation === 'FOOD_STATION' ? 'FOOD STATION' : 'DHARMAJAYA';
                         if (dataLines.length % 4 !== 0) {
                             isValidFormat = false;
                             if (dataLines.length % 5 === 0) {
                                 rejectionReason = [
                                     '❌ *FORMAT TIDAK COCOK*',
                                     '',
-                                    'Anda sedang di mode: *DHARMAJAYA (Wajib 4 Baris)*',
+                                    `Anda sedang di mode: *${locationLabel} (Wajib 4 Baris)*`,
                                     'Tapi data yang dikirim formatnya *5 Baris* (ada Tanggal Lahir?).',
                                     '',
                                     '💡 *SOLUSI:*',
                                     '1. Jika ingin ganti lokasi, ketik *0* (Batal), lalu pilih lokasi ulang.',
-                                    '2. Jika tetap di *Dharmajaya*, hapus baris tanggal lahirnya.'
+                                    `2. Jika tetap di *${locationLabel}*, hapus baris tanggal lahirnya.`
                                 ].join('\n');
                             } else {
                                 rejectionReason = [
                                     '❌ *JUMLAH BARIS SALAH*',
-                                    'Untuk *Dharmajaya*, format harus 4 baris per orang:',
+                                    `Untuk *${locationLabel}*, format harus 4 baris per orang:`,
                                     '1. Nama',
                                     '2. Kartu',
                                     '3. KTP',
@@ -2849,7 +2850,7 @@ export async function connectToWhatsApp() {
                                 senderPhone,
                                 logJson,
                                 originalText: messageText,
-                                locationContext: existingLocation === 'PASARJAYA' ? 'PASARJAYA' : 'DHARMAJAYA',
+                                locationContext: existingLocation,
                                 processingDayKey,
                             });
                             if (hasPendingUnknownRegion) {
@@ -2862,7 +2863,7 @@ export async function connectToWhatsApp() {
                                 senderPhone,
                                 logJson,
                                 originalText: messageText,
-                                locationContext: existingLocation === 'PASARJAYA' ? 'PASARJAYA' : 'DHARMAJAYA',
+                                locationContext: existingLocation,
                                 processingDayKey,
                             });
                             if (hasPendingUnderage) {
