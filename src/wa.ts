@@ -355,7 +355,7 @@ async function buildSelectLocationFirstPromptText(): Promise<string> {
     };
 
     const optionParts = [...providerMap.entries()].map(([num, key]) => `*${num}. ${providerLabels[key] || key}*`);
-    const locationOptionText = `Saat ini yang tersedia: ${optionParts.join(', ')}`;
+    const locationOptionText = `Saat ini yang tersedia:\n${optionParts.join('\n')}`;
 
     const dharmajayaNum = [...providerMap.entries()].find(([, v]) => v === 'DHARMAJAYA')?.[0];
 
@@ -4201,7 +4201,7 @@ export async function connectToWhatsApp() {
 
                             clearBotSettingsCache();
                             closeWindowDraftByPhone.delete(senderPhone);
-                            adminFlowByPhone.set(senderPhone, 'MENU');
+                            adminFlowByPhone.set(senderPhone, 'SETTING_OPERATION_MENU');
 
                             replyText = ok
                                 ? [
@@ -4210,6 +4210,8 @@ export async function connectToWhatsApp() {
                                     'Status sekarang: *24 jam buka* (tanpa jam tutup).',
                                     'Untuk mengaktifkan lagi jadwal normal, pilih:',
                                     '3️⃣ *Kembali ke Default (00.00 - 06.05)*',
+                                    '',
+                                    '_Ketik 0 untuk kembali ke menu admin._',
                                 ].join('\n')
                                 : '❌ Gagal membuka bot. Coba lagi.';
                         } else if (normalized === '2') {
@@ -4236,7 +4238,7 @@ export async function connectToWhatsApp() {
 
                             clearBotSettingsCache();
                             closeWindowDraftByPhone.delete(senderPhone);
-                            adminFlowByPhone.set(senderPhone, 'MENU');
+                            adminFlowByPhone.set(senderPhone, 'SETTING_OPERATION_MENU');
 
                             replyText = ok
                                 ? [
@@ -4245,6 +4247,8 @@ export async function connectToWhatsApp() {
                                     'Jam operasional sekarang:',
                                     '🟢 BUKA: *06.05 - 23.59 WIB*',
                                     '🔴 TUTUP: *00.00 - 06.05 WIB*',
+                                    '',
+                                    '_Ketik 0 untuk kembali ke menu admin._',
                                 ].join('\n')
                                 : '❌ Gagal mengaktifkan jadwal default. Coba lagi.';
                         } else {
