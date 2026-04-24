@@ -121,7 +121,7 @@ export async function listAllProviderStatuses(): Promise<Array<{ provider: strin
     const providers: Array<{ key: ProviderType; name: string }> = [
         { key: 'DHARMAJAYA', name: 'Dharmajaya' },
         { key: 'PASARJAYA', name: 'Pasarjaya' },
-        { key: 'FOOD_STATION', name: 'Food Station' },
+        { key: 'FOOD_STATION', name: 'Foodstation' },
     ];
 
     const results = await Promise.all(

@@ -143,7 +143,7 @@ export const FOODSTATION_MAPPING: Record<string, string> = {
 export const PROVIDER_LIST: Array<{ key: ProviderType; name: string; mapping: Record<string, string> }> = [
     { key: 'DHARMAJAYA', name: 'Dharmajaya', mapping: DHARMAJAYA_MAPPING },
     { key: 'PASARJAYA', name: 'Pasarjaya', mapping: PASARJAYA_MAPPING },
-    { key: 'FOOD_STATION', name: 'Food Station', mapping: FOODSTATION_MAPPING },
+    { key: 'FOOD_STATION', name: 'Foodstation', mapping: FOODSTATION_MAPPING },
 ];
 
 export const LOCATION_MGMT_MENU_TEXT = ({
@@ -160,7 +160,7 @@ export const LOCATION_MGMT_MENU_TEXT = ({
     'Pilih provider:',
     `1. Dharmajaya [${dharmajayaStatus}]`,
     `2. Pasarjaya [${pasarjayaStatus}]`,
-    `3. Food Station [${foodStationStatus}]`,
+    `3. Foodstation [${foodStationStatus}]`,
     '',
     '0. Kembali ke menu admin',
 ].join('\n');

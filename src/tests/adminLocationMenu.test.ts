@@ -27,7 +27,7 @@ const mockOpenSpecificLocation = mock(() => Promise.resolve({ success: true, mes
 const mockListAllProviderStatuses = mock(() => Promise.resolve([
     { provider: 'DHARMAJAYA', name: 'Dharmajaya', closed: false },
     { provider: 'PASARJAYA', name: 'Pasarjaya', closed: false },
-    { provider: 'FOOD_STATION', name: 'Food Station', closed: false },
+    { provider: 'FOOD_STATION', name: 'Foodstation', closed: false },
 ]));
 
 mock.module('../services/locationGate', () => ({
@@ -43,13 +43,13 @@ mock.module('../config/messages', () => ({
     PROVIDER_LIST: [
         { key: 'DHARMAJAYA', name: 'Dharmajaya', mapping: { '1': 'Duri Kosambi', '2': 'Kapuk Jagal', '3': 'Pulogadung', '4': 'Cakung' } },
         { key: 'PASARJAYA', name: 'Pasarjaya', mapping: { '1': 'Jakgrosir Kedoya', '2': 'Gerai Rusun Pesakih', '3': 'Mini DC Kec. Cengkareng', '4': 'Jakmart Bambu Larangan' } },
-        { key: 'FOOD_STATION', name: 'Food Station', mapping: { '1': 'FOD STATION' } },
+        { key: 'FOOD_STATION', name: 'Foodstation', mapping: { '1': 'FOD STATION' } },
     ],
     PASARJAYA_MAPPING: { '1': 'Jakgrosir Kedoya', '2': 'Gerai Rusun Pesakih', '3': 'Mini DC Kec. Cengkareng', '4': 'Jakmart Bambu Larangan' },
     DHARMAJAYA_MAPPING: { '1': 'Duri Kosambi', '2': 'Kapuk Jagal', '3': 'Pulogadung', '4': 'Cakung' },
     FOODSTATION_MAPPING: { '1': 'FOD STATION' },
     LOCATION_MGMT_MENU_TEXT: ({ dharmajayaStatus, pasarjayaStatus, foodStationStatus }: { dharmajayaStatus: string; pasarjayaStatus: string; foodStationStatus: string }) =>
-        [`*📍 Kelola Buka/Tutup Lokasi*`, '', `1. Dharmajaya [${dharmajayaStatus}]`, `2. Pasarjaya [${pasarjayaStatus}]`, `3. Food Station [${foodStationStatus}]`, '', '0. Kembali ke menu admin'].join('\n'),
+        [`*📍 Kelola Buka/Tutup Lokasi*`, '', `1. Dharmajaya [${dharmajayaStatus}]`, `2. Pasarjaya [${pasarjayaStatus}]`, `3. Foodstation [${foodStationStatus}]`, '', '0. Kembali ke menu admin'].join('\n'),
 }));
 
 const { handleLocationMgmt } = await import('../services/adminLocationMenu');
@@ -94,7 +94,7 @@ describe('handleLocationMgmt', () => {
         mockListAllProviderStatuses.mockImplementation(() => Promise.resolve([
             { provider: 'DHARMAJAYA', name: 'Dharmajaya', closed: false },
             { provider: 'PASARJAYA', name: 'Pasarjaya', closed: false },
-            { provider: 'FOOD_STATION', name: 'Food Station', closed: false },
+            { provider: 'FOOD_STATION', name: 'Foodstation', closed: false },
         ]));
     });
 
@@ -113,7 +113,7 @@ describe('handleLocationMgmt', () => {
     it('selects Food Station from menu and goes to provider action', async () => {
         const res = await handleLocationMgmt('LOCATION_MGMT_SELECT_PROVIDER', '3', getPhone('menu-fs'));
         expect(res.nextState).toBe('LOCATION_MGMT_PROVIDER_ACTION');
-        expect(res.replyText).toContain('Provider: Food Station');
+        expect(res.replyText).toContain('Provider: Foodstation');
     });
 
     it('exits to admin root on input 0 at menu', async () => {

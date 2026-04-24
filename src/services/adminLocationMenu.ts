@@ -37,7 +37,7 @@ const adminScheduleAction = new Map<string, 'open' | 'close'>();
 const LOCAL_PROVIDER_LIST: Array<{ key: ProviderType; name: string; mapping: Record<string, string> }> = [
     { key: 'DHARMAJAYA', name: 'Dharmajaya', mapping: DHARMAJAYA_MAPPING },
     { key: 'PASARJAYA', name: 'Pasarjaya', mapping: PASARJAYA_MAPPING },
-    { key: 'FOOD_STATION', name: 'Food Station', mapping: FOODSTATION_MAPPING },
+    { key: 'FOOD_STATION', name: 'Foodstation', mapping: FOODSTATION_MAPPING },
 ];
 
 function getProviderList() {

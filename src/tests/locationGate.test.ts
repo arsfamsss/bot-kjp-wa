@@ -252,7 +252,7 @@ describe('locationGate - status/menu helpers', () => {
         expect(rows).toEqual([
             { provider: 'DHARMAJAYA', name: 'Dharmajaya', closed: true },
             { provider: 'PASARJAYA', name: 'Pasarjaya', closed: false },
-            { provider: 'FOOD_STATION', name: 'Food Station', closed: true },
+            { provider: 'FOOD_STATION', name: 'Foodstation', closed: true },
         ]);
     });
 });

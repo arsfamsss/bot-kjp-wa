@@ -373,7 +373,7 @@ async function loadIntegrationModules(caseName: string) {
             },
             {
                 key: 'FOOD_STATION',
-                name: 'Food Station',
+                name: 'Foodstation',
                 mapping: {
                     '1': 'FOD STATION',
                 },
@@ -407,7 +407,7 @@ async function loadIntegrationModules(caseName: string) {
             '',
             `1. Dharmajaya [${dharmajayaStatus}]`,
             `2. Pasarjaya [${pasarjayaStatus}]`,
-            `3. Food Station [${foodStationStatus}]`,
+            `3. Foodstation [${foodStationStatus}]`,
             '',
             '0. Kembali ke menu admin',
         ].join('\n'),

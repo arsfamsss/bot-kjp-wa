@@ -351,7 +351,7 @@ async function buildSelectLocationFirstPromptText(): Promise<string> {
     const providerLabels: Record<string, string> = {
         'PASARJAYA': 'Pasarjaya',
         'DHARMAJAYA': 'Dharmajaya',
-        'FOOD_STATION': 'Food Station',
+        'FOOD_STATION': 'Foodstation',
     };
 
     const optionParts = [...providerMap.entries()].map(([num, key]) => `*${num}. ${providerLabels[key] || key}*`);
@@ -387,17 +387,8 @@ async function buildSelectLocationFirstPromptText(): Promise<string> {
         locationOptionText,
     ];
 
-    if (dharmajayaNum && availableSection) {
-        lines.push('');
-        lines.push('*Sub-lokasi DHARMAJAYA yang masih tersedia:*');
-        lines.push(availableSection);
-    }
-
     lines.push('');
-    lines.push('Balas bertahap:');
-    lines.push(firstStepText);
-    lines.push('2) Lalu ketik angka sub-lokasi sesuai menu yang muncul');
-    lines.push('   _(Food Station tidak perlu sub-lokasi)_');
+    lines.push(`Ketik ${nums} untuk pilih lokasi.`);
     lines.push('');
     lines.push('_Ketik 0 untuk batal._');
 
@@ -1965,7 +1956,7 @@ export async function connectToWhatsApp() {
                                 displayLocation = displayLocation.split('-')[1].trim();
                             }
                             if (!displayLocation) {
-                                displayLocation = isPasarjaya ? 'Pasarjaya' : isFoodStation ? 'Food Station' : 'Duri Kosambi';
+                                displayLocation = isPasarjaya ? 'Pasarjaya' : isFoodStation ? 'Foodstation' : 'Duri Kosambi';
                             }
 
                             editSessionMap.set(senderPhone, session); // update session
@@ -2049,7 +2040,7 @@ export async function connectToWhatsApp() {
                             if (displayLocation.includes('-')) {
                                 displayLocation = displayLocation.split('-')[1].trim();
                             }
-                            if (!displayLocation) displayLocation = 'Food Station';
+                            if (!displayLocation) displayLocation = 'Foodstation';
 
                             const fields = [
                                 '1️⃣ Nama',
@@ -2060,7 +2051,7 @@ export async function connectToWhatsApp() {
                                 '6️⃣ BATAL'
                             ];
                             replyText = [
-                                '⚠️ Lokasi Food Station tidak bisa diubah (tetap FOOD STATION).',
+                                '⚠️ Lokasi Foodstation tidak bisa diubah (tetap FOOD STATION).',
                                 '',
                                 `📝 *EDIT DATA KE-${session.selectedIndex}*`,
                                 `👤 Nama: ${extractChildName(record?.nama || '')}`,
@@ -3161,7 +3152,7 @@ export async function connectToWhatsApp() {
                                     pasarjayaNum
                                         ? `• Jika ingin ke Pasarjaya, ketik *${pasarjayaNum}*.`
                                         : '• Pasarjaya sedang tutup.',
-                                    '• Jika tetap Food Station, mohon hapus Tanggal Lahir dan kirim ulang.',
+                                    '• Jika tetap Foodstation, mohon hapus Tanggal Lahir dan kirim ulang.',
                                     '',
                                     '_Ketik 0 untuk batal._'
                                 ].join('\n');
@@ -3174,7 +3165,7 @@ export async function connectToWhatsApp() {
                             console.log(`[DEBUG] SET Specific Location for ${senderPhone}: FOOD STATION`);
 
                             if (pendingData) {
-                                await sock.sendMessage(remoteJid, { text: '🔄 Memproses data untuk Food Station...' });
+                                await sock.sendMessage(remoteJid, { text: '🔄 Memproses data untuk Foodstation...' });
 
                                 const logJson = await processRawMessageToLogJson({
                                     text: pendingData,
@@ -3243,7 +3234,7 @@ export async function connectToWhatsApp() {
                                     userFlowByPhone.set(senderPhone, 'NONE');
                                     pendingRegistrationData.delete(senderPhone);
                                 } else {
-                                    replyText = '❌ *Data Food Station Gagal Proses*\nPastikan format 4 baris (Nama, Kartu, KTP, KK).';
+                                    replyText = '❌ *Data Foodstation Gagal Proses*\nPastikan format 4 baris (Nama, Kartu, KTP, KK).';
                                     userFlowByPhone.set(senderPhone, 'NONE');
                                     pendingRegistrationData.delete(senderPhone);
                                 }
@@ -6120,7 +6111,7 @@ export async function connectToWhatsApp() {
                                     { keyword: 'CAKUNG', filename: 'kjp_cakung', label: 'Cakung', parentRegion: 'DHARMAJAYA' },
                                     { keyword: 'PULOGADUNG', filename: 'kjp_pulogadung', label: 'Pulogadung', parentRegion: 'DHARMAJAYA' },
                                     { keyword: 'PASARJAYA', filename: 'kjp_pasarjaya', label: 'Pasarjaya', parentRegion: 'PASARJAYA' },
-                                    { keyword: 'FOOD STATION', filename: 'kjp_foodstation', label: 'Food Station', parentRegion: 'FOOD_STATION' },
+                                    { keyword: 'FOOD STATION', filename: 'kjp_foodstation', label: 'Foodstation', parentRegion: 'FOOD_STATION' },
                                 ];
 
                                 for (const region of regionExports) {
@@ -6201,7 +6192,7 @@ export async function connectToWhatsApp() {
                                     { keyword: 'CAKUNG', filename: 'kjp_cakung', label: 'Cakung', parentRegion: 'DHARMAJAYA' },
                                     { keyword: 'PULOGADUNG', filename: 'kjp_pulogadung', label: 'Pulogadung', parentRegion: 'DHARMAJAYA' },
                                     { keyword: 'PASARJAYA', filename: 'kjp_pasarjaya', label: 'Pasarjaya', parentRegion: 'PASARJAYA' },
-                                    { keyword: 'FOOD STATION', filename: 'kjp_foodstation', label: 'Food Station', parentRegion: 'FOOD_STATION' },
+                                    { keyword: 'FOOD STATION', filename: 'kjp_foodstation', label: 'Foodstation', parentRegion: 'FOOD_STATION' },
                                 ];
 
                                 for (const region of regionExports) {
@@ -6305,7 +6296,7 @@ export async function connectToWhatsApp() {
                                         { keyword: 'CAKUNG', filename: 'kjp_cakung', label: 'Cakung', parentRegion: 'DHARMAJAYA' },
                                         { keyword: 'PULOGADUNG', filename: 'kjp_pulogadung', label: 'Pulogadung', parentRegion: 'DHARMAJAYA' },
                                         { keyword: 'PASARJAYA', filename: 'kjp_pasarjaya', label: 'Pasarjaya', parentRegion: 'PASARJAYA' },
-                                        { keyword: 'FOOD STATION', filename: 'kjp_foodstation', label: 'Food Station', parentRegion: 'FOOD_STATION' },
+                                        { keyword: 'FOOD STATION', filename: 'kjp_foodstation', label: 'Foodstation', parentRegion: 'FOOD_STATION' },
                                     ];
 
                                     for (const region of regionExports) {
@@ -6920,7 +6911,7 @@ export async function connectToWhatsApp() {
                             const reasonSuffix = fsCloseStatus.reason ? `\nAlasan: ${fsCloseStatus.reason}` : '';
                             userFlowByPhone.set(senderPhone, 'SELECT_LOCATION');
                             await sock.sendMessage(remoteJid, {
-                                text: `⚠️ *Food Station* sedang ditutup sementara.${reasonSuffix}\nSilakan pilih lokasi lain.`
+                                text: `⚠️ *Foodstation* sedang ditutup sementara.${reasonSuffix}\nSilakan pilih lokasi lain.`
                             });
                             continue;
                         }
@@ -7000,7 +6991,7 @@ export async function connectToWhatsApp() {
                                 const reasonSuffix = closeStatus.reason ? `\nAlasan: ${closeStatus.reason}` : '';
                                 userFlowByPhone.set(senderPhone, 'SELECT_LOCATION');
                                 await sock.sendMessage(remoteJid, {
-                                    text: `⚠️ *Food Station* sedang ditutup sementara.${reasonSuffix}\nSilakan pilih lokasi lain.`
+                                    text: `⚠️ *Foodstation* sedang ditutup sementara.${reasonSuffix}\nSilakan pilih lokasi lain.`
                                 });
                                 continue;
                             }
