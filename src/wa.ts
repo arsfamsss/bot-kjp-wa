@@ -6535,7 +6535,8 @@ export async function connectToWhatsApp() {
                         userFlowByPhone.set(senderPhone, 'EDIT_PICK_RECORD');
 
                         const listRows = items.map((item, i) => {
-                            return `${i + 1}. ${extractChildName(item.nama)}`;
+                            const typeLabel = (item.lokasi && item.lokasi.startsWith('PASARJAYA')) ? '[PSJ]' : (item.lokasi && item.lokasi.startsWith('FOOD STATION')) ? '[FS]' : '[DHJ]';
+                            return `${i + 1}. ${extractChildName(item.nama)} ${typeLabel}`;
                         });
 
                         replyText = [
