@@ -2917,7 +2917,7 @@ export async function connectToWhatsApp() {
                         statusCheckSelectionByPhone.delete(senderPhone);
                         statusCheckInProgressByPhone.delete(senderPhone);
                     }
-                    clearTransientSessionContext(senderPhone, { clearFlows: true, clearPendingConfirmations: true });
+                    clearTransientSessionContext(senderPhone, { clearFlows: true, clearPendingConfirmations: true, clearLocationChoice: true });
                     // Lanjut ke handler menu utama di bawah
                 }
 
@@ -6685,7 +6685,7 @@ export async function connectToWhatsApp() {
                         userFlowByPhone.set(senderPhone, 'EDIT_PICK_RECORD');
 
                         const listRows = items.map((item, i) => {
-                            const typeLabel = (item.lokasi && item.lokasi.startsWith('PASARJAYA')) ? '[PSJ]' : '[DHJ]';
+                            const typeLabel = (item.lokasi && item.lokasi.startsWith('PASARJAYA')) ? '[PSJ]' : (item.lokasi && item.lokasi.startsWith('FOOD STATION')) ? '[FS]' : '[DHJ]';
                             return `${i + 1}. ${extractChildName(item.nama)} ${typeLabel}`;
                         });
 
@@ -7038,6 +7038,8 @@ export async function connectToWhatsApp() {
                 if (!replyText) {
                     if (isGreetingOrMenu(normalized)) {
                         pendingDelete.delete(senderPhone);
+                        userLocationChoice.delete(senderPhone);
+                        userSpecificLocationChoice.delete(senderPhone);
 
                         await sendMainMenu(sock, remoteJid, isAdmin);
                     } else {
