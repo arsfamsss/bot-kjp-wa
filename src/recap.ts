@@ -367,7 +367,8 @@ export async function getGlobalRecap(
             );
             const parentCount = subLocations.reduce((acc, item) => acc + item.count, 0);
 
-            target.push(`   • ${parent} : ${parentCount} data`);
+            const parentDisplay = parent === 'FOOD_STATION' ? 'FOOD STATION' : parent;
+            target.push(`   • ${parentDisplay} : ${parentCount} data`);
             for (const item of subLocations) {
                 target.push(`      - ${item.label} : ${item.count} data`);
             }
