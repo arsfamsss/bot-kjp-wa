@@ -184,7 +184,7 @@ export function buildReplyForTodayRecap(
             // Tentukan lokasi pengambilan
             let lokasiLabel = '📍 Duri Kosambi'; // Default lama
             if (item.lokasi) {
-                if (item.lokasi.startsWith('PASARJAYA') || item.lokasi.startsWith('DHARMAJAYA')) {
+                if (item.lokasi.startsWith('PASARJAYA') || item.lokasi.startsWith('DHARMAJAYA') || item.lokasi.startsWith('FOOD STATION')) {
                     lokasiLabel = `📍 ${item.lokasi}`;
                 }
             }
