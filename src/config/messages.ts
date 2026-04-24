@@ -32,6 +32,7 @@ export const FORMAT_DAFTAR_MESSAGE = [
     '(Kosambi,Kapuk Jagal,Pulogadung,Cakung)',
     '',
     '3️⃣ *FOOD STATION*',
+    '(Cipinang)',
     '',
     'Silakan ketik *1*, *2*, atau *3* untuk pilih lokasi.',
     'Ketik 0 kalau batal 😊'
