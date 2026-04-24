@@ -1430,11 +1430,19 @@ export async function checkBlockedLocationBatch(items: LogItem[]): Promise<LogIt
 
     if (locationKeys.length === 0) return items;
 
+    // Extract provider keys from location keys (e.g., "PASARJAYA - Jakgrosir" → "PASARJAYA")
+    const providerKeys = Array.from(
+        new Set(locationKeys.map((k) => k.includes(' - ') ? k.split(' - ')[0].trim() : k).filter((v) => v.length > 0))
+    );
+
+    // Query both exact location keys AND provider-level keys
+    const allKeysToCheck = Array.from(new Set([...locationKeys, ...providerKeys]));
+
     const { data, error } = await supabase
         .from('blocked_locations')
         .select('location_key, reason')
         .eq('is_active', true)
-        .in('location_key', locationKeys);
+        .in('location_key', allKeysToCheck);
 
     if (error) {
         if (!isMissingTableError(error, 'blocked_locations')) {
@@ -1456,7 +1464,13 @@ export async function checkBlockedLocationBatch(items: LogItem[]): Promise<LogIt
         const locationKey = (item.parsed.lokasi || '').trim();
         if (!locationKey) return item;
 
-        const reason = blockedMap.get(locationKey);
+        let reason = blockedMap.get(locationKey);
+
+        if (reason === undefined && locationKey.includes(' - ')) {
+            const providerKey = locationKey.split(' - ')[0].trim();
+            reason = blockedMap.get(providerKey);
+        }
+
         if (reason === undefined) return item;
 
         const locationName = locationKey.includes(' - ') ? locationKey.split(' - ').slice(1).join(' - ') : locationKey;
@@ -1589,6 +1603,7 @@ export async function getBlockedLocationList(limit: number = 200): Promise<Block
 }
 
 export async function closeLocation(
+    provider: string,
     locationRaw: string,
     reason?: string
 ): Promise<{ success: boolean; message: string }> {
@@ -1599,6 +1614,7 @@ export async function closeLocation(
 
     const payload = {
         location_key: locationKey,
+        provider: provider.trim() || null,
         reason: (reason || '').trim() || null,
         is_active: true,
         updated_at: new Date().toISOString(),
@@ -1619,16 +1635,19 @@ export async function closeLocation(
     return { success: true, message: `Lokasi ${locationKey} ditandai penuh.` };
 }
 
-export async function openLocation(locationRaw: string): Promise<{ success: boolean; message: string }> {
-    const locationKey = normalizeLocationKey(locationRaw);
+export async function openLocation(_providerOrLocationRaw: string, locationRaw?: string): Promise<{ success: boolean; message: string }> {
+    const rawValue = locationRaw !== undefined ? locationRaw : _providerOrLocationRaw;
+    const locationKey = normalizeLocationKey(rawValue);
     if (!locationKey) {
         return { success: false, message: 'Nama lokasi wajib diisi.' };
     }
 
-    const { count, error } = await supabase
+    const { data, error } = await supabase
         .from('blocked_locations')
-        .delete({ count: 'exact' })
-        .eq('location_key', locationKey);
+        .update({ is_active: false, updated_at: new Date().toISOString() })
+        .eq('location_key', locationKey)
+        .eq('is_active', true)
+        .select('location_key');
 
     if (error) {
         if (isMissingTableError(error, 'blocked_locations')) {
@@ -1638,7 +1657,7 @@ export async function openLocation(locationRaw: string): Promise<{ success: bool
         return { success: false, message: `Gagal membuka lokasi (${(error as { message?: string }).message || 'unknown error'}).` };
     }
 
-    if ((count || 0) === 0) {
+    if (!data || data.length === 0) {
         return { success: false, message: `Lokasi ${locationKey} tidak ada di daftar penuh.` };
     }
 
@@ -1666,6 +1685,230 @@ export async function isLocationBlocked(locationRaw: string): Promise<{ blocked:
 
     if (!data) return { blocked: false };
     return { blocked: true, reason: (data as { reason?: string | null }).reason || null };
+}
+
+// --- Provider-level location blocking ---
+
+export async function closeLocationByProvider(provider: string, reason?: string): Promise<boolean> {
+    const providerKey = (provider || '').trim();
+    if (!providerKey) return false;
+
+    const payload = {
+        location_key: providerKey,
+        provider: providerKey,
+        reason: (reason || '').trim() || null,
+        is_active: true,
+        updated_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase
+        .from('blocked_locations')
+        .upsert(payload, { onConflict: 'location_key' });
+
+    if (error) {
+        if (isMissingTableError(error, 'blocked_locations')) {
+            console.error('[closeLocationByProvider] Table missing:', error.message);
+            return false;
+        }
+        console.error('[closeLocationByProvider] Error:', error.message);
+        return false;
+    }
+
+    return true;
+}
+
+export async function openLocationByProvider(provider: string): Promise<boolean> {
+    const providerKey = (provider || '').trim();
+    if (!providerKey) return false;
+
+    const { error } = await supabase
+        .from('blocked_locations')
+        .update({ is_active: false, updated_at: new Date().toISOString() })
+        .eq('location_key', providerKey)
+        .eq('is_active', true);
+
+    if (error) {
+        if (isMissingTableError(error, 'blocked_locations')) {
+            console.error('[openLocationByProvider] Table missing:', error.message);
+            return false;
+        }
+        console.error('[openLocationByProvider] Error:', error.message);
+        return false;
+    }
+
+    return true;
+}
+
+export async function isProviderBlocked(provider: string): Promise<boolean> {
+    const providerKey = (provider || '').trim();
+    if (!providerKey) return false;
+
+    const { data, error } = await supabase
+        .from('blocked_locations')
+        .select('location_key')
+        .eq('location_key', providerKey)
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle();
+
+    if (error) {
+        if (!isMissingTableError(error, 'blocked_locations')) {
+            console.error('[isProviderBlocked] Error:', error.message);
+        }
+        return false;
+    }
+
+    return !!data;
+}
+
+export async function listClosedByProvider(provider: string): Promise<Array<{ location_key: string; reason: string | null }>> {
+    const providerKey = (provider || '').trim();
+    if (!providerKey) return [];
+
+    const { data, error } = await supabase
+        .from('blocked_locations')
+        .select('location_key, reason')
+        .eq('provider', providerKey)
+        .eq('is_active', true)
+        .order('location_key', { ascending: true });
+
+    if (error) {
+        if (isMissingTableError(error, 'blocked_locations')) {
+            console.error('[listClosedByProvider] Table missing:', error.message);
+            return [];
+        }
+        console.error('[listClosedByProvider] Error:', error.message);
+        return [];
+    }
+
+    return (data || []).map((row) => ({
+        location_key: (row as { location_key: string }).location_key,
+        reason: (row as { reason: string | null }).reason ?? null,
+    }));
+}
+
+// --- Schedule CRUD for location_schedules ---
+
+export interface LocationScheduleInput {
+    provider: string;
+    sub_location?: string | null;
+    action: 'open' | 'close';
+    schedule_type: 'one_time' | 'recurring';
+    scheduled_time: string;
+    recurring_time?: string | null;
+    reason?: string | null;
+}
+
+export async function createSchedule(schedule: LocationScheduleInput): Promise<{ id: string } | null> {
+    const { data, error } = await supabase
+        .from('location_schedules')
+        .insert({
+            provider: schedule.provider,
+            sub_location: schedule.sub_location ?? null,
+            action: schedule.action,
+            schedule_type: schedule.schedule_type,
+            scheduled_time: schedule.scheduled_time,
+            recurring_time: schedule.recurring_time ?? null,
+            reason: schedule.reason ?? null,
+            is_active: true,
+        })
+        .select('id')
+        .single();
+
+    if (error) {
+        if (isMissingTableError(error, 'location_schedules')) {
+            console.error('[createSchedule] Table missing:', error.message);
+            return null;
+        }
+        console.error('[createSchedule] Error:', error.message);
+        return null;
+    }
+
+    return data ? { id: (data as { id: string }).id } : null;
+}
+
+export async function getActiveSchedules(): Promise<Array<Record<string, unknown>>> {
+    const { data, error } = await supabase
+        .from('location_schedules')
+        .select('*')
+        .eq('is_active', true)
+        .order('scheduled_time', { ascending: true });
+
+    if (error) {
+        if (isMissingTableError(error, 'location_schedules')) {
+            console.error('[getActiveSchedules] Table missing:', error.message);
+            return [];
+        }
+        console.error('[getActiveSchedules] Error:', error.message);
+        return [];
+    }
+
+    return (data || []) as Array<Record<string, unknown>>;
+}
+
+export async function markScheduleExecuted(id: string, deactivate: boolean = false): Promise<boolean> {
+    const updates: Record<string, unknown> = {
+        last_executed_at: new Date().toISOString(),
+    };
+    if (deactivate) {
+        updates.is_active = false;
+    }
+
+    const { error } = await supabase
+        .from('location_schedules')
+        .update(updates)
+        .eq('id', id);
+
+    if (error) {
+        if (isMissingTableError(error, 'location_schedules')) {
+            console.error('[markScheduleExecuted] Table missing:', error.message);
+            return false;
+        }
+        console.error('[markScheduleExecuted] Error:', error.message);
+        return false;
+    }
+
+    return true;
+}
+
+export async function deleteSchedule(id: string): Promise<boolean> {
+    const { error } = await supabase
+        .from('location_schedules')
+        .delete()
+        .eq('id', id);
+
+    if (error) {
+        if (isMissingTableError(error, 'location_schedules')) {
+            console.error('[deleteSchedule] Table missing:', error.message);
+            return false;
+        }
+        console.error('[deleteSchedule] Error:', error.message);
+        return false;
+    }
+
+    return true;
+}
+
+export async function listSchedulesByProvider(provider: string): Promise<Array<Record<string, unknown>>> {
+    const providerKey = (provider || '').trim();
+    if (!providerKey) return [];
+
+    const { data, error } = await supabase
+        .from('location_schedules')
+        .select('*')
+        .eq('provider', providerKey)
+        .order('scheduled_time', { ascending: true });
+
+    if (error) {
+        if (isMissingTableError(error, 'location_schedules')) {
+            console.error('[listSchedulesByProvider] Table missing:', error.message);
+            return [];
+        }
+        console.error('[listSchedulesByProvider] Error:', error.message);
+        return [];
+    }
+
+    return (data || []) as Array<Record<string, unknown>>;
 }
 
 export async function hasProcessedMessageById(params: {

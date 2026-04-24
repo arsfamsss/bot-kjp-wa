@@ -1,6 +1,7 @@
 import {
     getBlockedLocationList,
     isLocationBlocked,
+    isProviderBlocked,
     closeLocation,
     openLocation,
     isGlobalLocationQuotaFull,
@@ -25,27 +26,30 @@ export function getProviderSubLocations(provider: ProviderType): string[] {
 }
 
 export async function isSpecificLocationClosed(provider: ProviderType, subLocation: string): Promise<{ closed: boolean; reason?: string | null }> {
-    if (provider === 'FOOD_STATION') {
-        return { closed: false, reason: null };
-    }
-
     const locationKey = buildLocationKey(provider, subLocation);
-    const blockedResult = await isLocationBlocked(locationKey);
-    if (blockedResult.blocked) {
-        return { closed: true, reason: blockedResult.reason || null };
+
+    // 1. Check specific sub-location key
+    const subBlocked = await isLocationBlocked(locationKey);
+    if (subBlocked.blocked) {
+        return { closed: true, reason: subBlocked.reason || null };
     }
 
-    if (provider !== 'DHARMAJAYA') {
-        return { closed: false, reason: null };
+    // 2. Check provider-level key
+    const providerBlocked = await isProviderBlocked(provider);
+    if (providerBlocked) {
+        return { closed: true, reason: 'Provider ditutup' };
     }
 
-    const dayKey = getProcessingDayKey(new Date());
-    const quotaResult = await isGlobalLocationQuotaFull(dayKey, locationKey);
-    if (quotaResult.full) {
-        return {
-            closed: true,
-            reason: `Kuota global harian sudah penuh (${quotaResult.used}/${quotaResult.limit}).`,
-        };
+    // 3. Check quota (Dharmajaya only)
+    if (provider === 'DHARMAJAYA') {
+        const dayKey = getProcessingDayKey(new Date());
+        const quotaResult = await isGlobalLocationQuotaFull(dayKey, locationKey);
+        if (quotaResult.full) {
+            return {
+                closed: true,
+                reason: `Kuota global harian sudah penuh (${quotaResult.used}/${quotaResult.limit}).`,
+            };
+        }
     }
 
     return { closed: false, reason: null };
@@ -57,7 +61,7 @@ export async function closeSpecificLocation(
     reason?: string
 ): Promise<{ success: boolean; message: string }> {
     const locationKey = buildLocationKey(provider, subLocation);
-    return closeLocation(locationKey, reason);
+    return closeLocation(provider, locationKey, reason);
 }
 
 export async function openSpecificLocation(
@@ -65,7 +69,7 @@ export async function openSpecificLocation(
     subLocation: string
 ): Promise<{ success: boolean; message: string }> {
     const locationKey = buildLocationKey(provider, subLocation);
-    return openLocation(locationKey);
+    return openLocation(provider, locationKey);
 }
 
 export async function listClosedLocationsByProvider(provider: ProviderType): Promise<string[]> {
@@ -76,13 +80,14 @@ export async function listClosedLocationsByProvider(provider: ProviderType): Pro
         .filter((key) => key.startsWith(prefix));
 }
 
-export async function buildDharmajayaMenuWithStatus(): Promise<string> {
-    const closed = new Set(await listClosedLocationsByProvider('DHARMAJAYA'));
+export async function buildProviderMenuWithStatus(provider: string, mapping: Record<string, string>): Promise<string> {
+    const providerKey = provider as ProviderType;
+    const closed = new Set(await listClosedLocationsByProvider(providerKey));
     const dayKey = getProcessingDayKey(new Date());
 
     await Promise.all(
-        Object.values(DHARMAJAYA_MAPPING).map(async (name) => {
-            const locationKey = buildLocationKey('DHARMAJAYA', name);
+        Object.values(mapping).map(async (name) => {
+            const locationKey = buildLocationKey(providerKey, name);
             const quotaResult = await isGlobalLocationQuotaFull(dayKey, locationKey);
             if (quotaResult.full) {
                 closed.add(locationKey);
@@ -90,13 +95,13 @@ export async function buildDharmajayaMenuWithStatus(): Promise<string> {
         })
     );
 
-    const options = Object.entries(DHARMAJAYA_MAPPING).map(([idx, name]) => {
-        const marker = closed.has(buildLocationKey('DHARMAJAYA', name)) ? ' (TUTUP)' : '';
+    const options = Object.entries(mapping).map(([idx, name]) => {
+        const marker = closed.has(buildLocationKey(providerKey, name)) ? ' (TUTUP)' : '';
         return `*${idx}.* ${name}${marker}`;
     });
 
     return [
-        '📍 *LOKASI PENGAMBILAN*',
+        '\u{1F4CD} *LOKASI PENGAMBILAN*',
         '',
         ...options,
         '',
@@ -105,4 +110,26 @@ export async function buildDharmajayaMenuWithStatus(): Promise<string> {
         '',
         'Catatan: Lokasi bertanda *(TUTUP)* sedang ditutup sementara.',
     ].join('\n');
+}
+
+/** @deprecated Use buildProviderMenuWithStatus('DHARMAJAYA', DHARMAJAYA_MAPPING) instead */
+export async function buildDharmajayaMenuWithStatus(): Promise<string> {
+    return buildProviderMenuWithStatus('DHARMAJAYA', DHARMAJAYA_MAPPING);
+}
+
+export async function listAllProviderStatuses(): Promise<Array<{ provider: string; name: string; closed: boolean }>> {
+    const providers: Array<{ key: ProviderType; name: string }> = [
+        { key: 'DHARMAJAYA', name: 'Dharmajaya' },
+        { key: 'PASARJAYA', name: 'Pasarjaya' },
+        { key: 'FOOD_STATION', name: 'Food Station' },
+    ];
+
+    const results = await Promise.all(
+        providers.map(async ({ key, name }) => {
+            const closed = await isProviderBlocked(key);
+            return { provider: key, name, closed };
+        })
+    );
+
+    return results;
 }
