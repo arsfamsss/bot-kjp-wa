@@ -22,23 +22,78 @@ export const MENU_MESSAGE = [
 ].join('\n');
 
 // --- FORMAT DAFTAR (Dipanggil saat user ketik 1) ---
-export const FORMAT_DAFTAR_MESSAGE = [
-    '📍 *PILIH LOKASI*',
-    '',
-    'Mau ambil sembako dimana?',
-    '',
-    '1️⃣ *PASARJAYA*',
-    '(Jakgrosir Kedoya,Gerai Rusun Pesakih,Mini DC Kec. Cengkareng,Jakmart Bambu Larangan,dll)',
-    '',
-    '2️⃣ *DHARMAJAYA*',
-    '(Kosambi,Kapuk Jagal,Pulogadung,Cakung)',
-    '',
-    '3️⃣ *FOOD STATION*',
-    '(Cipinang)',
-    '',
-    'Silakan ketik *1*, *2*, atau *3* untuk pilih lokasi.',
-    'Ketik 0 kalau batal 😊'
-].join('\n');
+// Dynamic: hanya tampilkan provider yang BUKA
+export async function buildFormatDaftarMessage(): Promise<string> {
+    const { isProviderBlocked } = await import('../supabase');
+
+    const [pasarjayaBlocked, dharmajayaBlocked, foodStationBlocked] = await Promise.all([
+        isProviderBlocked('PASARJAYA'),
+        isProviderBlocked('DHARMAJAYA'),
+        isProviderBlocked('FOOD_STATION'),
+    ]);
+
+    const providers: { num: number; name: string; detail: string }[] = [];
+    let idx = 1;
+
+    if (!pasarjayaBlocked) {
+        providers.push({ num: idx++, name: 'PASARJAYA', detail: '(Jakgrosir Kedoya,Gerai Rusun Pesakih,Mini DC Kec. Cengkareng,Jakmart Bambu Larangan,dll)' });
+    }
+    if (!dharmajayaBlocked) {
+        providers.push({ num: idx++, name: 'DHARMAJAYA', detail: '(Kosambi,Kapuk Jagal,Pulogadung,Cakung)' });
+    }
+    if (!foodStationBlocked) {
+        providers.push({ num: idx++, name: 'FOOD STATION', detail: '(Cipinang)' });
+    }
+
+    if (providers.length === 0) {
+        return [
+            '⛔ *SEMUA LOKASI SEDANG TUTUP*',
+            '',
+            'Mohon maaf, saat ini semua lokasi pengambilan sedang ditutup.',
+            'Silakan coba lagi nanti. 🙏'
+        ].join('\n');
+    }
+
+    const numEmoji = (n: number) => n === 1 ? '1️⃣' : n === 2 ? '2️⃣' : '3️⃣';
+
+    const lines = [
+        '📍 *PILIH LOKASI*',
+        '',
+        'Mau ambil sembako dimana?',
+        '',
+    ];
+
+    for (const p of providers) {
+        lines.push(`${numEmoji(p.num)} *${p.name}*`);
+        lines.push(p.detail);
+        lines.push('');
+    }
+
+    const nums = providers.map(p => `*${p.num}*`).join(', ');
+    lines.push(`Silakan ketik ${nums} untuk pilih lokasi.`);
+    lines.push('Ketik 0 kalau batal 😊');
+
+    return lines.join('\n');
+}
+
+// Helper: mapping nomor dinamis → provider key
+export async function getActiveProviderMapping(): Promise<Map<string, string>> {
+    const { isProviderBlocked } = await import('../supabase');
+
+    const [pasarjayaBlocked, dharmajayaBlocked, foodStationBlocked] = await Promise.all([
+        isProviderBlocked('PASARJAYA'),
+        isProviderBlocked('DHARMAJAYA'),
+        isProviderBlocked('FOOD_STATION'),
+    ]);
+
+    const mapping = new Map<string, string>();
+    let idx = 1;
+    if (!pasarjayaBlocked) mapping.set(String(idx++), 'PASARJAYA');
+    if (!dharmajayaBlocked) mapping.set(String(idx++), 'DHARMAJAYA');
+    if (!foodStationBlocked) mapping.set(String(idx++), 'FOOD_STATION');
+
+    return mapping;
+}
 
 // --- MENU & MAPPING LOKASI PASARJAYA (NEW) ---
 export const MENU_PASARJAYA_LOCATIONS = [

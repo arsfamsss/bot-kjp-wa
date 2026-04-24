@@ -117,7 +117,8 @@ import { warmupKtpMasterCsvLookup } from './services/ktpMasterLookup';
 import { isAdminPhone, resolveSenderAccess } from './services/whitelistGate';
 import {
     MENU_MESSAGE,
-    FORMAT_DAFTAR_MESSAGE,
+    buildFormatDaftarMessage,
+    getActiveProviderMapping,
     FORMAT_DAFTAR_PASARJAYA,
     FORMAT_DAFTAR_DHARMAJAYA,
     FORMAT_DAFTAR_FOOD_STATION,
@@ -336,52 +337,71 @@ function buildMessageIdempotencyKey(senderPhone: string, processingDayKey: strin
 }
 
 async function buildSelectLocationFirstPromptText(): Promise<string> {
-    const options = await Promise.all(
-        Object.entries(DHARMAJAYA_MAPPING).map(async ([idx, name]) => {
-            const status = await isSpecificLocationClosed('DHARMAJAYA', name);
-            return {
-                idx,
-                name,
-                available: !status.closed,
-            };
-        })
-    );
+    const providerMap = await getActiveProviderMapping();
 
-    const availableSubLocations = options
-        .filter((item) => item.available)
-        .map((item) => `   ${item.idx}. ${item.name}`);
+    if (providerMap.size === 0) {
+        return [
+            '⛔ *SEMUA LOKASI SEDANG TUTUP*',
+            '',
+            'Mohon maaf, saat ini semua lokasi pengambilan sedang ditutup.',
+            'Silakan coba lagi nanti. 🙏'
+        ].join('\n');
+    }
 
-    const availableSection = availableSubLocations.length > 0
-        ? availableSubLocations.join('\n')
-        : '   - Saat ini semua sub-lokasi DHARMAJAYA sedang TUTUP.';
+    const providerLabels: Record<string, string> = {
+        'PASARJAYA': 'Pasarjaya',
+        'DHARMAJAYA': 'Dharmajaya',
+        'FOOD_STATION': 'Food Station',
+    };
 
-    const pasarjayaBlocked = await isProviderBlocked('PASARJAYA');
-    const locationOptionText = pasarjayaBlocked
-        ? 'Saat ini yang tersedia: *2. DHARMAJAYA* dan *3. FOOD STATION*'
-        : 'Saat ini yang tersedia: *1. PASARJAYA*, *2. DHARMAJAYA*, dan *3. FOOD STATION*';
+    const optionParts = [...providerMap.entries()].map(([num, key]) => `*${num}. ${providerLabels[key] || key}*`);
+    const locationOptionText = `Saat ini yang tersedia: ${optionParts.join(', ')}`;
 
-    const firstStepText = pasarjayaBlocked
-        ? '1) Ketik *2* (Dharmajaya) atau *3* (Food Station)'
-        : '1) Ketik *1*, *2*, atau *3* untuk pilih lokasi';
+    const dharmajayaNum = [...providerMap.entries()].find(([, v]) => v === 'DHARMAJAYA')?.[0];
 
-    return [
+    let availableSection = '';
+    if (dharmajayaNum) {
+        const options = await Promise.all(
+            Object.entries(DHARMAJAYA_MAPPING).map(async ([idx, name]) => {
+                const status = await isSpecificLocationClosed('DHARMAJAYA', name);
+                return { idx, name, available: !status.closed };
+            })
+        );
+        const availableSubLocations = options
+            .filter((item) => item.available)
+            .map((item) => `   ${item.idx}. ${item.name}`);
+        availableSection = availableSubLocations.length > 0
+            ? availableSubLocations.join('\n')
+            : '   - Saat ini semua sub-lokasi DHARMAJAYA sedang TUTUP.';
+    }
+
+    const nums = [...providerMap.keys()].join(', ');
+    const firstStepText = `1) Ketik ${nums} untuk pilih lokasi`;
+
+    const lines = [
         '⚠️ *Mohon Pilih Lokasi Dulu*',
         '',
         'Data Anda sudah valid, tapi lokasi pengambilan belum dipilih.',
         'Silakan pilih lokasi dulu agar data bisa diproses.',
         '',
         locationOptionText,
-        '',
-        '*Sub-lokasi DHARMAJAYA yang masih tersedia:*',
-        availableSection,
-        '',
-        'Balas bertahap:',
-        firstStepText,
-        '2) Lalu ketik angka sub-lokasi sesuai menu yang muncul',
-        '   _(Food Station tidak perlu sub-lokasi)_',
-        '',
-        '_Ketik 0 untuk batal._',
-    ].join('\n');
+    ];
+
+    if (dharmajayaNum && availableSection) {
+        lines.push('');
+        lines.push('*Sub-lokasi DHARMAJAYA yang masih tersedia:*');
+        lines.push(availableSection);
+    }
+
+    lines.push('');
+    lines.push('Balas bertahap:');
+    lines.push(firstStepText);
+    lines.push('2) Lalu ketik angka sub-lokasi sesuai menu yang muncul');
+    lines.push('   _(Food Station tidak perlu sub-lokasi)_');
+    lines.push('');
+    lines.push('_Ketik 0 untuk batal._');
+
+    return lines.join('\n');
 }
 
 function formatOperationStatus(settings: {
@@ -3072,36 +3092,44 @@ export async function connectToWhatsApp() {
                     }
                 }
                 else if (currentUserFlow === 'SELECT_LOCATION') {
-                    // Logic Unified: Pilihan 1 -> Menu Pasarjaya, Pilihan 2 -> Dharmajaya (Auto Process Pending)
-                    if (normalized === '1') {
-                        if (await isProviderBlocked('PASARJAYA')) {
-                            replyText = '⚠️ PasarJaya sementara ditutup.\nSilakan pilih lokasi yang tersedia: *2. DHARMAJAYA* dan *3. FOOD STATION*.';
-                            if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
-                            continue;
+                    const providerMap = await getActiveProviderMapping();
+                    const selectedProvider = providerMap.get(normalized);
+                    const pasarjayaNum = [...providerMap.entries()].find(([, v]) => v === 'PASARJAYA')?.[0];
+
+                    if (normalized === '0') {
+                        userFlowByPhone.set(senderPhone, 'NONE');
+                        pendingRegistrationData.delete(senderPhone);
+                        replyText = '✅ Pendaftaran dibatalkan.';
+                    } else if (!selectedProvider) {
+                        if (providerMap.size === 0) {
+                            replyText = '⛔ Semua lokasi sedang tutup. Silakan coba lagi nanti.';
+                        } else {
+                            const validNums = [...providerMap.keys()].join(', ');
+                            replyText = `⚠️ Pilihan tidak dikenali. Ketik ${validNums} untuk pilih lokasi, atau 0 untuk batal.`;
                         }
-                        // ✅ BUKA PASARJAYA - Tampilkan menu sub-lokasi
+                    } else if (selectedProvider === 'PASARJAYA') {
                         replyText = MENU_PASARJAYA_LOCATIONS;
                         userFlowByPhone.set(senderPhone, 'SELECT_PASARJAYA_SUB');
-                    } else if (normalized === '2') {
-                        // CEK VALIDASI AWAL: DHARMAJAYA WAJIB 4 BARIS
+                    } else if (selectedProvider === 'DHARMAJAYA') {
                         const pendingData = pendingRegistrationData.get(senderPhone);
                         let rejectDharmajaya = false;
 
                         if (pendingData) {
                             const lines = parseRawMessageToLines(pendingData);
-                            // Jika kelipatan 5 (Pasarjaya) tapi bukan kelipatan 4 -> Tolak
                             if (lines.length > 0 && lines.length % 5 === 0 && lines.length % 4 !== 0) {
                                 rejectDharmajaya = true;
                                 replyText = [
                                     '⚠️ *DATA TERTOLAK (SALAH FORMAT)*',
                                     '',
-                                    'Anda memilih: *2. DHARMAJAYA*',
+                                    `Anda memilih: *${normalized}. DHARMAJAYA*`,
                                     'Syarat: *Wajib 4 Baris* (Nama, Kartu, KTP, KK).',
                                     '',
                                     `Data Anda: *${lines.length} baris* (Terdeteksi format Pasarjaya / ada Tanggal Lahir).`,
                                     '',
                                     '💡 *SOLUSI:*',
-                                    '• Jika ingin ke Pasarjaya, ketik *1*.',
+                                    pasarjayaNum
+                                        ? `• Jika ingin ke Pasarjaya, ketik *${pasarjayaNum}*.`
+                                        : '• Pasarjaya sedang tutup.',
                                     '• Jika tetap Dharmajaya, mohon hapus Tanggal Lahir dan kirim ulang.',
                                     '',
                                     '_Ketik 0 untuk batal._'
@@ -3110,30 +3138,29 @@ export async function connectToWhatsApp() {
                         }
 
                         if (!rejectDharmajaya) {
-                            // MENU SUB-LOKASI DHARMAJAYA (BARU - sama seperti Pasarjaya)
                             replyText = await buildDharmajayaMenuWithStatus();
                             userFlowByPhone.set(senderPhone, 'SELECT_DHARMAJAYA_SUB');
                         }
-                    } else if (normalized === '3') {
-                        // FOOD STATION: 4 baris, tanpa sub-lokasi
+                    } else if (selectedProvider === 'FOOD_STATION') {
                         const pendingData = pendingRegistrationData.get(senderPhone);
                         let rejectFoodStation = false;
 
                         if (pendingData) {
                             const lines = parseRawMessageToLines(pendingData);
-                            // Jika kelipatan 5 (Pasarjaya) tapi bukan kelipatan 4 -> Tolak
                             if (lines.length > 0 && lines.length % 5 === 0 && lines.length % 4 !== 0) {
                                 rejectFoodStation = true;
                                 replyText = [
                                     '⚠️ *DATA TERTOLAK (SALAH FORMAT)*',
                                     '',
-                                    'Anda memilih: *3. FOOD STATION*',
+                                    `Anda memilih: *${normalized}. FOOD STATION*`,
                                     'Syarat: *Wajib 4 Baris* (Nama, Kartu, KTP, KK).',
                                     '',
                                     `Data Anda: *${lines.length} baris* (Terdeteksi format Pasarjaya / ada Tanggal Lahir).`,
                                     '',
                                     '💡 *SOLUSI:*',
-                                    '• Jika ingin ke Pasarjaya, ketik *1*.',
+                                    pasarjayaNum
+                                        ? `• Jika ingin ke Pasarjaya, ketik *${pasarjayaNum}*.`
+                                        : '• Pasarjaya sedang tutup.',
                                     '• Jika tetap Food Station, mohon hapus Tanggal Lahir dan kirim ulang.',
                                     '',
                                     '_Ketik 0 untuk batal._'
@@ -3225,14 +3252,6 @@ export async function connectToWhatsApp() {
                                 replyText = FORMAT_DAFTAR_FOOD_STATION;
                             }
                         }
-                    } else if (normalized === '0') {
-                        userFlowByPhone.set(senderPhone, 'NONE');
-                        pendingRegistrationData.delete(senderPhone);
-                        replyText = '✅ Pendaftaran dibatalkan.';
-                    } else {
-                        replyText = (await isProviderBlocked('PASARJAYA'))
-                            ? '⚠️ Ketik Angka *2* (Dharmajaya) atau *3* (Food Station).\nKetik *0* untuk batal.'
-                            : '⚠️ Ketik Angka *1* (Pasarjaya), *2* (Dharmajaya), atau *3* (Food Station).\nKetik *0* untuk batal.';
                     }
                     if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
                     continue;
@@ -3240,7 +3259,7 @@ export async function connectToWhatsApp() {
                 else if (currentUserFlow === 'SELECT_PASARJAYA_SUB') {
                     if (await isProviderBlocked('PASARJAYA')) {
                         userFlowByPhone.set(senderPhone, 'SELECT_LOCATION');
-                        replyText = '⚠️ PasarJaya sementara ditutup.\nSilakan pilih lokasi yang tersedia: *2. DHARMAJAYA* dan *3. FOOD STATION*.';
+                        replyText = '⚠️ PasarJaya sementara ditutup.\n' + await buildFormatDaftarMessage();
                         if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
                         continue;
                     }
@@ -3389,7 +3408,7 @@ export async function connectToWhatsApp() {
                 else if (currentUserFlow === 'INPUT_MANUAL_LOCATION') {
                     if (await isProviderBlocked('PASARJAYA')) {
                         userFlowByPhone.set(senderPhone, 'SELECT_LOCATION');
-                        replyText = '⚠️ PasarJaya sementara ditutup.\nSilakan pilih lokasi yang tersedia: *2. DHARMAJAYA* dan *3. FOOD STATION*.';
+                        replyText = '⚠️ PasarJaya sementara ditutup.\n' + await buildFormatDaftarMessage();
                         if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
                         continue;
                     }
@@ -6512,7 +6531,7 @@ export async function connectToWhatsApp() {
                     console.log(`[DEBUG] DELETE Specific Location for ${senderPhone} (RESET MENU)`);
 
                     userFlowByPhone.set(senderPhone, 'SELECT_LOCATION');
-                    replyText = FORMAT_DAFTAR_MESSAGE;
+                    replyText = await buildFormatDaftarMessage();
                 } else if (normalized === '2' || normalized.startsWith('CEK')) {
                     pendingDelete.delete(senderPhone);
                     const { validCount, totalInvalid, validItems } = await getTodayRecapForSender(senderPhone, processingDayKey);
@@ -6837,7 +6856,7 @@ export async function connectToWhatsApp() {
                     if (blockAskLocation) {
                         if ((await isProviderBlocked('PASARJAYA')) && detectedFormat === 'PASARJAYA') {
                             await sock.sendMessage(remoteJid, {
-                                text: '⚠️ PasarJaya sementara ditutup.\nSilakan kirim data format Dharmajaya atau Food Station, atau pilih lokasi dari menu.'
+                                text: '⚠️ PasarJaya sementara ditutup.\nSilakan pilih lokasi lain dari menu.\n\n' + await buildFormatDaftarMessage()
                             });
                             userFlowByPhone.set(senderPhone, 'SELECT_LOCATION');
                             continue;
@@ -6908,9 +6927,10 @@ export async function connectToWhatsApp() {
                         // VALIDASI BARU: Jika PASARJAYA tapi belum pilih lokasi spesifik, minta pilih dulu
                         if (finalContext === 'PASARJAYA' && !storedSpecificLocation) {
                             if (await isProviderBlocked('PASARJAYA')) {
-                                userLocationChoice.set(senderPhone, 'DHARMAJAYA');
+                                userLocationChoice.delete(senderPhone);
+                                userFlowByPhone.set(senderPhone, 'SELECT_LOCATION');
                                 await sock.sendMessage(remoteJid, {
-                                    text: '⚠️ PasarJaya sementara ditutup.\nSilakan kirim ulang dengan format *DHARMAJAYA* (4 baris) atau *FOOD STATION* (4 baris).'
+                                    text: '⚠️ PasarJaya sementara ditutup.\nSilakan pilih lokasi lain.\n\n' + await buildFormatDaftarMessage()
                                 });
                                 continue;
                             }
