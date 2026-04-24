@@ -1,6 +1,7 @@
 create table if not exists public.blocked_locations (
     id bigserial primary key,
     location_key text not null unique,
+    provider text not null default '',
     reason text null,
     is_active boolean not null default true,
     created_at timestamptz not null default now(),
@@ -9,3 +10,5 @@ create table if not exists public.blocked_locations (
 
 create index if not exists idx_blocked_locations_active
     on public.blocked_locations (is_active, location_key);
+create index if not exists idx_blocked_locations_provider
+    on public.blocked_locations (provider);
