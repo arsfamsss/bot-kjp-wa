@@ -3086,6 +3086,8 @@ export async function connectToWhatsApp() {
                     const providerMap = await getActiveProviderMapping();
                     const selectedProvider = providerMap.get(normalized);
                     const pasarjayaNum = [...providerMap.entries()].find(([, v]) => v === 'PASARJAYA')?.[0];
+                    const dharmajayaNum = [...providerMap.entries()].find(([, v]) => v === 'DHARMAJAYA')?.[0];
+                    const foodstationNum = [...providerMap.entries()].find(([, v]) => v === 'FOOD_STATION')?.[0];
 
                     if (normalized === '0') {
                         userFlowByPhone.set(senderPhone, 'NONE');
@@ -3099,8 +3101,39 @@ export async function connectToWhatsApp() {
                             replyText = `⚠️ Pilihan tidak dikenali. Ketik ${validNums} untuk pilih lokasi, atau 0 untuk batal.`;
                         }
                     } else if (selectedProvider === 'PASARJAYA') {
-                        replyText = MENU_PASARJAYA_LOCATIONS;
-                        userFlowByPhone.set(senderPhone, 'SELECT_PASARJAYA_SUB');
+                        const pendingData = pendingRegistrationData.get(senderPhone);
+                        let rejectPasarjaya = false;
+
+                        if (pendingData) {
+                            const lines = parseRawMessageToLines(pendingData);
+                            if (lines.length > 0 && lines.length % 4 === 0 && lines.length % 5 !== 0) {
+                                rejectPasarjaya = true;
+                                const solusiLines: string[] = [];
+                                if (dharmajayaNum) solusiLines.push(`• Jika ingin ke Dharmajaya, ketik *${dharmajayaNum}*.`);
+                                if (foodstationNum) solusiLines.push(`• Jika ingin ke Foodstation, ketik *${foodstationNum}*.`);
+                                solusiLines.push('• Jika tetap Pasarjaya, kirim ulang data dengan *5 baris* per orang (tambahkan Tanggal Lahir).');
+
+                                replyText = [
+                                    '⚠️ *DATA TIDAK COCOK DENGAN LOKASI*',
+                                    '',
+                                    `Anda memilih: *${normalized}. PASARJAYA*`,
+                                    'Pasarjaya butuh *5 baris* per orang:',
+                                    'Nama, No Kartu, No KTP, No KK, Tanggal Lahir.',
+                                    '',
+                                    `Data Anda: *${lines.length} baris* (format 4 baris per orang).`,
+                                    '',
+                                    '💡 *SOLUSI:*',
+                                    ...solusiLines,
+                                    '',
+                                    '_Ketik 0 untuk batal._'
+                                ].join('\n');
+                            }
+                        }
+
+                        if (!rejectPasarjaya) {
+                            replyText = MENU_PASARJAYA_LOCATIONS;
+                            userFlowByPhone.set(senderPhone, 'SELECT_PASARJAYA_SUB');
+                        }
                     } else if (selectedProvider === 'DHARMAJAYA') {
                         const pendingData = pendingRegistrationData.get(senderPhone);
                         let rejectDharmajaya = false;
@@ -3234,7 +3267,20 @@ export async function connectToWhatsApp() {
                                     userFlowByPhone.set(senderPhone, 'NONE');
                                     pendingRegistrationData.delete(senderPhone);
                                 } else {
-                                    replyText = '❌ *Data Foodstation Gagal Proses*\nPastikan format 4 baris (Nama, Kartu, KTP, KK).';
+                                    replyText = [
+                                        '❌ *DATA BELUM BISA DIPROSES*',
+                                        '',
+                                        'Lokasi: *Foodstation*',
+                                        'Syarat: *4 baris* per orang.',
+                                        '',
+                                        '👇 *CONTOH YANG BENAR:*',
+                                        'Siti Aminah',
+                                        '5049488500001234',
+                                        '3171234567890123',
+                                        '3171098765432109',
+                                        '',
+                                        'Mohon kirim ulang ya Bu/Pak 🙏',
+                                    ].join('\n');
                                     userFlowByPhone.set(senderPhone, 'NONE');
                                     pendingRegistrationData.delete(senderPhone);
                                 }
@@ -3356,10 +3402,22 @@ export async function connectToWhatsApp() {
                                 pendingRegistrationData.delete(senderPhone);
                             } else {
                                 // Gagal (Mungkin kurang tanggal lahir / baris)
-                                replyText = '❌ *Data Pasarjaya Gagal Proses*\nPastikan format 5 baris (Nama, Kartu, KTP, KK, Tgl Lahir).\nDan pastikan Tanggal Lahir benar.';
+                                replyText = [
+                                    '❌ *DATA BELUM BISA DIPROSES*',
+                                    '',
+                                    'Lokasi: *Pasarjaya*',
+                                    'Syarat: *5 baris* per orang.',
+                                    '',
+                                    '👇 *CONTOH YANG BENAR:*',
+                                    'Siti Aminah',
+                                    '5049488500001234',
+                                    '3171234567890123',
+                                    '3171098765432109',
+                                    '15-08-1975',
+                                    '',
+                                    'Mohon kirim ulang ya Bu/Pak 🙏',
+                                ].join('\n');
                                 userFlowByPhone.set(senderPhone, 'NONE');
-                                // Jangan delete pending? Biar user bisa coba lagi?
-                                // Ah delete saja biar bersih, user kirim ulang yang benar.
                                 pendingRegistrationData.delete(senderPhone);
                             }
                         } else {
@@ -3498,7 +3556,21 @@ export async function connectToWhatsApp() {
                                 userFlowByPhone.set(senderPhone, 'NONE');
                                 pendingRegistrationData.delete(senderPhone);
                             } else {
-                                replyText = '❌ *Data Pasarjaya Gagal Proses*\nPastikan format 5 baris (Nama, Kartu, KTP, KK, Tgl Lahir).\nDan pastikan Tanggal Lahir benar.';
+                                replyText = [
+                                    '❌ *DATA BELUM BISA DIPROSES*',
+                                    '',
+                                    'Lokasi: *Pasarjaya*',
+                                    'Syarat: *5 baris* per orang.',
+                                    '',
+                                    '👇 *CONTOH YANG BENAR:*',
+                                    'Siti Aminah',
+                                    '5049488500001234',
+                                    '3171234567890123',
+                                    '3171098765432109',
+                                    '15-08-1975',
+                                    '',
+                                    'Mohon kirim ulang ya Bu/Pak 🙏',
+                                ].join('\n');
                                 userFlowByPhone.set(senderPhone, 'NONE');
                                 pendingRegistrationData.delete(senderPhone);
                             }
@@ -3614,7 +3686,20 @@ export async function connectToWhatsApp() {
                                 userFlowByPhone.set(senderPhone, 'NONE');
                                 pendingRegistrationData.delete(senderPhone);
                             } else {
-                                replyText = '❌ *Data Dharmajaya Gagal Proses*\nPastikan format 4 baris (Nama, Kartu, KTP, KK).';
+                                replyText = [
+                                    '❌ *DATA BELUM BISA DIPROSES*',
+                                    '',
+                                    'Lokasi: *Dharmajaya*',
+                                    'Syarat: *4 baris* per orang.',
+                                    '',
+                                    '👇 *CONTOH YANG BENAR:*',
+                                    'Siti Aminah',
+                                    '5049488500001234',
+                                    '3171234567890123',
+                                    '3171098765432109',
+                                    '',
+                                    'Mohon kirim ulang ya Bu/Pak 🙏',
+                                ].join('\n');
                                 userFlowByPhone.set(senderPhone, 'NONE');
                                 pendingRegistrationData.delete(senderPhone);
                             }
