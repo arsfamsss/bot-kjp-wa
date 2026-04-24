@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "bun test",
+    "test": "npx bun test --isolate",
     "dev": "ts-node src/index.ts",
     "smoke:whitelist": "ts-node src/scripts/smokeWhitelist.ts",
     "build": "tsc",

@@ -142,7 +142,12 @@ export type AdminFlowState =
     | 'CONTACT_EDIT_NAME'   // Input nama baru
     | 'CONTACT_EDIT_PHONE'  // Input nomor baru
     | 'CONTACT_ADD_NAME'    // Input nama untuk kontak baru
-    | 'CONTACT_ADD_PHONE';  // Input nomor untuk kontak baru
+    | 'CONTACT_ADD_PHONE'   // Input nomor untuk kontak baru
+    // Sub-menu states for streamlined admin menu
+    | 'BLOCK_NUMBER_MENU'   // Sub-menu pilih jenis blokir (KJP/KTP/KK/HP)
+    | 'QUOTA_MENU'          // Sub-menu pilih jenis kuota (per user/global)
+    | 'REPORT_MENU'         // Sub-menu laporan & analitik
+    | 'REKAP_MENU';         // Sub-menu rekap data
 
 // Draft broadcast untuk penjadwalan/preview
 export type BroadcastDraft = {

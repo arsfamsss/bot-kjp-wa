@@ -3852,7 +3852,7 @@ export async function connectToWhatsApp() {
                 }
 
                 if (isAdmin && currentAdminFlow !== 'NONE') {
-                    if ((normalized === '0' && !currentAdminFlow.startsWith('CONTACT_') && !currentAdminFlow.startsWith('BLOCKED_KK_') && !currentAdminFlow.startsWith('BLOCKED_PHONE_') && !currentAdminFlow.startsWith('BLOCKED_LOCATION_') && !currentAdminFlow.startsWith('LOCATION_MGMT_') && !currentAdminFlow.startsWith('SETTING_')) || isGreetingOrMenu(normalized)) {
+                    if ((normalized === '0' && !currentAdminFlow.startsWith('CONTACT_') && !currentAdminFlow.startsWith('BLOCKED_KK_') && !currentAdminFlow.startsWith('BLOCKED_PHONE_') && !currentAdminFlow.startsWith('BLOCKED_LOCATION_') && !currentAdminFlow.startsWith('LOCATION_MGMT_') && !currentAdminFlow.startsWith('SETTING_') && currentAdminFlow !== 'BLOCK_NUMBER_MENU' && currentAdminFlow !== 'QUOTA_MENU' && currentAdminFlow !== 'REPORT_MENU' && currentAdminFlow !== 'REKAP_MENU') || isGreetingOrMenu(normalized)) {
                         clearTransientSessionContext(senderPhone, { clearFlows: true, clearPendingConfirmations: true });
                         await sendMainMenu(sock, remoteJid, isAdmin);
                         continue;
@@ -3887,175 +3887,45 @@ export async function connectToWhatsApp() {
                                 }
                             }
                         }
-                    } else if (currentAdminFlow === 'MENU') {
-                        // MENU ADMIN BARU:
-                        // 1 = Hapus Data User (per orang)
-                        // 2 = Rekap Hari Ini
-                        // 3 = Rekap Tanggal Tertentu
-                        // 4 = Rekap Rentang Tanggal
-                        // 5 = List Semua Kontak
-                        // 6 = Edit Kontak
-                        // 7 = Hapus Kontak
-                        // 8 = Broadcast Informasi
-                        // 9 = Statistik Dashboard
-                        // 10 = Cari Data
-                        // 11 = Log Aktivitas
-                        // 12 = Export Data (TXT)
-
-                        if (normalized === '1') {
-                            // HAPUS DATA USER - Tampilkan daftar user yang kirim data hari ini
-                            adminFlowByPhone.set(senderPhone, 'ADMIN_DELETE_SELECT_USER');
-                            const recap = await getGlobalRecap(processingDayKey, undefined, lookupName);
-
-                            // Ambil daftar user unik yang kirim data hari ini
-                            const { data: users } = await supabase
-                                .from('data_harian')
-                                .select('sender_phone, sender_name')
-                                .eq('processing_day_key', processingDayKey)
-                                .order('sender_phone');
-
-                            if (!users || users.length === 0) {
-                                replyText = '📂 Belum ada data hari ini.';
-                                adminFlowByPhone.set(senderPhone, 'MENU');
-                            } else {
-                                // Group by sender_phone
-                                const userMap = new Map<string, { name: string; count: number }>();
-                                users.forEach((u: any) => {
-                                    const existing = userMap.get(u.sender_phone);
-                                    if (existing) {
-                                        existing.count++;
-                                    } else {
-                                        userMap.set(u.sender_phone, {
-                                            name: getContactName(u.sender_phone) || u.sender_name || getRegisteredUserNameSync(u.sender_phone) || u.sender_phone,
-                                            count: 1
-                                        });
-                                    }
-                                });
-
-                                // Cache untuk digunakan di flow berikutnya
-                                const userList = Array.from(userMap.entries())
-                                    .map(([phone, info]) => ({
-                                        phone,
-                                        name: info.name,
-                                        count: info.count
-                                    }))
-                                    .sort((a, b) => {
-                                        const nameA = (a.name || '').trim().toLowerCase();
-                                        const nameB = (b.name || '').trim().toLowerCase();
-                                        return nameA.localeCompare(nameB);
-                                    }); // SORTED ALPHABETICALLY (ROBUST) ✅
-                                adminUserListCache.set(senderPhone, userList);
-
-                                let msg = '🗑️ *HAPUS DATA USER*\n\n';
-                                msg += `📅 Tanggal: ${dmyExample}\n\n`;
-                                msg += 'Pilih user yang datanya ingin dihapus:\n\n';
-                                userList.forEach((u, i) => {
-                                    msg += `${i + 1}. ${u.name} (${u.count} data)\n`;
-                                });
-                                msg += '\n👇 Ketik nomor urut user.\n_Ketik 0 untuk batal._';
-                                replyText = msg;
-                            }
+                    } else if (currentAdminFlow === 'BLOCK_NUMBER_MENU') {
+                        if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'MENU');
+                            replyText = ADMIN_MENU_MESSAGE;
+                        } else if (normalized === '1') {
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_KJP_MENU');
+                            replyText = buildBlockedKjpMenuText();
+                        } else if (normalized === '2') {
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_KTP_MENU');
+                            replyText = buildBlockedKtpMenuText();
+                        } else if (normalized === '3') {
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_KK_MENU');
+                            replyText = buildBlockedKkMenuText();
+                        } else if (normalized === '4') {
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_PHONE_MENU');
+                            replyText = buildBlockedPhoneMenuText();
+                        } else {
+                            replyText = '⚠️ Pilihan tidak dikenali. Ketik 1-4 atau 0 untuk kembali.';
                         }
-                        else if (normalized === '2') {
-                            // Rekap Hari Ini
-                            replyText = await getGlobalRecap(processingDayKey, undefined, lookupName);
+                    } else if (currentAdminFlow === 'QUOTA_MENU') {
+                        if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'MENU');
+                            replyText = ADMIN_MENU_MESSAGE;
+                        } else if (normalized === '1') {
+                            locationQuotaDraftByPhone.delete(senderPhone);
+                            adminFlowByPhone.set(senderPhone, 'LOCATION_QUOTA_MENU');
+                            replyText = buildLocationQuotaMenuText();
+                        } else if (normalized === '2') {
+                            globalLocationQuotaDraftByPhone.delete(senderPhone);
+                            adminFlowByPhone.set(senderPhone, 'GLOBAL_LOCATION_QUOTA_MENU');
+                            replyText = buildGlobalLocationQuotaMenuText();
+                        } else {
+                            replyText = '⚠️ Pilihan tidak dikenali. Ketik 1-2 atau 0 untuk kembali.';
                         }
-                        else if (normalized === '3') {
-                            // Rekap Tanggal Tertentu
-                            adminFlowByPhone.set(senderPhone, 'RECAP_SPECIFIC_MENU');
-                            replyText = [
-                                '📅 *REKAP TANGGAL TERTENTU*',
-                                '',
-                                '1️⃣ Rekap Kemarin',
-                                '2️⃣ Input Tanggal Manual',
-                                '',
-                                '_Ketik 0 untuk batal._'
-                            ].join('\n');
-                        }
-                        else if (normalized === '4') {
-                            // Rekap Rentang Tanggal
-                            adminFlowByPhone.set(senderPhone, 'ASK_RANGE');
-                            replyText = ['📅 *REKAP RENTANG*', '', `Contoh: *01-01-2026 ${dmyExample}*`, '', '_Ketik 0 untuk kembali._'].join('\n');
-                        }
-                        else if (normalized === '5') {
-                            // List Semua Kontak (langsung tampilkan)
-                            const allContacts = await getAllLidPhoneMap();
-                            if (allContacts.length === 0) {
-                                replyText = '📂 Belum ada kontak terdaftar.';
-                            } else {
-                                await sock.sendMessage(remoteJid, { text: `📂 *DAFTAR SEMUA KONTAK (${allContacts.length})*` });
-
-                                let currentMsg = '';
-                                for (let i = 0; i < allContacts.length; i++) {
-                                    const c = allContacts[i];
-                                    const line = `${i + 1}. ${c.push_name || '(Tanpa Nama)'} (${c.phone_number})\n`;
-
-                                    if (currentMsg.length + line.length > 3000) {
-                                        await sock.sendMessage(remoteJid, { text: currentMsg });
-                                        currentMsg = '';
-                                    }
-                                    currentMsg += line;
-                                }
-                                if (currentMsg) {
-                                    replyText = currentMsg;
-                                } else {
-                                    replyText = '✅ Selesai.';
-                                }
-                            }
-                        }
-                        else if (normalized === '6') {
-                            // Kelola Kontak (NEW)
-                            adminFlowByPhone.set(senderPhone, 'CONTACT_MENU');
-                            replyText = [
-                                '👥 *KELOLA KONTAK*',
-                                '',
-                                '1️⃣ 🔍 Cari Kontak',
-                                '2️⃣ ➕ Tambah Kontak Baru',
-                                '3️⃣ 📂 Lihat Semua Kontak',
-                                '',
-                                '0️⃣ 🔙 Kembali ke Menu Utama',
-                            ].join('\n');
-                        }
-                        else if (normalized === '7') {
-                            // Hapus Kontak
-                            adminFlowByPhone.set(senderPhone, 'DELETE_CONTACT');
-                            const allContacts = await getAllLidPhoneMap();
-
-                            adminContactCache.set(senderPhone, allContacts);
-
-                            if (allContacts.length === 0) {
-                                replyText = '📂 Tidak ada kontak untuk dihapus.';
-                                adminFlowByPhone.set(senderPhone, 'MENU');
-                            } else {
-                                let msg = '🗑️ *HAPUS KONTAK*\n\n';
-                                for (let i = 0; i < allContacts.length; i++) {
-                                    const c = allContacts[i];
-                                    msg += `${i + 1}. ${c.push_name || '(Tanpa Nama)'} (${c.phone_number})\n`;
-                                    if (msg.length > 3500) {
-                                        msg += '\n...(List dipotong, terlalu panjang)...';
-                                        break;
-                                    }
-                                }
-                                msg += '\n👇 *Ketik nomor urut yg ingin dihapus (bisa banyak, pisah koma/spasi)*\nContoh: 1, 3, 5\n\n_Ketik 0 untuk batal._';
-                                replyText = msg;
-                            }
-                        }
-                        else if (normalized === '8') {
-                            // Broadcast Informasi
-                            adminFlowByPhone.set(senderPhone, 'BROADCAST_SELECT');
-                            replyText = [
-                                '📢 *BROADCAST INFO*',
-                                '',
-                                'Pilih target pengiriman:',
-                                '',
-                                '1️⃣ Kirim ke SEMUA kontak',
-                                '2️⃣ Kirim ke nomor tertentu',
-                                '',
-                                '_Ketik 0 untuk batal._'
-                            ].join('\n');
-                        }
-                        else if (normalized === '9') {
-                            // FEATURE: STATISTIK DASHBOARD
+                    } else if (currentAdminFlow === 'REPORT_MENU') {
+                        if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'MENU');
+                            replyText = ADMIN_MENU_MESSAGE;
+                        } else if (normalized === '1') {
                             const stats = await getStatistics(processingDayKey);
                             const displayDate = processingDayKey.split('-').reverse().join('-');
 
@@ -4082,23 +3952,7 @@ export async function connectToWhatsApp() {
                             }
 
                             replyText = lines.join('\n');
-                        } else if (normalized === '10') {
-                            // FEATURE: CARI DATA
-                            adminFlowByPhone.set(senderPhone, 'SEARCH_DATA');
-                            replyText = [
-                                '🔍 *CARI DATA*',
-                                '',
-                                'Ketik keyword pencarian:',
-                                '• Nama penerima (contoh: Budi)',
-                                '• Nama pengirim WA (contoh: Tari)',
-                                '• No Kartu (contoh: 5049488500001111)',
-                                '• No HP (contoh: 628123456789)',
-                                '',
-                                '_Pencarian di SEMUA tanggal._',
-                                '_Ketik 0 untuk batal._'
-                            ].join('\n');
-                        } else if (normalized === '11') {
-                            // FEATURE: LOG AKTIVITAS
+                        } else if (normalized === '2') {
                             const { data: logs, error } = await supabase
                                 .from('log_pesan_wa')
                                 .select('*')
@@ -4125,7 +3979,6 @@ export async function connectToWhatsApp() {
                                     });
                                     const senderName = getContactName(log.sender_phone) || getRegisteredUserNameSync(log.sender_phone) || log.sender_phone;
 
-                                    // FIX: Ambil dari kolom database langsung, bukan dari property .stats yang mungkin tidak ada di level root row
                                     const okCount = log.stats_ok_count ?? 0;
                                     const totalBlocks = log.stats_total_blocks ?? 0;
                                     const failCount = totalBlocks - okCount;
@@ -4140,21 +3993,59 @@ export async function connectToWhatsApp() {
 
                                 replyText = lines.join('\n');
                             }
-                        } else if (normalized === '12') {
-                            // FEATURE: EXPORT DATA (TXT only) - Default hari ini, opsi tanggal lain
-                            adminFlowByPhone.set(senderPhone, 'EXPORT_SELECT_DATE');
+                        } else if (normalized === '3') {
+                            adminFlowByPhone.set(senderPhone, 'SEARCH_DATA');
                             replyText = [
-                                '📤 *EXPORT DATA*',
+                                '🔍 *CARI DATA*',
                                 '',
-                                `📅 Default: Hari Ini (${dmyExample})`,
+                                'Ketik keyword pencarian:',
+                                '• Nama penerima (contoh: Budi)',
+                                '• Nama pengirim WA (contoh: Tari)',
+                                '• No Kartu (contoh: 5049488500001111)',
+                                '• No HP (contoh: 628123456789)',
                                 '',
-                                '1️⃣ Export Hari Ini',
-                                '2️⃣ Export Kemarin',
-                                '3️⃣ Export Tanggal Lain',
+                                '_Pencarian di SEMUA tanggal._',
+                                '_Ketik 0 untuk batal._'
+                            ].join('\n');
+                        } else if (normalized === '4') {
+                            adminFlowByPhone.set(senderPhone, 'BROADCAST_SELECT');
+                            replyText = [
+                                '📢 *BROADCAST INFO*',
+                                '',
+                                'Pilih target pengiriman:',
+                                '',
+                                '1️⃣ Kirim ke SEMUA kontak',
+                                '2️⃣ Kirim ke nomor tertentu',
                                 '',
                                 '_Ketik 0 untuk batal._'
                             ].join('\n');
-                        } else if (normalized === '13') {
+                        } else {
+                            replyText = '⚠️ Pilihan tidak dikenali. Ketik 1-4 atau 0 untuk kembali.';
+                        }
+                    } else if (currentAdminFlow === 'REKAP_MENU') {
+                        if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'MENU');
+                            replyText = ADMIN_MENU_MESSAGE;
+                        } else if (normalized === '1') {
+                            replyText = await getGlobalRecap(processingDayKey, undefined, lookupName);
+                        } else if (normalized === '2') {
+                            adminFlowByPhone.set(senderPhone, 'RECAP_SPECIFIC_MENU');
+                            replyText = [
+                                '📅 *REKAP TANGGAL TERTENTU*',
+                                '',
+                                '1️⃣ Rekap Kemarin',
+                                '2️⃣ Input Tanggal Manual',
+                                '',
+                                '_Ketik 0 untuk batal._'
+                            ].join('\n');
+                        } else if (normalized === '3') {
+                            adminFlowByPhone.set(senderPhone, 'ASK_RANGE');
+                            replyText = ['📅 *REKAP RENTANG*', '', `Contoh: *01-01-2026 ${dmyExample}*`, '', '_Ketik 0 untuk kembali._'].join('\n');
+                        } else {
+                            replyText = '⚠️ Pilihan tidak dikenali. Ketik 1-3 atau 0 untuk kembali.';
+                        }
+                    } else if (currentAdminFlow === 'MENU') {
+                        if (normalized === '1') {
                             const currentSettings = await getBotSettings();
                             const currentTimeStr = formatOperationStatus(currentSettings);
                             adminFlowByPhone.set(senderPhone, 'SETTING_OPERATION_MENU');
@@ -4170,41 +4061,137 @@ export async function connectToWhatsApp() {
                                 '',
                                 '_Ketik 0 untuk batal._'
                             ].join('\n');
-                        } else if (normalized === '14') {
-                            adminFlowByPhone.set(senderPhone, 'BLOCKED_KJP_MENU');
-                            replyText = buildBlockedKjpMenuText();
-                        } else if (normalized === '15') {
-                            adminFlowByPhone.set(senderPhone, 'BLOCKED_KTP_MENU');
-                            replyText = buildBlockedKtpMenuText();
-                        } else if (normalized === '16') {
-                            adminFlowByPhone.set(senderPhone, 'BLOCKED_KK_MENU');
-                            replyText = buildBlockedKkMenuText();
-                        } else if (normalized === '17') {
-                            adminFlowByPhone.set(senderPhone, 'BLOCKED_PHONE_MENU');
-                            replyText = buildBlockedPhoneMenuText();
-                        } else if (normalized === '18') {
-                            adminFlowByPhone.set(senderPhone, 'CARD_PREFIX_MENU');
-                            replyText = buildCardPrefixMenuText();
-                        } else if (normalized === '19') {
-                            adminFlowByPhone.set(senderPhone, 'BLOCKED_LOCATION_MENU');
-                            replyText = buildBlockedLocationMenuText();
-                        } else if (normalized === '20') {
-                            locationQuotaDraftByPhone.delete(senderPhone);
-                            adminFlowByPhone.set(senderPhone, 'LOCATION_QUOTA_MENU');
-                            replyText = buildLocationQuotaMenuText();
-                        } else if (normalized === '21') {
-                            globalLocationQuotaDraftByPhone.delete(senderPhone);
-                            adminFlowByPhone.set(senderPhone, 'GLOBAL_LOCATION_QUOTA_MENU');
-                            replyText = buildGlobalLocationQuotaMenuText();
-                        } else if (normalized === '22') {
-                            whitelistSessionByPhone.delete(senderPhone);
-                            adminFlowByPhone.set(senderPhone, 'WHITELIST_MENU');
-                            replyText = buildWhitelistMenuText();
-                        } else if (normalized === '23') {
+                        } else if (normalized === '2') {
+                            adminFlowByPhone.set(senderPhone, 'EXPORT_SELECT_DATE');
+                            replyText = [
+                                '📤 *EXPORT DATA*',
+                                '',
+                                `📅 Default: Hari Ini (${dmyExample})`,
+                                '',
+                                '1️⃣ Export Hari Ini',
+                                '2️⃣ Export Kemarin',
+                                '3️⃣ Export Tanggal Lain',
+                                '',
+                                '_Ketik 0 untuk batal._'
+                            ].join('\n');
+                        } else if (normalized === '3') {
+                            adminFlowByPhone.set(senderPhone, 'ADMIN_DELETE_SELECT_USER');
+                            const recap = await getGlobalRecap(processingDayKey, undefined, lookupName);
+
+                            const { data: users } = await supabase
+                                .from('data_harian')
+                                .select('sender_phone, sender_name')
+                                .eq('processing_day_key', processingDayKey)
+                                .order('sender_phone');
+
+                            if (!users || users.length === 0) {
+                                replyText = '📂 Belum ada data hari ini.';
+                                adminFlowByPhone.set(senderPhone, 'MENU');
+                            } else {
+                                const userMap = new Map<string, { name: string; count: number }>();
+                                users.forEach((u: any) => {
+                                    const existing = userMap.get(u.sender_phone);
+                                    if (existing) {
+                                        existing.count++;
+                                    } else {
+                                        userMap.set(u.sender_phone, {
+                                            name: getContactName(u.sender_phone) || u.sender_name || getRegisteredUserNameSync(u.sender_phone) || u.sender_phone,
+                                            count: 1
+                                        });
+                                    }
+                                });
+
+                                const userList = Array.from(userMap.entries())
+                                    .map(([phone, info]) => ({
+                                        phone,
+                                        name: info.name,
+                                        count: info.count
+                                    }))
+                                    .sort((a, b) => {
+                                        const nameA = (a.name || '').trim().toLowerCase();
+                                        const nameB = (b.name || '').trim().toLowerCase();
+                                        return nameA.localeCompare(nameB);
+                                    });
+                                adminUserListCache.set(senderPhone, userList);
+
+                                let msg = '🗑️ *HAPUS DATA USER*\n\n';
+                                msg += `📅 Tanggal: ${dmyExample}\n\n`;
+                                msg += 'Pilih user yang datanya ingin dihapus:\n\n';
+                                userList.forEach((u, i) => {
+                                    msg += `${i + 1}. ${u.name} (${u.count} data)\n`;
+                                });
+                                msg += '\n👇 Ketik nomor urut user.\n_Ketik 0 untuk batal._';
+                                replyText = msg;
+                            }
+                        } else if (normalized === '4') {
+                            adminFlowByPhone.set(senderPhone, 'BLOCK_NUMBER_MENU');
+                            replyText = [
+                                '🔒 *KELOLA BLOKIR NOMOR*',
+                                '',
+                                '1️⃣ Blokir No KJP',
+                                '2️⃣ Blokir No KTP',
+                                '3️⃣ Blokir No KK',
+                                '4️⃣ Blokir No HP',
+                                '',
+                                '0️⃣ Kembali ke Menu Admin',
+                            ].join('\n');
+                        } else if (normalized === '5') {
                             const { handleLocationMgmt } = await import('./services/adminLocationMenu');
                             const result = await handleLocationMgmt('LOCATION_MGMT_MENU', '', senderPhone);
                             adminFlowByPhone.set(senderPhone, result.nextState ?? 'NONE');
                             replyText = result.replyText;
+                        } else if (normalized === '6') {
+                            adminFlowByPhone.set(senderPhone, 'CONTACT_MENU');
+                            replyText = [
+                                '👥 *KELOLA KONTAK*',
+                                '',
+                                '1️⃣ 🔍 Cari Kontak',
+                                '2️⃣ ➕ Tambah Kontak Baru',
+                                '3️⃣ 📂 Lihat Semua Kontak',
+                                '4️⃣ 🗑️ Hapus Kontak',
+                                '',
+                                '0️⃣ 🔙 Kembali ke Menu Admin',
+                            ].join('\n');
+                        } else if (normalized === '7') {
+                            adminFlowByPhone.set(senderPhone, 'QUOTA_MENU');
+                            replyText = [
+                                '📊 *KELOLA KUOTA LOKASI*',
+                                '',
+                                '1️⃣ Batas per Lokasi (per user/hari)',
+                                '2️⃣ Kuota Global per Lokasi (semua user/hari)',
+                                '',
+                                '0️⃣ Kembali ke Menu Admin',
+                            ].join('\n');
+                        } else if (normalized === '8') {
+                            adminFlowByPhone.set(senderPhone, 'CARD_PREFIX_MENU');
+                            replyText = buildCardPrefixMenuText();
+                        } else if (normalized === '9') {
+                            whitelistSessionByPhone.delete(senderPhone);
+                            adminFlowByPhone.set(senderPhone, 'WHITELIST_MENU');
+                            replyText = buildWhitelistMenuText();
+                        } else if (normalized === '10') {
+                            adminFlowByPhone.set(senderPhone, 'REPORT_MENU');
+                            replyText = [
+                                '📊 *LAPORAN & ANALITIK*',
+                                '',
+                                '1️⃣ Statistik Dashboard',
+                                '2️⃣ Log Aktivitas',
+                                '3️⃣ Cari Data',
+                                '4️⃣ Broadcast Informasi',
+                                '',
+                                '0️⃣ Kembali ke Menu Admin',
+                            ].join('\n');
+                        } else if (normalized === '11') {
+                            adminFlowByPhone.set(senderPhone, 'REKAP_MENU');
+                            replyText = [
+                                '📋 *REKAP DATA*',
+                                '',
+                                '1️⃣ Rekap Hari Ini',
+                                '2️⃣ Rekap Tanggal Tertentu',
+                                '3️⃣ Rekap Rentang Tanggal',
+                                '',
+                                '0️⃣ Kembali ke Menu Admin',
+                            ].join('\n');
                         } else replyText = '⚠️ Pilihan tidak dikenali.';
                     } else if (currentAdminFlow === 'SETTING_OPERATION_MENU') {
                         if (normalized === '0') {
@@ -4585,13 +4572,35 @@ export async function connectToWhatsApp() {
                                 msg += '\n👇 Ketik nomor urut untuk pilih kontak.\n_Ketik 0 untuk kembali._';
                                 replyText = msg;
                             }
+                        } else if (normalized === '4') {
+                            adminFlowByPhone.set(senderPhone, 'DELETE_CONTACT');
+                            const allContacts = await getAllLidPhoneMap();
+
+                            adminContactCache.set(senderPhone, allContacts);
+
+                            if (allContacts.length === 0) {
+                                replyText = '📂 Tidak ada kontak untuk dihapus.';
+                                adminFlowByPhone.set(senderPhone, 'CONTACT_MENU');
+                            } else {
+                                let msg = '🗑️ *HAPUS KONTAK*\n\n';
+                                for (let i = 0; i < allContacts.length; i++) {
+                                    const c = allContacts[i];
+                                    msg += `${i + 1}. ${c.push_name || '(Tanpa Nama)'} (${c.phone_number})\n`;
+                                    if (msg.length > 3500) {
+                                        msg += '\n...(List dipotong, terlalu panjang)...';
+                                        break;
+                                    }
+                                }
+                                msg += '\n👇 *Ketik nomor urut yg ingin dihapus (bisa banyak, pisah koma/spasi)*\nContoh: 1, 3, 5\n\n_Ketik 0 untuk batal._';
+                                replyText = msg;
+                            }
                         } else {
-                            replyText = '⚠️ Pilihan tidak dikenali. Ketik 1, 2, atau 3.';
+                            replyText = '⚠️ Pilihan tidak dikenali. Ketik 1-4 atau 0 untuk kembali.';
                         }
                     } else if (currentAdminFlow === 'CONTACT_SEARCH') {
                         if (normalized === '0') {
                             adminFlowByPhone.set(senderPhone, 'CONTACT_MENU');
-                            replyText = ['👥 *KELOLA KONTAK*', '', '1️⃣ 🔍 Cari Kontak', '2️⃣ ➕ Tambah Kontak Baru', '3️⃣ 📂 Lihat Semua Kontak', '', '0️⃣ 🔙 Kembali ke Menu Utama'].join('\n');
+                            replyText = ['👥 *KELOLA KONTAK*', '', '1️⃣ 🔍 Cari Kontak', '2️⃣ ➕ Tambah Kontak Baru', '3️⃣ 📂 Lihat Semua Kontak', '4️⃣ 🗑️ Hapus Kontak', '', '0️⃣ 🔙 Kembali ke Menu Admin'].join('\n');
                         } else {
                             const keyword = rawTrim.toUpperCase();
                             const digitsOnly = rawTrim.replace(/\D/g, '');
@@ -4620,7 +4629,7 @@ export async function connectToWhatsApp() {
                         if (normalized === '0') {
                             adminFlowByPhone.set(senderPhone, 'CONTACT_MENU');
                             contactSessionByPhone.delete(senderPhone);
-                            replyText = ['👥 *KELOLA KONTAK*', '', '1️⃣ 🔍 Cari Kontak', '2️⃣ ➕ Tambah Kontak Baru', '3️⃣ 📂 Lihat Semua Kontak', '', '0️⃣ 🔙 Kembali ke Menu Utama'].join('\n');
+                            replyText = ['👥 *KELOLA KONTAK*', '', '1️⃣ 🔍 Cari Kontak', '2️⃣ ➕ Tambah Kontak Baru', '3️⃣ 📂 Lihat Semua Kontak', '4️⃣ 🗑️ Hapus Kontak', '', '0️⃣ 🔙 Kembali ke Menu Admin'].join('\n');
                         } else {
                             const session = contactSessionByPhone.get(senderPhone);
                             const choice = parseInt(normalized);
@@ -4719,7 +4728,7 @@ export async function connectToWhatsApp() {
                         if (normalized === '0') {
                             adminFlowByPhone.set(senderPhone, 'CONTACT_MENU');
                             contactSessionByPhone.delete(senderPhone);
-                            replyText = ['👥 *KELOLA KONTAK*', '', '1️⃣ 🔍 Cari Kontak', '2️⃣ ➕ Tambah Kontak Baru', '3️⃣ 📂 Lihat Semua Kontak', '', '0️⃣ 🔙 Kembali ke Menu Utama'].join('\n');
+                            replyText = ['👥 *KELOLA KONTAK*', '', '1️⃣ 🔍 Cari Kontak', '2️⃣ ➕ Tambah Kontak Baru', '3️⃣ 📂 Lihat Semua Kontak', '4️⃣ 🗑️ Hapus Kontak', '', '0️⃣ 🔙 Kembali ke Menu Admin'].join('\n');
                         } else {
                             if (rawTrim.length < 2) {
                                 replyText = '⚠️ Nama terlalu pendek (min 2 karakter). Coba lagi.';
@@ -4733,7 +4742,7 @@ export async function connectToWhatsApp() {
                         if (normalized === '0') {
                             adminFlowByPhone.set(senderPhone, 'CONTACT_MENU');
                             contactSessionByPhone.delete(senderPhone);
-                            replyText = ['👥 *KELOLA KONTAK*', '', '1️⃣ 🔍 Cari Kontak', '2️⃣ ➕ Tambah Kontak Baru', '3️⃣ 📂 Lihat Semua Kontak', '', '0️⃣ 🔙 Kembali ke Menu Utama'].join('\n');
+                            replyText = ['👥 *KELOLA KONTAK*', '', '1️⃣ 🔍 Cari Kontak', '2️⃣ ➕ Tambah Kontak Baru', '3️⃣ 📂 Lihat Semua Kontak', '4️⃣ 🗑️ Hapus Kontak', '', '0️⃣ 🔙 Kembali ke Menu Admin'].join('\n');
                         } else {
                             const session = contactSessionByPhone.get(senderPhone);
                             const newPhone = extractManualPhone(rawTrim);
