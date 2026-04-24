@@ -2850,7 +2850,7 @@ export async function connectToWhatsApp() {
                                 senderPhone,
                                 logJson,
                                 originalText: messageText,
-                                locationContext: existingLocation,
+                                locationContext: existingLocation || 'DHARMAJAYA',
                                 processingDayKey,
                             });
                             if (hasPendingUnknownRegion) {
@@ -2863,7 +2863,7 @@ export async function connectToWhatsApp() {
                                 senderPhone,
                                 logJson,
                                 originalText: messageText,
-                                locationContext: existingLocation,
+                                locationContext: existingLocation || 'DHARMAJAYA',
                                 processingDayKey,
                             });
                             if (hasPendingUnderage) {
