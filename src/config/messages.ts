@@ -1,7 +1,39 @@
 // src/config/messages.ts
 // File ini berisi semua template pesan statis untuk bot WA
 
+import { getWibParts } from '../time';
+
 type ProviderType = 'PASARJAYA' | 'DHARMAJAYA' | 'FOOD_STATION';
+
+export const STATUS_CHECK_HOURS: Record<string, { startHour: number; startMinute: number; endHour: number; endMinute: number; label: string }> = {
+    DHARMAJAYA: { startHour: 6, startMinute: 5, endHour: 23, endMinute: 59, label: '06:05' },
+    PASARJAYA: { startHour: 7, startMinute: 10, endHour: 23, endMinute: 59, label: '07:10' },
+    FOOD_STATION: { startHour: 16, startMinute: 10, endHour: 23, endMinute: 59, label: '16:10' },
+};
+
+const STATUS_CHECK_PROVIDER_DISPLAY: Record<ProviderType, string> = {
+    DHARMAJAYA: 'Dharmajaya',
+    PASARJAYA: 'Pasarjaya',
+    FOOD_STATION: 'Foodstation',
+};
+
+export function isStatusCheckOpen(provider: string): boolean {
+    const config = STATUS_CHECK_HOURS[provider];
+    if (!config) return false;
+
+    const { hour, minute } = getWibParts(new Date());
+    const currentMinutes = hour * 60 + minute;
+    const startMinutes = config.startHour * 60 + config.startMinute;
+    const endMinutes = config.endHour * 60 + config.endMinute;
+
+    return currentMinutes >= startMinutes && currentMinutes <= endMinutes;
+}
+
+export function getStatusCheckClosedMessage(provider: string): string {
+    const displayName = STATUS_CHECK_PROVIDER_DISPLAY[provider as ProviderType] ?? provider;
+    const label = STATUS_CHECK_HOURS[provider]?.label ?? '';
+    return `⏰ Cek status ${displayName} bisa dilakukan mulai jam ${label} WIB s/d 23:59 WIB`;
+}
 
 // --- MENU UTAMA USER ---
 export const MENU_MESSAGE = [
@@ -94,6 +126,81 @@ export async function getActiveProviderMapping(): Promise<Map<string, string>> {
 
     return mapping;
 }
+
+// --- STATUS CHECK PROVIDER MENU & MAPPING ---
+export async function STATUS_CHECK_PROVIDER_MENU(): Promise<string> {
+    const { isProviderBlocked } = await import('../supabase');
+
+    const [pasarjayaBlocked, dharmajayaBlocked, foodStationBlocked] = await Promise.all([
+        isProviderBlocked('PASARJAYA'),
+        isProviderBlocked('DHARMAJAYA'),
+        isProviderBlocked('FOOD_STATION'),
+    ]);
+
+    const providers: { key: ProviderType; name: string; label?: string }[] = [];
+    if (!dharmajayaBlocked) providers.push({ key: 'DHARMAJAYA', name: 'Dharmajaya' });
+    if (!pasarjayaBlocked) providers.push({ key: 'PASARJAYA', name: 'Pasarjaya' });
+    if (!foodStationBlocked) providers.push({ key: 'FOOD_STATION', name: 'Foodstation' });
+
+    if (providers.length === 0) {
+        return [
+            '⛔ *SEMUA LOKASI SEDANG TUTUP*',
+            '',
+            'Mohon maaf, saat ini semua lokasi pengambilan sedang ditutup.',
+            'Silakan coba lagi nanti. 🙏'
+        ].join('\n');
+    }
+
+    const lines = [
+        '📋 *CEK STATUS PENDAFTARAN*',
+        '',
+        'Pilih lokasi yang mau dicek:',
+        '',
+    ];
+
+    let idx = 1;
+    for (const provider of providers) {
+        const label = STATUS_CHECK_HOURS[provider.key]?.label;
+        const isOpen = isStatusCheckOpen(provider.key);
+        const suffix = isOpen ? '' : ` (buka jam ${label})`;
+        const numEmoji = idx === 1 ? '1️⃣' : idx === 2 ? '2️⃣' : '3️⃣';
+        lines.push(`${numEmoji} *${provider.name}*${suffix}`);
+        idx += 1;
+    }
+
+    lines.push('');
+    lines.push('Ketik angkanya (1-3) atau 0 untuk batal.');
+
+    return lines.join('\n');
+}
+
+export async function getStatusCheckProviderMapping(): Promise<Map<string, string>> {
+    const { isProviderBlocked } = await import('../supabase');
+
+    const [pasarjayaBlocked, dharmajayaBlocked, foodStationBlocked] = await Promise.all([
+        isProviderBlocked('PASARJAYA'),
+        isProviderBlocked('DHARMAJAYA'),
+        isProviderBlocked('FOOD_STATION'),
+    ]);
+
+    const mapping = new Map<string, string>();
+    let idx = 1;
+    if (!dharmajayaBlocked) mapping.set(String(idx++), 'DHARMAJAYA');
+    if (!pasarjayaBlocked) mapping.set(String(idx++), 'PASARJAYA');
+    if (!foodStationBlocked) mapping.set(String(idx++), 'FOOD_STATION');
+
+    return mapping;
+}
+
+export const STATUS_CHECK_NO_DATA_TEXT = (provider: string): string => {
+    const displayName = STATUS_CHECK_PROVIDER_DISPLAY[provider as ProviderType] ?? provider;
+    return `⚠️ Tidak ada data pendaftaran kemarin untuk ${displayName}.`;
+};
+
+export const STATUS_CHECK_PROCESSING_TEXT = (provider: string, count: number): string => {
+    const displayName = STATUS_CHECK_PROVIDER_DISPLAY[provider as ProviderType] ?? provider;
+    return `⏳ Sedang mengecek status pendaftaran ${displayName} (${count} data). Mohon tunggu...`;
+};
 
 // --- MENU & MAPPING LOKASI PASARJAYA (NEW) ---
 export const MENU_PASARJAYA_LOCATIONS = [

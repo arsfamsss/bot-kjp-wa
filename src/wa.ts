@@ -137,6 +137,12 @@ import {
     UNKNOWN_REGION_CONFIRMATION_MESSAGE,
     UNKNOWN_REGION_CONFIRMATION_REMINDER,
     UNKNOWN_REGION_CONFIRMATION_CANCEL_MESSAGE,
+    STATUS_CHECK_PROVIDER_MENU,
+    getStatusCheckProviderMapping,
+    isStatusCheckOpen,
+    getStatusCheckClosedMessage,
+    STATUS_CHECK_NO_DATA_TEXT,
+    STATUS_CHECK_PROCESSING_TEXT,
 } from './config/messages';
 import {
     normalizePhone,
@@ -1907,7 +1913,10 @@ export async function connectToWhatsApp() {
                     return { indices: Array.from(unique).sort((a, b) => a - b) };
                 };
 
-                const resolveStatusSourceItems = async (sourceDate: string) => {
+                const resolveStatusSourceItems = async (
+                    sourceDate: string,
+                    providerFilter?: 'PASARJAYA' | 'DHARMAJAYA' | 'FOOD_STATION'
+                ) => {
                     const { validItems } = await getTodayRecapForSender(senderPhone, sourceDate, 'received_at');
                     const items = validItems.map((item) => ({
                         nama: item.nama,
@@ -1915,8 +1924,89 @@ export async function connectToWhatsApp() {
                         no_ktp: item.no_ktp || '-',
                         no_kk: item.no_kk || '-',
                         jenis_kartu: item.jenis_kartu || null,
+                        lokasi: item.lokasi || undefined,
+                        tanggal_lahir: item.tanggal_lahir || null,
                     }));
-                    return { sourceDate, items };
+
+                    if (!providerFilter) return { sourceDate, items };
+
+                    const filtered = items.filter((item) => {
+                        if (!item.lokasi) return false;
+                        if (providerFilter === 'PASARJAYA') return item.lokasi.startsWith('PASARJAYA');
+                        if (providerFilter === 'DHARMAJAYA') return item.lokasi.startsWith('DHARMAJAYA');
+                        // FOOD_STATION: lokasi bisa 'FOD STATION' atau 'FOOD_STATION'
+                        return item.lokasi.startsWith('FOD STATION') || item.lokasi.startsWith('FOOD_STATION');
+                    });
+
+                    return { sourceDate, items: filtered };
+                };
+
+                // --- STATUS CHECK: shared helper for provider-based status check ---
+                const processProviderStatusCheck = async (providerKey: 'PASARJAYA' | 'DHARMAJAYA' | 'FOOD_STATION'): Promise<{ text: string | null; done: boolean }> => {
+                    const sourceDateDefault = shiftIsoDate(processingDayKey, -1);
+                    const targetDate = shiftIsoDate(processingDayKey, 1);
+                    const { sourceDate, items } = await resolveStatusSourceItems(sourceDateDefault, providerKey);
+
+                    if (!items.length) {
+                        const { validCount: todayCount } = await getTodayRecapForSender(senderPhone, processingDayKey, 'received_at');
+                        if (todayCount > 0) {
+                            const displayDate = sourceDateDefault.split('-').reverse().join('-');
+                            return {
+                                text: [
+                                    '⚠️ Data hari ini belum bisa dicek statusnya sekarang.',
+                                    '✅ Data hari ini baru bisa dicek besok lewat menu CEK STATUS PENDAFTARAN.',
+                                    `📌 Sumber cek status saat ini: data kemarin (${displayDate}).`,
+                                ].join('\n'),
+                                done: false,
+                            };
+                        }
+                        return { text: STATUS_CHECK_NO_DATA_TEXT(providerKey), done: false };
+                    }
+
+                    statusCheckInProgressByPhone.set(senderPhone, true);
+                    userFlowByPhone.delete(senderPhone);
+                    try {
+                        await sock.sendMessage(remoteJid, { text: STATUS_CHECK_PROCESSING_TEXT(providerKey, items.length) });
+
+                        if (providerKey === 'DHARMAJAYA') {
+                            const results = await checkRegistrationStatuses(items, targetDate);
+                            const summary = buildStatusSummaryMessage(results, targetDate);
+                            const failedData = buildFailedDataCopyMessage(results);
+                            await sock.sendMessage(remoteJid, { text: summary });
+                            if (failedData) {
+                                await sock.sendMessage(remoteJid, { text: failedData.header });
+                                await sock.sendMessage(remoteJid, { text: failedData.body });
+                            }
+                        } else if (providerKey === 'PASARJAYA') {
+                            const { checkPasarjayaStatuses } = await import('./services/pasarjayaStatusCheck');
+                            const { buildPasarjayaStatusSummary, buildPasarjayaFailedCopy } = await import('./services/statusCheckFormatter');
+                            const results = await checkPasarjayaStatuses(items);
+                            const summary = buildPasarjayaStatusSummary(results, sourceDate);
+                            const failedData = buildPasarjayaFailedCopy(results);
+                            await sock.sendMessage(remoteJid, { text: summary });
+                            if (failedData) {
+                                await sock.sendMessage(remoteJid, { text: failedData.header });
+                                await sock.sendMessage(remoteJid, { text: failedData.body });
+                            }
+                        } else if (providerKey === 'FOOD_STATION') {
+                            const { checkFoodStationStatuses } = await import('./services/foodStationStatusCheck');
+                            const { buildFoodStationStatusSummary, buildFoodStationFailedCopy } = await import('./services/statusCheckFormatter');
+                            const results = await checkFoodStationStatuses(items);
+                            const summary = buildFoodStationStatusSummary(results, sourceDate);
+                            const failedData = buildFoodStationFailedCopy(results);
+                            await sock.sendMessage(remoteJid, { text: summary });
+                            if (failedData) {
+                                await sock.sendMessage(remoteJid, { text: failedData.header });
+                                await sock.sendMessage(remoteJid, { text: failedData.body });
+                            }
+                        }
+                    } catch (error) {
+                        console.error('status check flow error:', error);
+                        await sock.sendMessage(remoteJid, { text: '❌ Gagal cek status pendaftaran. Silakan coba lagi.' });
+                    } finally {
+                        statusCheckInProgressByPhone.delete(senderPhone);
+                    }
+                    return { text: null, done: true };
                 };
 
                 const currentLocation = userLocationChoice.get(senderPhone) || 'DHARMAJAYA'; // Default to old style (Dharmajaya) if unknown
@@ -3035,8 +3125,30 @@ export async function connectToWhatsApp() {
                     }
                     continue;
                 }
+                else if (currentUserFlow === 'CHECK_STATUS_SELECT_PROVIDER') {
+                    if (normalized === '0') {
+                        userFlowByPhone.delete(senderPhone);
+                        replyText = MENU_MESSAGE;
+                    } else {
+                        const providerMap = await getStatusCheckProviderMapping();
+                        const providerKey = providerMap.get(normalized) as 'PASARJAYA' | 'DHARMAJAYA' | 'FOOD_STATION' | undefined;
+
+                        if (!providerKey) {
+                            replyText = await STATUS_CHECK_PROVIDER_MENU();
+                        } else if (!isStatusCheckOpen(providerKey)) {
+                            replyText = getStatusCheckClosedMessage(providerKey);
+                        } else if (statusCheckInProgressByPhone.get(senderPhone)) {
+                            replyText = '⏳ Permintaan cek status sebelumnya masih diproses. Mohon tunggu sampai selesai.';
+                        } else {
+                            const result = await processProviderStatusCheck(providerKey);
+                            if (result.done) continue;
+                            replyText = result.text!;
+                        }
+                    }
+                    if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
+                    continue;
+                }
                 else if (currentUserFlow === 'DELETE_DATA') {
-                    // Logic processing input angka untuk hapus
                     const input = normalized;
 
                     if (input === '0') {
@@ -6958,46 +7070,21 @@ export async function connectToWhatsApp() {
                     if (statusCheckInProgressByPhone.get(senderPhone)) {
                         replyText = '⏳ Permintaan cek status sebelumnya masih diproses. Mohon tunggu sampai selesai.';
                     } else {
-                        const sourceDateDefault = shiftIsoDate(processingDayKey, -1);
-                        const targetDate = shiftIsoDate(processingDayKey, 1);
-                        const { sourceDate, items } = await resolveStatusSourceItems(sourceDateDefault);
-
-                        if (!items.length) {
-                            const { validCount: todayCount } = await getTodayRecapForSender(senderPhone, processingDayKey, 'received_at');
-                            if (todayCount > 0) {
-                                replyText = [
-                                    '⚠️ Data hari ini belum bisa dicek statusnya sekarang.',
-                                    '✅ Data hari ini baru bisa dicek besok lewat menu CEK STATUS PENDAFTARAN.',
-                                    `📌 Sumber cek status saat ini: data kemarin (${sourceDateDefault}).`,
-                                ].join('\n');
+                        const providerMap = await getStatusCheckProviderMapping();
+                        if (providerMap.size === 0) {
+                            replyText = '⛔ Semua lokasi sedang tutup. Silakan coba lagi nanti.';
+                        } else if (providerMap.size === 1) {
+                            const providerKey = [...providerMap.values()][0] as 'PASARJAYA' | 'DHARMAJAYA' | 'FOOD_STATION';
+                            if (!isStatusCheckOpen(providerKey)) {
+                                replyText = getStatusCheckClosedMessage(providerKey);
                             } else {
-                                replyText = '⚠️ Data kemarin belum ditemukan. Silakan kirim data dulu lalu cek status besok.';
+                                const result = await processProviderStatusCheck(providerKey);
+                                if (result.done) continue;
+                                replyText = result.text!;
                             }
                         } else {
-                            statusCheckInProgressByPhone.set(senderPhone, true);
-                            try {
-                                const dateDisplayLong = formatLongIndonesianDate(targetDate);
-                                await sock.sendMessage(remoteJid, {
-                                    text: `⏳ Sedang cek status pendaftaran (${items.length} data) untuk pengambilan ${dateDisplayLong}. Mohon tunggu...`
-                                });
-
-                                const results = await checkRegistrationStatuses(items, targetDate);
-                                const summary = buildStatusSummaryMessage(results, targetDate);
-                                const failedData = buildFailedDataCopyMessage(results);
-
-                                await sock.sendMessage(remoteJid, { text: summary });
-
-                                if (failedData) {
-                                    await sock.sendMessage(remoteJid, { text: failedData.header });
-                                    await sock.sendMessage(remoteJid, { text: failedData.body });
-                                }
-                            } catch (error) {
-                                console.error('status check flow error:', error);
-                                await sock.sendMessage(remoteJid, { text: '❌ Gagal cek status pendaftaran. Silakan coba lagi.' });
-                            } finally {
-                                statusCheckInProgressByPhone.delete(senderPhone);
-                            }
-                            continue;
+                            replyText = await STATUS_CHECK_PROVIDER_MENU();
+                            userFlowByPhone.set(senderPhone, 'CHECK_STATUS_SELECT_PROVIDER');
                         }
                     }
                 } else if (normalized === '6' || normalized === 'BANTUAN') {

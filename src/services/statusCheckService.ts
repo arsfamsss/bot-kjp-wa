@@ -65,6 +65,8 @@ export interface StatusCheckItem {
     no_ktp: string;
     no_kk: string;
     jenis_kartu?: string | null;
+    lokasi?: string;
+    tanggal_lahir?: string | null;
 }
 
 export type StatusState = 'BERHASIL' | 'GAGAL' | 'ERROR';
