@@ -65,6 +65,7 @@ import {
     addBlockedKjp,
     addBlockedKtp,
     removeBlockedKtp,
+    changeBlockedKtpType,
     removeBlockedKjp,
     addBlockedKk,
     removeBlockedKk,
@@ -193,6 +194,8 @@ setInterval(() => {
 }, 10_000);
 
 let sock!: WASocket;
+
+const pendingKtpTypeChange = new Map<string, { noKtp: string; currentType: 'permanent' | 'temporary'; newType: 'permanent' | 'temporary' }>();
 
 // --- EXPONENTIAL BACKOFF RECONNECT ---
 let retryCount = 0;
@@ -503,9 +506,11 @@ function buildBlockedKtpMenuText(): string {
     return [
         '🛡️ *KELOLA BLOKIR NO KTP*',
         '',
-        '1️⃣ Tambah No KTP ke blokir',
-        '2️⃣ Lihat daftar No KTP terblokir',
-        '3️⃣ Buka blokir No KTP',
+        '1️⃣ Tambah Blokir Permanen',
+        '2️⃣ Tambah Blokir Sementara',
+        '3️⃣ Lihat Daftar Blokir',
+        '4️⃣ Buka Blokir (Hapus)',
+        '5️⃣ Ubah Jenis Blokir',
         '',
         '0️⃣ Kembali ke Menu Admin',
     ].join('\n');
@@ -4922,9 +4927,9 @@ export async function connectToWhatsApp() {
                             adminFlowByPhone.set(senderPhone, 'MENU');
                             replyText = ADMIN_MENU_MESSAGE;
                         } else if (normalized === '1') {
-                            adminFlowByPhone.set(senderPhone, 'BLOCKED_KTP_ADD');
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_KTP_ADD_PERMANENT');
                             replyText = [
-                                '🛡️ *TAMBAH BLOKIR NO KTP*',
+                                '🛡️ *TAMBAH BLOKIR PERMANEN NO KTP*',
                                 '',
                                 'Ketik satu atau beberapa baris.',
                                 'Format tiap baris: nomor, alasan (opsional)',
@@ -4935,20 +4940,44 @@ export async function connectToWhatsApp() {
                                 '_Ketik 0 untuk kembali._'
                             ].join('\n');
                         } else if (normalized === '2') {
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_KTP_ADD_TEMPORARY');
+                            replyText = [
+                                '🛡️ *TAMBAH BLOKIR SEMENTARA NO KTP*',
+                                '',
+                                'Ketik satu atau beberapa baris.',
+                                'Format tiap baris: nomor, alasan (opsional)',
+                                'Contoh:',
+                                '3173010202020001, KTP bermasalah',
+                                '3173010202020002',
+                                '',
+                                '_Ketik 0 untuk kembali._'
+                            ].join('\n');
+                        } else if (normalized === '3') {
                             const list = await getBlockedKtpList(200);
-                            if (list.length === 0) {
-                                replyText = '📂 Belum ada No KTP yang diblokir.';
+                            const permanent = list.filter((r: { block_type?: string }) => r.block_type === 'permanent');
+                            const temporary = list.filter((r: { block_type?: string }) => (r.block_type || 'temporary') === 'temporary');
+                            const lines = ['📋 *DAFTAR BLOKIR NO KTP*', ''];
+                            lines.push(`🔴 *BLOKIR PERMANEN* (${permanent.length})`);
+                            if (permanent.length === 0) {
+                                lines.push('Belum ada.');
                             } else {
-                                const lines = ['📋 *DAFTAR NO KTP TERBLOKIR*', ''];
-                                list.forEach((row: any, idx: number) => {
-                                    const reasonText = row.reason ? ` - ${row.reason}` : '';
-                                    lines.push(`${idx + 1}. ${row.no_ktp}${reasonText}`);
+                                permanent.forEach((row, idx) => {
+                                    lines.push(`${idx + 1}. ${row.no_ktp}${row.reason ? ` - ${row.reason}` : ''}`);
                                 });
-                                replyText = lines.join('\n');
                             }
+                            lines.push('');
+                            lines.push(`🟡 *BLOKIR SEMENTARA* (${temporary.length})`);
+                            if (temporary.length === 0) {
+                                lines.push('Belum ada.');
+                            } else {
+                                temporary.forEach((row, idx) => {
+                                    lines.push(`${idx + 1}. ${row.no_ktp}${row.reason ? ` - ${row.reason}` : ''}`);
+                                });
+                            }
+                            replyText = lines.join('\n');
                             replyText += '\n\n' + buildBlockedKtpMenuText();
                             adminFlowByPhone.set(senderPhone, 'BLOCKED_KTP_MENU');
-                        } else if (normalized === '3') {
+                        } else if (normalized === '4') {
                             adminFlowByPhone.set(senderPhone, 'BLOCKED_KTP_DELETE');
                             replyText = [
                                 '🛡️ *HAPUS BLOKIR NO KTP*',
@@ -4957,10 +4986,19 @@ export async function connectToWhatsApp() {
                                 '',
                                 '_Ketik 0 untuk kembali._'
                             ].join('\n');
+                        } else if (normalized === '5') {
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_KTP_CHANGE_TYPE');
+                            replyText = [
+                                '🔄 *UBAH JENIS BLOKIR NO KTP*',
+                                '',
+                                'Masukkan No KTP yang ingin diubah jenis blokirnya:',
+                                '',
+                                '_Ketik 0 untuk kembali._'
+                            ].join('\n');
                         } else {
-                            replyText = '⚠️ Pilihan tidak dikenali. Ketik 1, 2, 3, atau 0.';
+                            replyText = '⚠️ Pilihan tidak dikenali. Ketik 1-5 atau 0.';
                         }
-                    } else if (currentAdminFlow === 'BLOCKED_KTP_ADD') {
+                    } else if (currentAdminFlow === 'BLOCKED_KTP_ADD_PERMANENT') {
                         if (normalized === '0') {
                             adminFlowByPhone.set(senderPhone, 'BLOCKED_KTP_MENU');
                             replyText = buildBlockedKtpMenuText();
@@ -4981,7 +5019,42 @@ export async function connectToWhatsApp() {
                                         '_Ketik 0 untuk kembali._'
                                     ].join('\n');
                                 } else {
-                                    const summary = await buildBlockedBulkAddSummary('HASIL TAMBAH BLOKIR NO KTP', items, addBlockedKtp);
+                                    const summary = await buildBlockedBulkAddSummary(
+                                        'HASIL TAMBAH BLOKIR PERMANEN NO KTP',
+                                        items,
+                                        (nomor: string, alasan?: string) => addBlockedKtp(nomor, alasan, 'permanent')
+                                    );
+                                    replyText = `${summary}\n\n${buildBlockedKtpMenuText()}`;
+                                    adminFlowByPhone.set(senderPhone, 'BLOCKED_KTP_MENU');
+                                }
+                            }
+                        }
+                    } else if (currentAdminFlow === 'BLOCKED_KTP_ADD_TEMPORARY') {
+                        if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_KTP_MENU');
+                            replyText = buildBlockedKtpMenuText();
+                        } else {
+                            const bulkValidationError = validateBlockedBulkAddInput(rawTrim);
+                            if (bulkValidationError) {
+                                replyText = `${bulkValidationError}\n\n${buildBlockedKtpMenuText()}`;
+                                adminFlowByPhone.set(senderPhone, 'BLOCKED_KTP_MENU');
+                            } else {
+                                const items = parseBlockedBulkAddInput(rawTrim);
+                                if (items.length === 0) {
+                                    replyText = [
+                                        '⚠️ Tidak ada baris yang bisa diproses.',
+                                        '',
+                                        'Ketik satu atau beberapa baris.',
+                                        'Format tiap baris: nomor, alasan (opsional)',
+                                        '',
+                                        '_Ketik 0 untuk kembali._'
+                                    ].join('\n');
+                                } else {
+                                    const summary = await buildBlockedBulkAddSummary(
+                                        'HASIL TAMBAH BLOKIR SEMENTARA NO KTP',
+                                        items,
+                                        (nomor: string, alasan?: string) => addBlockedKtp(nomor, alasan, 'temporary')
+                                    );
                                     replyText = `${summary}\n\n${buildBlockedKtpMenuText()}`;
                                     adminFlowByPhone.set(senderPhone, 'BLOCKED_KTP_MENU');
                                 }
@@ -5000,6 +5073,58 @@ export async function connectToWhatsApp() {
                             }
                             replyText += '\n\n' + buildBlockedKtpMenuText();
                             adminFlowByPhone.set(senderPhone, 'BLOCKED_KTP_MENU');
+                        }
+                    } else if (currentAdminFlow === 'BLOCKED_KTP_CHANGE_TYPE') {
+                        if (normalized === '0') {
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_KTP_MENU');
+                            replyText = buildBlockedKtpMenuText();
+                        } else {
+                            const noKtp = rawTrim.replace(/\D/g, '');
+                            if (noKtp.length !== 16) {
+                                replyText = '⚠️ No KTP harus 16 digit. Silakan coba lagi.\n\n_Ketik 0 untuk kembali._';
+                            } else {
+                                const { data: existing } = await supabase.from('blocked_ktp').select('no_ktp, block_type').eq('no_ktp', noKtp).maybeSingle();
+                                if (!existing) {
+                                    replyText = `❌ KTP ${noKtp} tidak ditemukan di daftar blokir.\n\n_Ketik 0 untuk kembali._`;
+                                } else {
+                                    const currentType: 'permanent' | 'temporary' = existing.block_type === 'permanent' ? 'permanent' : 'temporary';
+                                    const newType: 'permanent' | 'temporary' = currentType === 'permanent' ? 'temporary' : 'permanent';
+                                    const currentLabel = currentType === 'permanent' ? 'Permanen' : 'Sementara';
+                                    const newLabel = newType === 'permanent' ? 'Permanen' : 'Sementara';
+                                    pendingKtpTypeChange.set(senderPhone, { noKtp, currentType, newType });
+                                    adminFlowByPhone.set(senderPhone, 'BLOCKED_KTP_CHANGE_TYPE_CONFIRM');
+                                    replyText = [
+                                        `KTP *${noKtp}* saat ini berstatus *${currentLabel}*.`,
+                                        `Ubah ke *${newLabel}*?`,
+                                        '',
+                                        'Ketik *YA* atau *TIDAK*'
+                                    ].join('\n');
+                                }
+                            }
+                        }
+                    } else if (currentAdminFlow === 'BLOCKED_KTP_CHANGE_TYPE_CONFIRM') {
+                        if (normalized === '0') {
+                            pendingKtpTypeChange.delete(senderPhone);
+                            adminFlowByPhone.set(senderPhone, 'BLOCKED_KTP_MENU');
+                            replyText = buildBlockedKtpMenuText();
+                        } else {
+                            const pending = pendingKtpTypeChange.get(senderPhone);
+                            if (!pending) {
+                                adminFlowByPhone.set(senderPhone, 'BLOCKED_KTP_MENU');
+                                replyText = '⚠️ Sesi telah berakhir.\n\n' + buildBlockedKtpMenuText();
+                            } else if (normalized === 'YA') {
+                                const result = await changeBlockedKtpType(pending.noKtp, pending.newType);
+                                replyText = result.success ? `✅ ${result.message}` : `❌ ${result.message}`;
+                                replyText += '\n\n' + buildBlockedKtpMenuText();
+                                pendingKtpTypeChange.delete(senderPhone);
+                                adminFlowByPhone.set(senderPhone, 'BLOCKED_KTP_MENU');
+                            } else if (normalized === 'TIDAK') {
+                                replyText = 'Dibatalkan.\n\n' + buildBlockedKtpMenuText();
+                                pendingKtpTypeChange.delete(senderPhone);
+                                adminFlowByPhone.set(senderPhone, 'BLOCKED_KTP_MENU');
+                            } else {
+                                replyText = '⚠️ Ketik *YA* atau *TIDAK*.';
+                            }
                         }
                     } else if (currentAdminFlow === 'BLOCKED_KK_MENU') {
                         if (normalized === '0') {

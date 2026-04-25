@@ -327,10 +327,13 @@ export async function checkDuplicatesBatch(
     });
 }
 
+export type KtpBlockType = 'permanent' | 'temporary';
+
 export type BlockedKtpItem = {
     no_ktp: string;
     reason?: string | null;
     created_at?: string;
+    block_type?: KtpBlockType;
 };
 
 export type BlockedKkItem = {
@@ -3188,6 +3191,7 @@ async function cleanupBlockedKtpAtEndOfMonthWib(): Promise<void> {
     const { count, error } = await supabase
         .from('blocked_ktp')
         .delete({ count: 'exact' })
+        .eq('block_type', 'temporary')
         .lt('created_at', startOfNextMonth);
 
     if (error) {
@@ -3207,8 +3211,7 @@ export async function getBlockedKtpList(limit: number = 50): Promise<BlockedKtpI
 
     const { data, error } = await supabase
         .from('blocked_ktp')
-        .select('no_ktp, reason, created_at')
-        .gte('created_at', startOfMonth)
+        .select('no_ktp, reason, created_at, block_type')
         .order('created_at', { ascending: false })
         .limit(limit);
 
@@ -3219,18 +3222,29 @@ export async function getBlockedKtpList(limit: number = 50): Promise<BlockedKtpI
         return [];
     }
 
-    return (data || []) as BlockedKtpItem[];
+    const allData = (data || []) as BlockedKtpItem[];
+    return allData.filter(item => {
+        if (item.block_type === 'permanent') return true;
+        return item.created_at && new Date(item.created_at) >= new Date(startOfMonth);
+    });
 }
 
-export async function addBlockedKtp(noKtpRaw: string, reason?: string): Promise<{ success: boolean; message: string }> {
+export async function addBlockedKtp(noKtpRaw: string, reason?: string, blockType: KtpBlockType = 'temporary'): Promise<{ success: boolean; message: string }> {
     const noKtp = noKtpRaw.replace(/\D/g, '');
     if (noKtp.length !== 16) {
         return { success: false, message: 'No KTP harus 16 digit.' };
     }
 
+    const { data: existing } = await supabase
+        .from('blocked_ktp')
+        .select('block_type')
+        .eq('no_ktp', noKtp)
+        .maybeSingle();
+
     const payload: any = {
         no_ktp: noKtp,
         reason: (reason || '').trim() || null,
+        block_type: blockType,
     };
 
     const { error } = await supabase
@@ -3245,7 +3259,14 @@ export async function addBlockedKtp(noKtpRaw: string, reason?: string): Promise<
         return { success: false, message: 'Gagal database: ' + error.message };
     }
 
-    return { success: true, message: `No KTP ${noKtp} berhasil diblokir.` };
+    const typeLabel = blockType === 'permanent' ? 'permanen' : 'sementara';
+
+    if (existing && existing.block_type && existing.block_type !== blockType) {
+        const oldLabel = existing.block_type === 'permanent' ? 'permanen' : 'sementara';
+        return { success: true, message: `No KTP ${noKtp} sudah diblokir ${oldLabel}. Diubah ke ${typeLabel}.` };
+    }
+
+    return { success: true, message: `No KTP ${noKtp} berhasil diblokir ${typeLabel}.` };
 }
 
 export async function removeBlockedKtp(noKtpRaw: string): Promise<{ success: boolean; message: string }> {
@@ -3253,6 +3274,12 @@ export async function removeBlockedKtp(noKtpRaw: string): Promise<{ success: boo
     if (noKtp.length !== 16) {
         return { success: false, message: 'No KTP harus 16 digit.' };
     }
+
+    const { data: existing } = await supabase
+        .from('blocked_ktp')
+        .select('block_type')
+        .eq('no_ktp', noKtp)
+        .maybeSingle();
 
     const { count, error } = await supabase
         .from('blocked_ktp')
@@ -3271,7 +3298,51 @@ export async function removeBlockedKtp(noKtpRaw: string): Promise<{ success: boo
         return { success: false, message: `No KTP ${noKtp} tidak ditemukan di daftar blokir.` };
     }
 
-    return { success: true, message: `No KTP ${noKtp} berhasil dibuka blokirnya.` };
+    const typeLabel = existing?.block_type === 'permanent' ? 'permanen' : 'sementara';
+    return { success: true, message: `Blokir ${typeLabel} untuk No KTP ${noKtp} berhasil dibuka.` };
+}
+
+export async function changeBlockedKtpType(noKtpRaw: string, newType: KtpBlockType): Promise<{ success: boolean; message: string }> {
+    const noKtp = noKtpRaw.replace(/\D/g, '');
+    if (noKtp.length !== 16) {
+        return { success: false, message: 'No KTP harus 16 digit.' };
+    }
+
+    const { data: existing } = await supabase
+        .from('blocked_ktp')
+        .select('block_type')
+        .eq('no_ktp', noKtp)
+        .maybeSingle();
+
+    if (!existing) {
+        return { success: false, message: `No KTP ${noKtp} tidak ditemukan di daftar blokir.` };
+    }
+
+    if (existing.block_type === newType) {
+        const label = newType === 'permanent' ? 'Permanen' : 'Sementara';
+        return { success: false, message: `No KTP ${noKtp} sudah berstatus ${label}.` };
+    }
+
+    const updatePayload: any = { block_type: newType };
+    if (newType === 'temporary') {
+        updatePayload.created_at = new Date().toISOString();
+    }
+
+    const { error } = await supabase
+        .from('blocked_ktp')
+        .update(updatePayload)
+        .eq('no_ktp', noKtp);
+
+    if (error) {
+        if (error.code === '42P01') {
+            return { success: false, message: 'Tabel blocked_ktp belum dibuat di database.' };
+        }
+        console.error('Error changeBlockedKtpType:', error);
+        return { success: false, message: 'Gagal database: ' + error.message };
+    }
+
+    const label = newType === 'permanent' ? 'Permanen' : 'Sementara';
+    return { success: true, message: `Jenis blokir No KTP ${noKtp} berhasil diubah ke ${label}.` };
 }
 
 export async function checkBlockedKtpBatch(items: LogItem[]): Promise<LogItem[]> {
@@ -3284,9 +3355,8 @@ export async function checkBlockedKtpBatch(items: LogItem[]): Promise<LogItem[]>
     const ktpValues = Array.from(new Set(activeItems.map(it => it.parsed.no_ktp)));
     const { data, error } = await supabase
         .from('blocked_ktp')
-        .select('no_ktp, reason')
-        .in('no_ktp', ktpValues)
-        .gte('created_at', startOfMonth);
+        .select('no_ktp, reason, block_type, created_at')
+        .in('no_ktp', ktpValues);
 
     if (error) {
         if (error.code !== '42P01') {
@@ -3295,9 +3365,14 @@ export async function checkBlockedKtpBatch(items: LogItem[]): Promise<LogItem[]>
         return items;
     }
 
-    const blockedMap = new Map<string, string | null>();
-    (data || []).forEach((row: any) => {
-        blockedMap.set(row.no_ktp, row.reason || null);
+    const blockedMap = new Map<string, { reason: string | null; block_type: string }>();
+    const blocked = (data || []).filter((row: any) => {
+        if (row.block_type === 'permanent') return true;
+        if (!row.created_at) return true;
+        return new Date(row.created_at) >= new Date(startOfMonth);
+    });
+    blocked.forEach((row: any) => {
+        blockedMap.set(row.no_ktp, { reason: row.reason || null, block_type: row.block_type || 'temporary' });
     });
 
     if (blockedMap.size === 0) return items;
@@ -3305,8 +3380,12 @@ export async function checkBlockedKtpBatch(items: LogItem[]): Promise<LogItem[]>
     return items.map(item => {
         if (item.status !== 'OK') return item;
 
-        const reason = blockedMap.get(item.parsed.no_ktp);
-        if (reason === undefined) return item;
+        const entry = blockedMap.get(item.parsed.no_ktp);
+        if (!entry) return item;
+
+        const detail = entry.block_type === 'permanent'
+            ? 'KTP tidak dapat digunakan, silahkan ganti KTP lain'
+            : 'KTP Telah Mencapai Batas 5x Pendaftaran Bulan ini';
 
         return {
             ...item,
@@ -3316,7 +3395,7 @@ export async function checkBlockedKtpBatch(items: LogItem[]): Promise<LogItem[]>
                 {
                     field: 'no_ktp',
                     type: 'ktp_blocked',
-                    detail: 'KTP Telah Mencapai Batas 5x Pendaftaran Bulan ini'
+                    detail
                 }
             ]
         };
