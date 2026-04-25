@@ -1943,7 +1943,10 @@ export async function connectToWhatsApp() {
 
                 // --- STATUS CHECK: shared helper for provider-based status check ---
                 const processProviderStatusCheck = async (providerKey: 'PASARJAYA' | 'DHARMAJAYA' | 'FOOD_STATION'): Promise<{ text: string | null; done: boolean }> => {
-                    const sourceDateDefault = shiftIsoDate(processingDayKey, -1);
+                    // Food Station: cek data hari ini. Dharmajaya & Pasarjaya: cek data kemarin.
+                    const sourceDateDefault = providerKey === 'FOOD_STATION'
+                        ? processingDayKey
+                        : shiftIsoDate(processingDayKey, -1);
                     const targetDate = shiftIsoDate(processingDayKey, 1);
                     const { sourceDate, items } = await resolveStatusSourceItems(sourceDateDefault, providerKey);
 
@@ -1956,6 +1959,8 @@ export async function connectToWhatsApp() {
                                     '⚠️ Data hari ini belum bisa dicek statusnya sekarang.',
                                     '✅ Data hari ini baru bisa dicek besok lewat menu CEK STATUS PENDAFTARAN.',
                                     `📌 Sumber cek status saat ini: data kemarin (${displayDate}).`,
+                                    '',
+                                    '_Ketik 0 untuk kembali atau ketik MENU untuk menu utama._',
                                 ].join('\n'),
                                 done: false,
                             };

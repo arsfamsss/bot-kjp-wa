@@ -194,7 +194,8 @@ export async function getStatusCheckProviderMapping(): Promise<Map<string, strin
 
 export const STATUS_CHECK_NO_DATA_TEXT = (provider: string): string => {
     const displayName = STATUS_CHECK_PROVIDER_DISPLAY[provider as ProviderType] ?? provider;
-    return `⚠️ Tidak ada data pendaftaran kemarin untuk ${displayName}.`;
+    const sumber = provider === 'FOOD_STATION' ? 'hari ini' : 'kemarin';
+    return `⚠️ Tidak ada data pendaftaran ${sumber} untuk ${displayName}.\n\n_Ketik 0 untuk kembali atau ketik MENU untuk menu utama._`;
 };
 
 export const STATUS_CHECK_PROCESSING_TEXT = (provider: string, count: number): string => {
