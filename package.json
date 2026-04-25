@@ -7,7 +7,7 @@
     "test": "npx bun test --isolate",
     "dev": "ts-node src/index.ts",
     "smoke:whitelist": "ts-node src/scripts/smokeWhitelist.ts",
-    "build": "tsc && xcopy src\\data dist\\data /E /I /Y",
+    "build": "tsc && node -e \"const fs=require('fs'),p=require('path');const s=p.join('src','data'),d=p.join('dist','data');fs.mkdirSync(d,{recursive:true});fs.readdirSync(s).forEach(f=>fs.copyFileSync(p.join(s,f),p.join(d,f)))\"",
     "start": "node dist/index.js"
   },
   "keywords": [],
