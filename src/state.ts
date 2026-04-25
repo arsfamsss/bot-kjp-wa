@@ -21,6 +21,8 @@ export type UserFlowState =
     | 'EDIT_CONFIRMATION' // PATCH 2
     | 'EDIT_PICK_LOCATION' // PATCH 3: Edit Lokasi - Menu Pilih
     | 'EDIT_INPUT_MANUAL_LOCATION' // PATCH 3: Edit Lokasi - Input Manual (Pasarjaya)
+    | 'INPUT_MANUAL_LOCATION_CONFIRM'
+    | 'EDIT_INPUT_MANUAL_LOCATION_CONFIRM'
     | 'UNDERAGE_CONFIRMATION'
     | 'UNKNOWN_REGION_CONFIRMATION';
 
@@ -196,6 +198,9 @@ export const editSessionByPhone = new Map<string, EditSession>();
 
 export const statusCheckSelectionByPhone = new Map<string, StatusCheckSelectionSession>();
 export const statusCheckInProgressByPhone = new Map<string, boolean>();
+
+// Kandidat lokasi untuk disambiguation flow (Pasarjaya Lokasi Lain)
+export const pendingLocationCandidates = new Map<string, Array<{ kode: string; nama: string; wilayah: string; wilayahNama: string; normalized: string; normalizedNospace: string }>>();
 
 // --- NEW: Sesi Kelola Kontak Admin ---
 export type ContactSession = {

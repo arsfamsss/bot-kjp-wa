@@ -176,6 +176,7 @@ import {
     statusCheckInProgressByPhone,
     pendingUnderageConfirmationByPhone,
     pendingUnknownRegionConfirmationByPhone,
+    pendingLocationCandidates,
 } from './state';
 import type {
     PendingUnderageConfirmationSession,
@@ -1199,6 +1200,7 @@ function clearTransientSessionContext(
     adminUserListCache.delete(senderPhone + '_selected');
     statusCheckSelectionByPhone.delete(senderPhone);
     statusCheckInProgressByPhone.delete(senderPhone);
+    pendingLocationCandidates.delete(senderPhone);
     pendingDelete.delete(senderPhone);
 
     if (options?.clearPendingConfirmations) {
@@ -2597,33 +2599,112 @@ export async function connectToWhatsApp() {
                     } else if (rawTrim.length < 3) {
                         replyText = '⚠️ Nama lokasi terlalu pendek. Minimal 3 karakter.\n\n_Ketik ulang atau 0 untuk batal._';
                     } else {
-                        // Valid manual input
-                        session.newValue = `PASARJAYA - ${rawTrim}`;
-                        session.selectedFieldKey = 'lokasi';
-                        editSessionMap.set(senderPhone, session);
+                        // Resolve lokasi dari database referensi
+                        const { resolveLocation, MAX_CANDIDATES } = await import('./services/locationResolver');
+                        const matches = resolveLocation(rawTrim);
 
-                        // Get old location for confirmation display
-                        const record = session.recordsToday.find(r => r.id === session.selectedRecordId);
-                        const oldValue = record?.lokasi || '(Tidak diketahui)';
+                        if (matches.length === 0) {
+                            replyText = '❌ Lokasi "' + rawTrim + '" tidak ditemukan di database Pasarjaya.\n\nSilakan ketik ulang nama lokasi yang lebih spesifik, atau ketik 0 untuk batal.';
+                            // State tetap EDIT_INPUT_MANUAL_LOCATION
+                        } else if (matches.length === 1) {
+                            // Single match — langsung pakai nama resmi
+                            session.newValue = `PASARJAYA - ${matches[0].nama}`;
+                            session.selectedFieldKey = 'lokasi';
+                            editSessionMap.set(senderPhone, session);
 
-                        // Go to confirmation
-                        userFlowByPhone.set(senderPhone, 'EDIT_CONFIRMATION');
-                        replyText = [
-                            '📝 *KONFIRMASI PERUBAHAN*',
-                            '',
-                            'Field: *Lokasi*',
-                            '',
-                            '🔻 *Data Lama:*',
-                            `${oldValue}`,
-                            '',
-                            '🔺 *Data Baru:*',
-                            `${session.newValue}`,
-                            '',
-                            'Apakah Anda yakin ingin menyimpan perubahan ini?',
-                            '',
-                            'Ketik *1* atau *OK* untuk SIMPAN',
-                            'Ketik *0* atau *BATAL* untuk membatalkan'
-                        ].join('\n');
+                            // Get old location for confirmation display
+                            const record = session.recordsToday.find(r => r.id === session.selectedRecordId);
+                            const oldValue = record?.lokasi || '(Tidak diketahui)';
+
+                            userFlowByPhone.set(senderPhone, 'EDIT_CONFIRMATION');
+                            replyText = [
+                                '📝 *KONFIRMASI PERUBAHAN*',
+                                '',
+                                'Field: *Lokasi*',
+                                '',
+                                '🔻 *Data Lama:*',
+                                `${oldValue}`,
+                                '',
+                                '🔺 *Data Baru:*',
+                                `${session.newValue}`,
+                                '',
+                                'Apakah Anda yakin ingin menyimpan perubahan ini?',
+                                '',
+                                'Ketik *1* atau *OK* untuk SIMPAN',
+                                'Ketik *0* atau *BATAL* untuk membatalkan'
+                            ].join('\n');
+                        } else if (matches.length > MAX_CANDIDATES) {
+                            replyText = '⚠️ Ditemukan ' + matches.length + ' lokasi yang cocok. Coba ketik nama lokasi yang lebih spesifik.\n\nKetik 0 untuk batal.';
+                            // State tetap EDIT_INPUT_MANUAL_LOCATION
+                        } else {
+                            // 2-10 matches — disambiguation
+                            pendingLocationCandidates.set(senderPhone, matches);
+                            userFlowByPhone.set(senderPhone, 'EDIT_INPUT_MANUAL_LOCATION_CONFIRM');
+
+                            const listItems = matches.map((m, i) => `${i + 1}. [${m.wilayahNama}] ${m.nama}`).join('\n');
+                            replyText = [
+                                '📍 Ditemukan ' + matches.length + ' lokasi yang cocok:',
+                                '',
+                                listItems,
+                                '',
+                                'Balas dengan angka pilihanmu (1-' + matches.length + '), atau ketik 0 untuk batal.'
+                            ].join('\n');
+                        }
+                    }
+                    if (replyText) {
+                        await sock.sendMessage(remoteJid, { text: replyText });
+                        continue;
+                    }
+                }
+                else if (currentUserFlow === 'EDIT_INPUT_MANUAL_LOCATION_CONFIRM') {
+                    const session = editSessionMap.get(senderPhone);
+                    const candidates = pendingLocationCandidates.get(senderPhone);
+
+                    if (!session) {
+                        replyText = '❌ Sesi edit kedaluwarsa. Ulangi ketik EDIT.';
+                        userFlowByPhone.set(senderPhone, 'NONE');
+                        pendingLocationCandidates.delete(senderPhone);
+                    } else if (!candidates || candidates.length === 0) {
+                        replyText = '❌ Sesi kedaluwarsa. Silakan ketik ulang nama lokasi.';
+                        userFlowByPhone.set(senderPhone, 'EDIT_INPUT_MANUAL_LOCATION');
+                        pendingLocationCandidates.delete(senderPhone);
+                    } else {
+                        const choice = parseInt(normalized, 10);
+                        if (choice === 0) {
+                            pendingLocationCandidates.delete(senderPhone);
+                            userFlowByPhone.set(senderPhone, 'EDIT_PICK_FIELD');
+                            replyText = '❌ Dibatalkan. Silakan pilih field yang ingin diedit.';
+                        } else if (isNaN(choice) || choice < 1 || choice > candidates.length) {
+                            replyText = '❌ Pilihan tidak valid. Balas angka 1-' + candidates.length + ' atau ketik 0 untuk batal.';
+                        } else {
+                            const selected = candidates[choice - 1];
+                            pendingLocationCandidates.delete(senderPhone);
+
+                            session.newValue = `PASARJAYA - ${selected.nama}`;
+                            session.selectedFieldKey = 'lokasi';
+                            editSessionMap.set(senderPhone, session);
+
+                            const record = session.recordsToday.find(r => r.id === session.selectedRecordId);
+                            const oldValue = record?.lokasi || '(Tidak diketahui)';
+
+                            userFlowByPhone.set(senderPhone, 'EDIT_CONFIRMATION');
+                            replyText = [
+                                '📝 *KONFIRMASI PERUBAHAN*',
+                                '',
+                                'Field: *Lokasi*',
+                                '',
+                                '🔻 *Data Lama:*',
+                                `${oldValue}`,
+                                '',
+                                '🔺 *Data Baru:*',
+                                `${session.newValue}`,
+                                '',
+                                'Apakah Anda yakin ingin menyimpan perubahan ini?',
+                                '',
+                                'Ketik *1* atau *OK* untuk SIMPAN',
+                                'Ketik *0* atau *BATAL* untuk membatalkan'
+                            ].join('\n');
+                        }
                     }
                     if (replyText) {
                         await sock.sendMessage(remoteJid, { text: replyText });
@@ -2814,7 +2895,7 @@ export async function connectToWhatsApp() {
 
                 // Skip validation block jika user sedang dalam flow yang butuh memilih sub-lokasi
                 // Biar handler flow yang proses data-nya
-                const skipDataValidation = (currentUserFlow as string) === 'SELECT_PASARJAYA_SUB' || (currentUserFlow as string) === 'SELECT_DHARMAJAYA_SUB' || (currentUserFlow as string) === 'INPUT_MANUAL_LOCATION';
+                const skipDataValidation = (currentUserFlow as string) === 'SELECT_PASARJAYA_SUB' || (currentUserFlow as string) === 'SELECT_DHARMAJAYA_SUB' || (currentUserFlow as string) === 'INPUT_MANUAL_LOCATION' || (currentUserFlow as string) === 'INPUT_MANUAL_LOCATION_CONFIRM' || (currentUserFlow as string) === 'EDIT_INPUT_MANUAL_LOCATION_CONFIRM';
 
                 if (potentialData && !skipDataValidation && !isTemplateCommand && activeAdminFlow === 'NONE') {
                     const existingLocation = userLocationChoice.get(senderPhone);
@@ -3594,113 +3675,272 @@ export async function connectToWhatsApp() {
                             replyText = '✅ Batal.';
                         }
                     } else {
-                        userLocationChoice.set(senderPhone, 'PASARJAYA');
-                        userSpecificLocationChoice.set(senderPhone, `PASARJAYA - ${lokasiName}`); // STORE SPECIFIC LOCATION
-                        console.log(`[DEBUG] SET Specific Location (Manual) for ${senderPhone}: PASARJAYA - ${lokasiName}`);
+                        // Resolve lokasi dari database referensi
+                        const { resolveLocation, MAX_CANDIDATES } = await import('./services/locationResolver');
+                        const matches = resolveLocation(lokasiName);
 
-                        // CEK PENDING DATA (Copy logic from above/Shared Logic ideally)
-                        const pendingData = pendingRegistrationData.get(senderPhone);
-                        if (pendingData) {
-                            await sock.sendMessage(remoteJid, { text: `🔄 Memproses data untuk Pasarjaya (${lokasiName})...` });
+                        if (matches.length === 0) {
+                            // No match
+                            replyText = '❌ Lokasi "' + lokasiName + '" tidak ditemukan di database Pasarjaya.\n\nSilakan ketik ulang nama lokasi yang lebih spesifik, atau ketik 0 untuk batal.';
+                            // State tetap INPUT_MANUAL_LOCATION — user bisa retry
+                        } else if (matches.length === 1) {
+                            // Single match — langsung pakai nama resmi
+                            const officialName = matches[0].nama;
+                            userLocationChoice.set(senderPhone, 'PASARJAYA');
+                            userSpecificLocationChoice.set(senderPhone, `PASARJAYA - ${officialName}`);
+                            console.log(`[DEBUG] SET Specific Location (Manual-Resolved) for ${senderPhone}: PASARJAYA - ${officialName}`);
 
-                            const logJson = await processRawMessageToLogJson({
-                                text: pendingData,
-                                senderPhone,
-                                messageId: msg.key.id,
-                                receivedAt,
-                                tanggal: tanggalWib,
-                                processingDayKey,
-                                locationContext: 'PASARJAYA',
-                                specificLocation: `PASARJAYA - ${lokasiName}` // PASS SPECIFIC LOCATION HERE
-                            });
-                            logJson.sender_name = existingName || undefined;
+                            // CEK PENDING DATA
+                            const pendingData = pendingRegistrationData.get(senderPhone);
+                            if (pendingData) {
+                                await sock.sendMessage(remoteJid, { text: `🔄 Memproses data untuk Pasarjaya (${officialName})...` });
 
-                            if (logJson.stats.total_blocks > 0 && (!logJson.failed_remainder_lines || logJson.failed_remainder_lines.length === 0)) {
-                                const quotaCheck = await checkLocationQuotaBeforeSave(logJson, senderPhone);
-                                if (!quotaCheck.allowed) {
-                                    replyText = quotaCheck.message || '⛔ Batas lokasi tercapai.';
+                                const logJson = await processRawMessageToLogJson({
+                                    text: pendingData,
+                                    senderPhone,
+                                    messageId: msg.key.id,
+                                    receivedAt,
+                                    tanggal: tanggalWib,
+                                    processingDayKey,
+                                    locationContext: 'PASARJAYA',
+                                    specificLocation: `PASARJAYA - ${officialName}`
+                                });
+                                logJson.sender_name = existingName || undefined;
+
+                                if (logJson.stats.total_blocks > 0 && (!logJson.failed_remainder_lines || logJson.failed_remainder_lines.length === 0)) {
+                                    const quotaCheck = await checkLocationQuotaBeforeSave(logJson, senderPhone);
+                                    if (!quotaCheck.allowed) {
+                                        replyText = quotaCheck.message || '⛔ Batas lokasi tercapai.';
+                                        userFlowByPhone.set(senderPhone, 'NONE');
+                                        pendingRegistrationData.delete(senderPhone);
+                                        if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
+                                        continue;
+                                    }
+
+                                    const hasPendingUnknownRegion = await queueUnknownRegionConfirmationIfNeeded({
+                                        sockInstance: sock,
+                                        remoteJid,
+                                        senderPhone,
+                                        logJson,
+                                        originalText: pendingData,
+                                        locationContext: 'PASARJAYA',
+                                        processingDayKey,
+                                    });
+                                    if (hasPendingUnknownRegion) {
+                                        pendingRegistrationData.delete(senderPhone);
+                                        continue;
+                                    }
+
+                                    const hasPendingUnderage = await queueUnderageConfirmationIfNeeded({
+                                        sockInstance: sock,
+                                        remoteJid,
+                                        senderPhone,
+                                        logJson,
+                                        originalText: pendingData,
+                                        locationContext: 'PASARJAYA',
+                                        processingDayKey,
+                                    });
+                                    if (hasPendingUnderage) {
+                                        pendingRegistrationData.delete(senderPhone);
+                                        continue;
+                                    }
+
+                                    const globalQuotaCheck = await checkGlobalLocationQuotaBeforeSave(
+                                        logJson,
+                                        msg.key.id || `${senderPhone}-${Date.now()}`
+                                    );
+                                    if (!globalQuotaCheck.allowed) {
+                                        replyText = globalQuotaCheck.message || '⛔ Kuota global lokasi tercapai.';
+                                        userFlowByPhone.set(senderPhone, 'NONE');
+                                        pendingRegistrationData.delete(senderPhone);
+                                        if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
+                                        continue;
+                                    }
+
+                                    const saveResult = await saveLogAndOkItems(logJson, pendingData);
+                                    if (!saveResult.success) {
+                                        await releaseGlobalQuotaReservationIfNeeded(globalQuotaCheck.reservation);
+                                        console.error('❌ Gagal simpan ke database (MANUAL LOCATION):', saveResult.dataError);
+                                        replyText = buildDatabaseErrorMessage(saveResult.dataError, logJson);
+                                    } else {
+                                        // FIX: Sort by received_at (Kronologis)
+                                        const { validCount, validItems } = await getTodayRecapForSender(senderPhone, processingDayKey, 'received_at');
+                                        replyText = buildReplyForNewData(logJson, validCount, 'PASARJAYA', validItems);
+                                    }
                                     userFlowByPhone.set(senderPhone, 'NONE');
                                     pendingRegistrationData.delete(senderPhone);
-                                    if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
-                                    continue;
-                                }
-
-                                const hasPendingUnknownRegion = await queueUnknownRegionConfirmationIfNeeded({
-                                    sockInstance: sock,
-                                    remoteJid,
-                                    senderPhone,
-                                    logJson,
-                                    originalText: pendingData,
-                                    locationContext: 'PASARJAYA',
-                                    processingDayKey,
-                                });
-                                if (hasPendingUnknownRegion) {
-                                    pendingRegistrationData.delete(senderPhone);
-                                    continue;
-                                }
-
-                                const hasPendingUnderage = await queueUnderageConfirmationIfNeeded({
-                                    sockInstance: sock,
-                                    remoteJid,
-                                    senderPhone,
-                                    logJson,
-                                    originalText: pendingData,
-                                    locationContext: 'PASARJAYA',
-                                    processingDayKey,
-                                });
-                                if (hasPendingUnderage) {
-                                    pendingRegistrationData.delete(senderPhone);
-                                    continue;
-                                }
-
-                                const globalQuotaCheck = await checkGlobalLocationQuotaBeforeSave(
-                                    logJson,
-                                    msg.key.id || `${senderPhone}-${Date.now()}`
-                                );
-                                if (!globalQuotaCheck.allowed) {
-                                    replyText = globalQuotaCheck.message || '⛔ Kuota global lokasi tercapai.';
-                                    userFlowByPhone.set(senderPhone, 'NONE');
-                                    pendingRegistrationData.delete(senderPhone);
-                                    if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
-                                    continue;
-                                }
-
-                                const saveResult = await saveLogAndOkItems(logJson, pendingData);
-                                if (!saveResult.success) {
-                                    await releaseGlobalQuotaReservationIfNeeded(globalQuotaCheck.reservation);
-                                    console.error('❌ Gagal simpan ke database (MANUAL LOCATION):', saveResult.dataError);
-                                    replyText = buildDatabaseErrorMessage(saveResult.dataError, logJson);
                                 } else {
-                                    // FIX: Sort by received_at (Kronologis)
-                                    const { validCount, validItems } = await getTodayRecapForSender(senderPhone, processingDayKey, 'received_at');
-                                    replyText = buildReplyForNewData(logJson, validCount, 'PASARJAYA', validItems);
+                                    replyText = [
+                                        '❌ *DATA BELUM BISA DIPROSES*',
+                                        '',
+                                        'Lokasi: *Pasarjaya*',
+                                        'Syarat: *5 baris* per orang.',
+                                        '',
+                                        '👇 *CONTOH YANG BENAR:*',
+                                        'Siti Aminah',
+                                        '5049488500001234',
+                                        '3171234567890123',
+                                        '3171098765432109',
+                                        '15-08-1975',
+                                        '',
+                                        'Mohon kirim ulang ya Bu/Pak 🙏',
+                                    ].join('\n');
+                                    userFlowByPhone.set(senderPhone, 'NONE');
+                                    pendingRegistrationData.delete(senderPhone);
                                 }
-                                userFlowByPhone.set(senderPhone, 'NONE');
-                                pendingRegistrationData.delete(senderPhone);
                             } else {
-                                replyText = [
-                                    '❌ *DATA BELUM BISA DIPROSES*',
-                                    '',
-                                    'Lokasi: *Pasarjaya*',
-                                    'Syarat: *5 baris* per orang.',
-                                    '',
-                                    '👇 *CONTOH YANG BENAR:*',
-                                    'Siti Aminah',
-                                    '5049488500001234',
-                                    '3171234567890123',
-                                    '3171098765432109',
-                                    '15-08-1975',
-                                    '',
-                                    'Mohon kirim ulang ya Bu/Pak 🙏',
-                                ].join('\n');
+                                // User pilih lokasi manual (tanpa pending data) -> Format panduan Pasarjaya
                                 userFlowByPhone.set(senderPhone, 'NONE');
-                                pendingRegistrationData.delete(senderPhone);
+                                replyText = FORMAT_DAFTAR_PASARJAYA;
                             }
+                        } else if (matches.length > MAX_CANDIDATES) {
+                            // Too many matches
+                            replyText = '⚠️ Ditemukan ' + matches.length + ' lokasi yang cocok. Coba ketik nama lokasi yang lebih spesifik.\n\nKetik 0 untuk batal.';
+                            // State tetap INPUT_MANUAL_LOCATION
                         } else {
-                            // User pilih lokasi manual (tanpa pending data) -> Kirim Format Panduan tapi bingung mau format apa
-                            // Harusnya format daftar pasarjaya biasa
-                            userFlowByPhone.set(senderPhone, 'NONE');
-                            replyText = FORMAT_DAFTAR_PASARJAYA;
+                            // 2-10 matches — show disambiguation list
+                            pendingLocationCandidates.set(senderPhone, matches);
+                            userFlowByPhone.set(senderPhone, 'INPUT_MANUAL_LOCATION_CONFIRM');
+
+                            const listItems = matches.map((m: { wilayahNama: string; nama: string }, i: number) => `${i + 1}. [${m.wilayahNama}] ${m.nama}`).join('\n');
+                            replyText = [
+                                '📍 Ditemukan ' + matches.length + ' lokasi yang cocok:',
+                                '',
+                                listItems,
+                                '',
+                                'Balas dengan angka pilihanmu (1-' + matches.length + '), atau ketik 0 untuk batal.'
+                            ].join('\n');
+                        }
+                    }
+                    if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
+                    continue;
+                }
+                else if (currentUserFlow === 'INPUT_MANUAL_LOCATION_CONFIRM') {
+                    if (await isProviderBlocked('PASARJAYA')) {
+                        userFlowByPhone.set(senderPhone, 'SELECT_LOCATION');
+                        pendingLocationCandidates.delete(senderPhone);
+                        replyText = '⚠️ PasarJaya sementara ditutup.\n' + await buildFormatDaftarMessage();
+                        if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
+                        continue;
+                    }
+
+                    const candidates = pendingLocationCandidates.get(senderPhone);
+                    if (!candidates || candidates.length === 0) {
+                        replyText = '❌ Sesi kedaluwarsa. Silakan ketik ulang nama lokasi.';
+                        userFlowByPhone.set(senderPhone, 'INPUT_MANUAL_LOCATION');
+                        pendingLocationCandidates.delete(senderPhone);
+                    } else {
+                        const choice = parseInt(normalized, 10);
+                        if (isNaN(choice) || choice < 1 || choice > candidates.length) {
+                            replyText = '❌ Pilihan tidak valid. Balas angka 1-' + candidates.length + ' atau ketik 0 untuk batal.';
+                        } else {
+                            const selected = candidates[choice - 1];
+                            pendingLocationCandidates.delete(senderPhone);
+
+                            userLocationChoice.set(senderPhone, 'PASARJAYA');
+                            userSpecificLocationChoice.set(senderPhone, `PASARJAYA - ${selected.nama}`);
+                            console.log(`[DEBUG] SET Specific Location (Manual-Disambiguated) for ${senderPhone}: PASARJAYA - ${selected.nama}`);
+
+                            const pendingData = pendingRegistrationData.get(senderPhone);
+                            if (pendingData) {
+                                await sock.sendMessage(remoteJid, { text: `🔄 Memproses data untuk Pasarjaya (${selected.nama})...` });
+
+                                const logJson = await processRawMessageToLogJson({
+                                    text: pendingData,
+                                    senderPhone,
+                                    messageId: msg.key.id,
+                                    receivedAt,
+                                    tanggal: tanggalWib,
+                                    processingDayKey,
+                                    locationContext: 'PASARJAYA',
+                                    specificLocation: `PASARJAYA - ${selected.nama}`
+                                });
+                                logJson.sender_name = existingName || undefined;
+
+                                if (logJson.stats.total_blocks > 0 && (!logJson.failed_remainder_lines || logJson.failed_remainder_lines.length === 0)) {
+                                    const quotaCheck = await checkLocationQuotaBeforeSave(logJson, senderPhone);
+                                    if (!quotaCheck.allowed) {
+                                        replyText = quotaCheck.message || '⛔ Batas lokasi tercapai.';
+                                        userFlowByPhone.set(senderPhone, 'NONE');
+                                        pendingRegistrationData.delete(senderPhone);
+                                        if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
+                                        continue;
+                                    }
+
+                                    const hasPendingUnknownRegion = await queueUnknownRegionConfirmationIfNeeded({
+                                        sockInstance: sock,
+                                        remoteJid,
+                                        senderPhone,
+                                        logJson,
+                                        originalText: pendingData,
+                                        locationContext: 'PASARJAYA',
+                                        processingDayKey,
+                                    });
+                                    if (hasPendingUnknownRegion) {
+                                        pendingRegistrationData.delete(senderPhone);
+                                        continue;
+                                    }
+
+                                    const hasPendingUnderage = await queueUnderageConfirmationIfNeeded({
+                                        sockInstance: sock,
+                                        remoteJid,
+                                        senderPhone,
+                                        logJson,
+                                        originalText: pendingData,
+                                        locationContext: 'PASARJAYA',
+                                        processingDayKey,
+                                    });
+                                    if (hasPendingUnderage) {
+                                        pendingRegistrationData.delete(senderPhone);
+                                        continue;
+                                    }
+
+                                    const globalQuotaCheck = await checkGlobalLocationQuotaBeforeSave(
+                                        logJson,
+                                        msg.key.id || `${senderPhone}-${Date.now()}`
+                                    );
+                                    if (!globalQuotaCheck.allowed) {
+                                        replyText = globalQuotaCheck.message || '⛔ Kuota global lokasi tercapai.';
+                                        userFlowByPhone.set(senderPhone, 'NONE');
+                                        pendingRegistrationData.delete(senderPhone);
+                                        if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
+                                        continue;
+                                    }
+
+                                    const saveResult = await saveLogAndOkItems(logJson, pendingData);
+                                    if (!saveResult.success) {
+                                        await releaseGlobalQuotaReservationIfNeeded(globalQuotaCheck.reservation);
+                                        console.error('❌ Gagal simpan ke database (MANUAL LOCATION CONFIRM):', saveResult.dataError);
+                                        replyText = buildDatabaseErrorMessage(saveResult.dataError, logJson);
+                                    } else {
+                                        const { validCount, validItems } = await getTodayRecapForSender(senderPhone, processingDayKey, 'received_at');
+                                        replyText = buildReplyForNewData(logJson, validCount, 'PASARJAYA', validItems);
+                                    }
+                                    userFlowByPhone.set(senderPhone, 'NONE');
+                                    pendingRegistrationData.delete(senderPhone);
+                                } else {
+                                    replyText = [
+                                        '❌ *DATA BELUM BISA DIPROSES*',
+                                        '',
+                                        'Lokasi: *Pasarjaya*',
+                                        'Syarat: *5 baris* per orang.',
+                                        '',
+                                        '👇 *CONTOH YANG BENAR:*',
+                                        'Siti Aminah',
+                                        '5049488500001234',
+                                        '3171234567890123',
+                                        '3171098765432109',
+                                        '15-08-1975',
+                                        '',
+                                        'Mohon kirim ulang ya Bu/Pak 🙏',
+                                    ].join('\n');
+                                    userFlowByPhone.set(senderPhone, 'NONE');
+                                    pendingRegistrationData.delete(senderPhone);
+                                }
+                            } else {
+                                userFlowByPhone.set(senderPhone, 'NONE');
+                                replyText = FORMAT_DAFTAR_PASARJAYA;
+                            }
                         }
                     }
                     if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
