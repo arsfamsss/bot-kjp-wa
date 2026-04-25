@@ -2600,8 +2600,18 @@ export async function connectToWhatsApp() {
                         replyText = '⚠️ Nama lokasi terlalu pendek. Minimal 3 karakter.\n\n_Ketik ulang atau 0 untuk batal._';
                     } else {
                         // Resolve lokasi dari database referensi
-                        const { resolveLocation, MAX_CANDIDATES } = await import('./services/locationResolver');
-                        const matches = resolveLocation(rawTrim);
+                        let matches: any[] = [];
+                        let MAX_CANDIDATES = 10;
+                        try {
+                            const resolver = await import('./services/locationResolver');
+                            MAX_CANDIDATES = resolver.MAX_CANDIDATES;
+                            matches = resolver.resolveLocation(rawTrim);
+                        } catch (resolverErr) {
+                            console.error('[locationResolver] Gagal load/resolve (EDIT):', resolverErr);
+                            replyText = '⚠️ Terjadi kesalahan saat mencari lokasi. Silakan coba lagi atau ketik 0 untuk batal.';
+                            if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
+                            continue;
+                        }
 
                         if (matches.length === 0) {
                             replyText = '❌ Lokasi "' + rawTrim + '" tidak ditemukan di database Pasarjaya.\n\nSilakan ketik ulang nama lokasi yang lebih spesifik, atau ketik 0 untuk batal.';
@@ -3676,8 +3686,18 @@ export async function connectToWhatsApp() {
                         }
                     } else {
                         // Resolve lokasi dari database referensi
-                        const { resolveLocation, MAX_CANDIDATES } = await import('./services/locationResolver');
-                        const matches = resolveLocation(lokasiName);
+                        let matches: any[] = [];
+                        let MAX_CANDIDATES = 10;
+                        try {
+                            const resolver = await import('./services/locationResolver');
+                            MAX_CANDIDATES = resolver.MAX_CANDIDATES;
+                            matches = resolver.resolveLocation(lokasiName);
+                        } catch (resolverErr) {
+                            console.error('[locationResolver] Gagal load/resolve:', resolverErr);
+                            replyText = '⚠️ Terjadi kesalahan saat mencari lokasi. Silakan coba lagi atau ketik 0 untuk batal.';
+                            if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
+                            continue;
+                        }
 
                         if (matches.length === 0) {
                             // No match

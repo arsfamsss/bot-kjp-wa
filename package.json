@@ -7,7 +7,7 @@
     "test": "npx bun test --isolate",
     "dev": "ts-node src/index.ts",
     "smoke:whitelist": "ts-node src/scripts/smokeWhitelist.ts",
-    "build": "tsc",
+    "build": "tsc && xcopy src\\data dist\\data /E /I /Y",
     "start": "node dist/index.js"
   },
   "keywords": [],
