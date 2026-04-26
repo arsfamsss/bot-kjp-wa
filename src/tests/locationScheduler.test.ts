@@ -181,7 +181,7 @@ describe('locationScheduler poller', () => {
             id: 'provider-close-1',
             schedule_type: 'one_time',
             action: 'close',
-            provider: 'FOOD_STATION',
+            provider: 'FOODSTATION',
             sub_location: null,
             reason: null,
             scheduled_time: new Date(Date.now() - 60_000).toISOString(),
@@ -192,7 +192,7 @@ describe('locationScheduler poller', () => {
         startSchedulePoller(999_999);
         await waitForPollerTick();
 
-        expect(mockCloseLocationByProvider).toHaveBeenCalledWith('FOOD_STATION', 'Ditutup otomatis oleh jadwal');
+        expect(mockCloseLocationByProvider).toHaveBeenCalledWith('FOODSTATION', 'Ditutup otomatis oleh jadwal');
         expect(mockCloseSpecificLocation).not.toHaveBeenCalled();
     });
 

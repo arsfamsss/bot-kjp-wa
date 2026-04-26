@@ -243,13 +243,13 @@ describe('buildReplyForNewData', () => {
         expect(reply).toContain('Kurang baris (harus 5 baris/orang)');
     });
 
-    test('uses 4-line expectation for FOOD_STATION remainder context', () => {
+    test('uses 4-line expectation for FOODSTATION remainder context', () => {
         const log = createLogJson({
             items: [createLogItem()],
             failed_remainder_lines: ['sisa'],
         });
 
-        const reply = buildReplyForNewData(log, undefined, 'FOOD_STATION');
+        const reply = buildReplyForNewData(log, undefined, 'FOODSTATION');
         expect(reply).toContain('Kurang baris (harus 4 baris/orang)');
     });
 

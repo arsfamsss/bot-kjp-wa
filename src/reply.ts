@@ -71,7 +71,7 @@ export function buildReplyForNewData(
                 // Bikin bold namanya biar jelas
                 lines.push(`${idx + 1}. *${extractChildName(item.nama)}*`);
                 const subLoc = item.lokasi
-                    ? item.lokasi.replace(/^(PASARJAYA|DHARMAJAYA|FOOD STATION)\s*-\s*/i, '').trim()
+                    ? item.lokasi.replace(/^(PASARJAYA|DHARMAJAYA|FOODSTATION)\s*-\s*/i, '').trim()
                     : '';
                 const jenisLabel = item.jenis_kartu ? ` (${item.jenis_kartu})` : '';
                 lines.push(`   └ ${item.no_kjp}${jenisLabel}${subLoc ? ` 📍 ${subLoc}` : ''}`); // Tree style + lokasi + jenis
@@ -176,8 +176,8 @@ export function buildReplyForNewData(
                     } else if (err.type === 'ktp_blocked') {
                         friendlyMsg = err.detail;
                     } else if (err.type === 'blocked_location') {
-                        const locationLabel = item.parsed.lokasi
-                            ? item.parsed.lokasi.replace(/^(PASARJAYA|DHARMAJAYA|FOOD STATION)\s*-\s*/i, '').trim()
+                    const locationLabel = item.parsed.lokasi
+                            ? item.parsed.lokasi.replace(/^(PASARJAYA|DHARMAJAYA|FOODSTATION)\s*-\s*/i, '').trim()
                             : '';
                         if (isPasarjaya) {
                             friendlyMsg = locationLabel

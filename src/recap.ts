@@ -184,7 +184,7 @@ export function buildReplyForTodayRecap(
             // Tentukan lokasi pengambilan
             let lokasiLabel = '📍 Duri Kosambi'; // Default lama
             if (item.lokasi) {
-                if (item.lokasi.startsWith('PASARJAYA') || item.lokasi.startsWith('DHARMAJAYA') || item.lokasi.startsWith('FOOD STATION')) {
+                if (item.lokasi.startsWith('PASARJAYA') || item.lokasi.startsWith('DHARMAJAYA') || item.lokasi.startsWith('FOODSTATION')) {
                     lokasiLabel = `📍 ${item.lokasi}`;
                 }
             }
@@ -296,7 +296,7 @@ export async function getGlobalRecap(
     }
 
     const locationSummary = new Map<string, Map<string, { label: string; count: number }>>();
-    const parentOrder = ['DHARMAJAYA', 'PASARJAYA', 'FOOD_STATION'];
+    const parentOrder = ['DHARMAJAYA', 'PASARJAYA', 'FOODSTATION'];
 
     const ensureParentBucket = (parent: string): Map<string, { label: string; count: number }> => {
         if (!locationSummary.has(parent)) {
@@ -305,7 +305,7 @@ export async function getGlobalRecap(
         return locationSummary.get(parent)!;
     };
 
-    const normalizeLocationMeta = (rawLokasi: unknown): { parent: 'DHARMAJAYA' | 'PASARJAYA' | 'FOOD_STATION'; subLabel: string; subKey: string } => {
+    const normalizeLocationMeta = (rawLokasi: unknown): { parent: 'DHARMAJAYA' | 'PASARJAYA' | 'FOODSTATION'; subLabel: string; subKey: string } => {
         const raw = typeof rawLokasi === 'string' ? rawLokasi.trim() : '';
 
         if (!raw || /^DHARMAJAYA\b/i.test(raw)) {
@@ -328,11 +328,11 @@ export async function getGlobalRecap(
             };
         }
 
-        if (/^FOOD STATION\b/i.test(raw)) {
+        if (/^FOODSTATION\b/i.test(raw)) {
             return {
-                parent: 'FOOD_STATION',
-                subLabel: 'FOOD STATION',
-                subKey: 'food station',
+                parent: 'FOODSTATION',
+                subLabel: 'FOODSTATION',
+                subKey: 'foodstation',
             };
         }
 
@@ -367,7 +367,7 @@ export async function getGlobalRecap(
             );
             const parentCount = subLocations.reduce((acc, item) => acc + item.count, 0);
 
-            const parentDisplay = parent === 'FOOD_STATION' ? 'FOOD STATION' : parent;
+            const parentDisplay = parent === 'FOODSTATION' ? 'Foodstation' : parent;
             target.push(`   • ${parentDisplay} : ${parentCount} data`);
             for (const item of subLocations) {
                 target.push(`      - ${item.label} : ${item.count} data`);
@@ -463,7 +463,7 @@ export async function getGlobalRecap(
         // --- GROUPING PER LOKASI ---
         const dharmajayaItems = items.filter((i: any) => normalizeLocationMeta(i.lokasi).parent === 'DHARMAJAYA');
         const pasarjayaItems = items.filter((i: any) => normalizeLocationMeta(i.lokasi).parent === 'PASARJAYA');
-        const foodStationItems = items.filter((i: any) => normalizeLocationMeta(i.lokasi).parent === 'FOOD_STATION');
+        const foodStationItems = items.filter((i: any) => normalizeLocationMeta(i.lokasi).parent === 'FOODSTATION');
 
         let globalIndex = 1;
 
@@ -534,7 +534,7 @@ export async function getGlobalRecap(
         }
 
         if (foodStationItems.length > 0) {
-            lines.push(`*FOOD STATION* : ${foodStationItems.length}`);
+            lines.push(`*Foodstation* : ${foodStationItems.length}`);
             foodStationItems.forEach((item: any) => {
                 const itemKey = endKey ? ` (${String(item.processing_day_key).split('-').reverse().join('-')})` : '';
                 const jenisKartu = resolveCardTypeLabel(item.no_kjp, item.jenis_kartu);
@@ -649,7 +649,7 @@ export async function generateExportData(
     // Dharmajaya: item yang lokasi-nya diawali "DHARMAJAYA" atau tidak ada lokasi (legacy)
     const dharmajayaData = (data as any[]).filter((i: any) => !i.lokasi || i.lokasi.startsWith('DHARMAJAYA'));
     const pasarjayaData = (data as any[]).filter((i: any) => i.lokasi && i.lokasi.startsWith('PASARJAYA'));
-    const foodStationData = (data as any[]).filter((i: any) => i.lokasi && i.lokasi.startsWith('FOOD STATION'));
+    const foodStationData = (data as any[]).filter((i: any) => i.lokasi && i.lokasi.startsWith('FOODSTATION'));
 
     // Group Dharmajaya by sender
     const dharmajayaBySender: Record<string, any[]> = {};
@@ -768,9 +768,9 @@ export async function generateExportData(
         }
     }
 
-    // === GERAI FOOD STATION ===
+    // === GERAI FOODSTATION ===
     if (Object.keys(foodStationBySender).length > 0) {
-        txtRows.push('*Gerai FOOD STATION*');
+        txtRows.push('*Gerai Foodstation*');
         txtRows.push('');
 
         const sortedPhones = Object.keys(foodStationBySender).sort((a, b) => {
@@ -819,8 +819,8 @@ export async function generateExportData(
         stats.total++;
 
         let locationName = '';
-        if (row.lokasi && row.lokasi.startsWith('FOOD STATION')) {
-            locationName = 'FOOD STATION';
+        if (row.lokasi && row.lokasi.startsWith('FOODSTATION')) {
+            locationName = 'FOODSTATION';
         } else if (row.lokasi && row.lokasi.startsWith('PASARJAYA')) {
             locationName = row.lokasi.replace(/^PASARJAYA\s*-\s*/i, '').trim();
             if (!locationName) locationName = 'PASARJAYA';
@@ -869,7 +869,7 @@ export async function generateRegionTxtExport(
     locationKeyword: string,
     filenameBase: string,
     nameLookup?: (phone: string) => string | undefined,
-    parentRegion?: 'DHARMAJAYA' | 'PASARJAYA' | 'FOOD_STATION'
+    parentRegion?: 'DHARMAJAYA' | 'PASARJAYA' | 'FOODSTATION'
 ): Promise<{ txt: string; filenameBase: string; count: number } | null> {
     const normalizedKeyword = locationKeyword.trim().toUpperCase();
     if (!normalizedKeyword) {
@@ -894,8 +894,8 @@ export async function generateRegionTxtExport(
             if (lokasi && !lokasi.startsWith('DHARMAJAYA')) return false;
         } else if (parentRegion === 'PASARJAYA') {
             if (!lokasi.startsWith('PASARJAYA')) return false;
-        } else if (parentRegion === 'FOOD_STATION') {
-            if (!lokasi.startsWith('FOOD STATION')) return false;
+        } else if (parentRegion === 'FOODSTATION') {
+            if (!lokasi.startsWith('FOODSTATION')) return false;
         }
         return lokasi.includes(normalizedKeyword);
     });

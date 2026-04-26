@@ -37,7 +37,7 @@ const adminScheduleAction = new Map<string, 'open' | 'close'>();
 const LOCAL_PROVIDER_LIST: Array<{ key: ProviderType; name: string; mapping: Record<string, string> }> = [
     { key: 'DHARMAJAYA', name: 'Dharmajaya', mapping: DHARMAJAYA_MAPPING },
     { key: 'PASARJAYA', name: 'Pasarjaya', mapping: PASARJAYA_MAPPING },
-    { key: 'FOOD_STATION', name: 'Foodstation', mapping: FOODSTATION_MAPPING },
+    { key: 'FOODSTATION', name: 'Foodstation', mapping: FOODSTATION_MAPPING },
 ];
 
 function getProviderList() {
@@ -469,7 +469,7 @@ async function buildMenuText(): Promise<string> {
         return LOCATION_MGMT_MENU_TEXT({
             dharmajayaStatus: statusMap['DHARMAJAYA'] ?? 'BUKA',
             pasarjayaStatus: statusMap['PASARJAYA'] ?? 'BUKA',
-            foodStationStatus: statusMap['FOOD_STATION'] ?? 'BUKA',
+            foodStationStatus: statusMap['FOODSTATION'] ?? 'BUKA',
         });
     } catch {
         return LOCATION_MGMT_MENU_TEXT({

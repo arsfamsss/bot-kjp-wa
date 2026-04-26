@@ -49,7 +49,7 @@ function baseParams(overrides?: Partial<{
     messageId: string | null;
     tanggal: string;
     processingDayKey: string;
-    locationContext: 'PASARJAYA' | 'DHARMAJAYA' | 'FOOD_STATION';
+    locationContext: 'PASARJAYA' | 'DHARMAJAYA' | 'FOODSTATION';
     specificLocation: string;
 }>) {
     return {
@@ -97,7 +97,7 @@ describe('processRawMessageToLogJson pipeline', () => {
         expect(result.stats.ok_count).toBe(1);
     });
 
-    test('single valid FOOD_STATION 4-line message -> 1 OK item and lokasi FOOD STATION', async () => {
+    test('single valid FOODSTATION 4-line message -> 1 OK item and lokasi FOODSTATION', async () => {
         const text = [
             'Ahmad Wijaya',
             'KJP 5049483234567890',
@@ -107,14 +107,14 @@ describe('processRawMessageToLogJson pipeline', () => {
 
         const result = await processRawMessageToLogJson(baseParams({
             text,
-            locationContext: 'FOOD_STATION',
-            specificLocation: 'FOOD STATION',
+            locationContext: 'FOODSTATION',
+            specificLocation: 'FOODSTATION',
         }));
 
         expect(result.items).toHaveLength(1);
         expect(result.items[0].status).toBe('OK');
-        expect(result.items[0].parsed.lokasi).toBe('FOOD STATION');
-        expect(result.lokasi).toBe('FOOD STATION');
+        expect(result.items[0].parsed.lokasi).toBe('FOODSTATION');
+        expect(result.lokasi).toBe('FOODSTATION');
     });
 
     test('multi-person DHARMAJAYA 8-line message -> 2 OK items', async () => {

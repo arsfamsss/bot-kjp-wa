@@ -8,7 +8,7 @@ const actualStatusCheckService = await import('../services/statusCheckService');
 const actualPasarjayaStatusCheck = await import('../services/pasarjayaStatusCheck');
 const actualFoodStationStatusCheck = await import('../services/foodStationStatusCheck');
 
-type ProviderKey = 'PASARJAYA' | 'DHARMAJAYA' | 'FOOD_STATION';
+type ProviderKey = 'PASARJAYA' | 'DHARMAJAYA' | 'FOODSTATION';
 
 type RecapItem = {
     nama: string;
@@ -126,7 +126,7 @@ function filterItemsByProvider(items: ReturnType<typeof normalizeRecapItems>, pr
         if (!item.lokasi) return false;
         if (providerFilter === 'PASARJAYA') return item.lokasi.startsWith('PASARJAYA');
         if (providerFilter === 'DHARMAJAYA') return item.lokasi.startsWith('DHARMAJAYA');
-        return item.lokasi.startsWith('FOD STATION') || item.lokasi.startsWith('FOOD_STATION');
+        return item.lokasi.startsWith('FOODSTATION');
     });
 }
 
@@ -203,7 +203,7 @@ describe('Multi-Provider Status Check Integration', () => {
             validItems: [
                 makeRecapItem({ nama: 'Dharma 1', lokasi: 'DHARMAJAYA - Cakung' }),
                 makeRecapItem({ nama: 'Pasar 1', lokasi: 'PASARJAYA - Jakgrosir Kedoya', tanggal_lahir: '1975-08-15' }),
-                makeRecapItem({ nama: 'Food 1', lokasi: 'FOD STATION' }),
+                makeRecapItem({ nama: 'Food 1', lokasi: 'FOODSTATION' }),
             ],
         });
 
@@ -254,12 +254,12 @@ describe('Multi-Provider Status Check Integration', () => {
         expect(result.summary).toContain('🔢 No Urut: 12');
     });
 
-    test('routes FOOD_STATION status checks and summary includes tgl pengambilan + jam', async () => {
+    test('routes FOODSTATION status checks and summary includes tgl pengambilan + jam', async () => {
         mockGetTodayRecapForSender.mockResolvedValue({
             ...defaultRecapResponse,
             validCount: 2,
             validItems: [
-                makeRecapItem({ nama: 'Food A', lokasi: 'FOD STATION' }),
+                makeRecapItem({ nama: 'Food A', lokasi: 'FOODSTATION' }),
                 makeRecapItem({ nama: 'Pasar B', lokasi: 'PASARJAYA - Pasar Minggu', tanggal_lahir: '1985-02-02' }),
             ],
         });
@@ -275,10 +275,10 @@ describe('Multi-Provider Status Check Integration', () => {
             })),
         );
 
-        const result = await processProviderStatusCheckForTest('FOOD_STATION', '628123', '2026-04-24', '2026-04-25');
+        const result = await processProviderStatusCheckForTest('FOODSTATION', '628123', '2026-04-24', '2026-04-25');
 
         expect(result.items).toHaveLength(1);
-        expect(result.items[0]?.lokasi).toBe('FOD STATION');
+        expect(result.items[0]?.lokasi).toBe('FOODSTATION');
         expect(mockCheckFoodStationStatuses).toHaveBeenCalledTimes(1);
         expect(mockCheckRegistrationStatuses).not.toHaveBeenCalled();
         expect(mockCheckPasarjayaStatuses).not.toHaveBeenCalled();
@@ -294,8 +294,8 @@ describe('Multi-Provider Status Check Integration', () => {
                 makeRecapItem({ nama: 'Dharma A', lokasi: 'DHARMAJAYA - Cakung' }),
                 makeRecapItem({ nama: 'Pasar A', lokasi: 'PASARJAYA - Jakgrosir Kedoya', tanggal_lahir: '1981-10-10' }),
                 makeRecapItem({ nama: 'Pasar B', lokasi: 'PASARJAYA - Pasar Minggu', tanggal_lahir: '1977-03-03' }),
-                makeRecapItem({ nama: 'Food A', lokasi: 'FOOD_STATION - Cipinang' }),
-                makeRecapItem({ nama: 'Food B', lokasi: 'FOD STATION' }),
+                makeRecapItem({ nama: 'Food A', lokasi: 'FOODSTATION - Cipinang' }),
+                makeRecapItem({ nama: 'Food B', lokasi: 'FOODSTATION' }),
             ],
         });
 
@@ -328,7 +328,7 @@ describe('Multi-Provider Status Check Integration', () => {
         const mappedProviders = Array.from(mapping.values());
 
         expect(mappedProviders).toContain('DHARMAJAYA');
-        expect(mappedProviders).toContain('FOOD_STATION');
+        expect(mappedProviders).toContain('FOODSTATION');
         expect(mappedProviders).not.toContain('PASARJAYA');
     });
 });

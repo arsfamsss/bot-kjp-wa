@@ -294,7 +294,7 @@ export function normalizeNameForDedup(raw: string): string {
  * @param locationContext Optional location context ('PASARJAYA' | 'DHARMAJAYA').
  * @returns LogItem object with initial parsed fields and status.
  */
-export function parseBlockToItem(lines: string[], index: number, processingDayKey: string, locationContext?: 'PASARJAYA' | 'DHARMAJAYA' | 'FOOD_STATION', specificLocation?: string): LogItem {
+export function parseBlockToItem(lines: string[], index: number, processingDayKey: string, locationContext?: 'PASARJAYA' | 'DHARMAJAYA' | 'FOODSTATION', specificLocation?: string): LogItem {
     // Pastikan lines minimal ada (walau kosong)
     const rawNama = lines[0] || '';
     const parsedNama = cleanName(rawNama);
@@ -608,7 +608,7 @@ export function groupLinesToBlocks(lines: string[], linesPerBlock: number = 4): 
     return { blocks, remainder };
 }
 
-function buildParsedFields(block: string[], location: 'PASARJAYA' | 'DHARMAJAYA' | 'FOOD_STATION' | 'DEFAULT' = 'DEFAULT'): ParsedFields {
+function buildParsedFields(block: string[], location: 'PASARJAYA' | 'DHARMAJAYA' | 'FOODSTATION' | 'DEFAULT' = 'DEFAULT'): ParsedFields {
     if (location === 'PASARJAYA') {
         // FORMAT 5 BARIS PASARJAYA: Nama, Kartu, KTP, KK, Tanggal Lahir
         // Pasarjaya: tidak perlu jenis kartu manual
@@ -731,7 +731,7 @@ function applyDuplicateNameHardBlockInMessage(items: LogItem[]): LogItem[] {
     });
 }
 
-export function validateBlockToItem(block: string[], index: number, location: 'PASARJAYA' | 'DHARMAJAYA' | 'FOOD_STATION' | 'DEFAULT' = 'DEFAULT'): LogItem {
+export function validateBlockToItem(block: string[], index: number, location: 'PASARJAYA' | 'DHARMAJAYA' | 'FOODSTATION' | 'DEFAULT' = 'DEFAULT'): LogItem {
     const parsed = buildParsedFields(block, location);
     const errors: ItemError[] = [];
 
@@ -868,7 +868,7 @@ export async function processRawMessageToLogJson(params: {
     receivedAt: Date;
     tanggal: string; // YYYY-MM-DD (kalender WIB)
     processingDayKey: string; // YYYY-MM-DD (periode operasional)
-    locationContext?: 'PASARJAYA' | 'DHARMAJAYA' | 'FOOD_STATION'; // New Param
+    locationContext?: 'PASARJAYA' | 'DHARMAJAYA' | 'FOODSTATION'; // New Param
     specificLocation?: string; // New Param: "PASARJAYA - Jakgrosir"
 }): Promise<LogJson> {
     const { text, senderPhone, messageId, receivedAt, tanggal, processingDayKey, locationContext, specificLocation } = params;

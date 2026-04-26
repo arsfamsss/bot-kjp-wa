@@ -10,7 +10,7 @@ import {
 import { DHARMAJAYA_MAPPING, PASARJAYA_MAPPING, isProviderOpen, REGISTRATION_HOURS } from '../config/messages';
 import { getProcessingDayKey } from '../time';
 
-export type ProviderType = 'PASARJAYA' | 'DHARMAJAYA' | 'FOOD_STATION';
+export type ProviderType = 'PASARJAYA' | 'DHARMAJAYA' | 'FOODSTATION';
 
 function buildLocationKey(provider: ProviderType, subLocation: string): string {
     return `${provider} - ${(subLocation || '').trim()}`;
@@ -20,8 +20,8 @@ export function getProviderSubLocations(provider: ProviderType): string[] {
     if (provider === 'DHARMAJAYA') {
         return Object.values(DHARMAJAYA_MAPPING);
     }
-    if (provider === 'FOOD_STATION') {
-        return ['FOOD STATION'];
+    if (provider === 'FOODSTATION') {
+        return ['FOODSTATION'];
     }
     return Object.values(PASARJAYA_MAPPING);
 }
@@ -159,7 +159,7 @@ export async function listAllProviderStatuses(): Promise<Array<{ provider: strin
     const providers: Array<{ key: ProviderType; name: string }> = [
         { key: 'DHARMAJAYA', name: 'Dharmajaya' },
         { key: 'PASARJAYA', name: 'Pasarjaya' },
-        { key: 'FOOD_STATION', name: 'Foodstation' },
+        { key: 'FOODSTATION', name: 'Foodstation' },
     ];
 
     const results = await Promise.all(

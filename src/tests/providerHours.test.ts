@@ -189,30 +189,30 @@ describe('provider hours - messages + locationGate integration', () => {
         it('Foodstation at 10:00 returns true', async () => {
             setMockTime(10, 0);
             const { isProviderOpen } = await loadMessagesModule();
-            expect(isProviderOpen('FOOD_STATION')).toBe(true);
+            expect(isProviderOpen('FOODSTATION')).toBe(true);
         });
 
         it('Foodstation at 16:00 returns false', async () => {
             setMockTime(16, 0);
             const { isProviderOpen } = await loadMessagesModule();
-            expect(isProviderOpen('FOOD_STATION')).toBe(false);
+            expect(isProviderOpen('FOODSTATION')).toBe(false);
         });
     });
 
     describe('B. getProviderClosedLabel()', () => {
         it('returns Dharmajaya opening label', async () => {
             const { getProviderClosedLabel } = await loadMessagesModule();
-            expect(getProviderClosedLabel('DHARMAJAYA')).toBe('(buka jam 06.05)');
+            expect(getProviderClosedLabel('DHARMAJAYA')).toBe('buka jam 06.05');
         });
 
         it('returns Pasarjaya opening label', async () => {
             const { getProviderClosedLabel } = await loadMessagesModule();
-            expect(getProviderClosedLabel('PASARJAYA')).toBe('(buka jam 07.10)');
+            expect(getProviderClosedLabel('PASARJAYA')).toBe('buka jam 07.10');
         });
 
         it('returns Foodstation opening label', async () => {
             const { getProviderClosedLabel } = await loadMessagesModule();
-            expect(getProviderClosedLabel('FOOD_STATION')).toBe('(buka jam 06.30)');
+            expect(getProviderClosedLabel('FOODSTATION')).toBe('buka jam 06.30');
         });
     });
 
@@ -241,7 +241,7 @@ describe('provider hours - messages + locationGate integration', () => {
 
         it('contains correct Foodstation hours', async () => {
             const { REGISTRATION_HOURS } = await loadMessagesModule();
-            expect(REGISTRATION_HOURS.FOOD_STATION).toEqual({
+            expect(REGISTRATION_HOURS.FOODSTATION).toEqual({
                 startHour: 6,
                 startMinute: 30,
                 endHour: 15,
@@ -317,13 +317,13 @@ describe('provider hours - messages + locationGate integration', () => {
             isProviderOpenMock.mockImplementation(() => false);
             const past = new Date(Date.now() - 60_000).toISOString();
             getProviderOverrideMock.mockImplementation(() => Promise.resolve({
-                provider: 'FOOD_STATION',
+                provider: 'FOODSTATION',
                 override_type: 'open',
                 expires_at: past,
             }));
 
             const { isSpecificLocationClosed } = await loadLocationGateModule();
-            const result = await isSpecificLocationClosed('FOOD_STATION', 'FOD STATION');
+            const result = await isSpecificLocationClosed('FOODSTATION', 'FOODSTATION');
 
             expect(result).toEqual({
                 closed: true,
@@ -351,7 +351,7 @@ describe('provider hours - messages + locationGate integration', () => {
             setMockTime(16, 0);
 
             const { isProviderAvailable } = await loadMessagesModule();
-            const result = await isProviderAvailable('FOOD_STATION');
+            const result = await isProviderAvailable('FOODSTATION');
 
             expect(result).toBe(false);
         });
@@ -371,13 +371,13 @@ describe('provider hours - messages + locationGate integration', () => {
             setMockTime(16, 0);
             const future = new Date(Date.now() + 3_600_000).toISOString();
             getProviderOverrideMock.mockImplementation(() => Promise.resolve({
-                provider: 'FOOD_STATION',
+                provider: 'FOODSTATION',
                 override_type: 'open',
                 expires_at: future,
             }));
 
             const { isProviderAvailable } = await loadMessagesModule();
-            const result = await isProviderAvailable('FOOD_STATION');
+            const result = await isProviderAvailable('FOODSTATION');
 
             expect(result).toBe(true);
         });
@@ -392,7 +392,7 @@ describe('provider hours - messages + locationGate integration', () => {
             const { buildFormatDaftarMessage } = await loadMessagesModule();
             const message = await buildFormatDaftarMessage();
 
-            expect(message).toContain('*FOOD STATION* (buka jam 06.30)');
+            expect(message).toContain('*Foodstation* (TUTUP - buka jam 06.30)');
             expect(message).toContain('*PASARJAYA*');
             expect(message).toContain('*DHARMAJAYA*');
         });
@@ -407,8 +407,8 @@ describe('provider hours - messages + locationGate integration', () => {
 
             expect(message).toContain('*PASARJAYA*');
             expect(message).toContain('*DHARMAJAYA*');
-            expect(message).toContain('*FOOD STATION*');
-            expect(message).not.toContain('(buka jam ');
+            expect(message).toContain('*Foodstation*');
+            expect(message).not.toContain('(TUTUP - ');
         });
     });
 });

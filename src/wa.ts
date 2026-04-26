@@ -363,7 +363,7 @@ async function buildSelectLocationFirstPromptText(): Promise<string> {
     const providerLabels: Record<string, string> = {
         'PASARJAYA': 'Pasarjaya',
         'DHARMAJAYA': 'Dharmajaya',
-        'FOOD_STATION': 'Foodstation',
+        'FOODSTATION': 'Foodstation',
     };
 
     const optionParts = [...providerMap.entries()].map(([num, key]) => `*${num}. ${providerLabels[key] || key}*`);
@@ -1111,7 +1111,7 @@ async function queueUnderageConfirmationIfNeeded(params: {
     senderPhone: string;
     logJson: LogJson;
     originalText: string;
-    locationContext: 'PASARJAYA' | 'DHARMAJAYA' | 'FOOD_STATION';
+    locationContext: 'PASARJAYA' | 'DHARMAJAYA' | 'FOODSTATION';
     processingDayKey: string;
 }): Promise<boolean> {
     const underageItems = getUnderageOkItems(params.logJson);
@@ -1227,7 +1227,7 @@ async function queueUnknownRegionConfirmationIfNeeded(params: {
     senderPhone: string;
     logJson: LogJson;
     originalText: string;
-    locationContext: 'PASARJAYA' | 'DHARMAJAYA' | 'FOOD_STATION';
+    locationContext: 'PASARJAYA' | 'DHARMAJAYA' | 'FOODSTATION';
     processingDayKey: string;
 }): Promise<boolean> {
     const unknownRegionItems = getUnknownRegionOkItems(params.logJson);
@@ -1919,7 +1919,7 @@ export async function connectToWhatsApp() {
 
                 const resolveStatusSourceItems = async (
                     sourceDate: string,
-                    providerFilter?: 'PASARJAYA' | 'DHARMAJAYA' | 'FOOD_STATION'
+                    providerFilter?: 'PASARJAYA' | 'DHARMAJAYA' | 'FOODSTATION'
                 ) => {
                     const { validItems } = await getTodayRecapForSender(senderPhone, sourceDate, 'received_at');
                     const items = validItems.map((item) => ({
@@ -1938,17 +1938,17 @@ export async function connectToWhatsApp() {
                         if (!item.lokasi) return false;
                         if (providerFilter === 'PASARJAYA') return item.lokasi.startsWith('PASARJAYA');
                         if (providerFilter === 'DHARMAJAYA') return item.lokasi.startsWith('DHARMAJAYA');
-                        // FOOD_STATION: lokasi 'FOOD STATION' atau 'FOOD_STATION'
-                        return item.lokasi.startsWith('FOOD STATION') || item.lokasi.startsWith('FOOD_STATION');
+                        // Foodstation: lokasi 'FOODSTATION' (atau legacy 'FOOD STATION'/'FOD STATION')
+                        return item.lokasi.startsWith('FOODSTATION') || item.lokasi.startsWith('FOOD STATION') || item.lokasi.startsWith('FOD STATION');
                     });
 
                     return { sourceDate, items: filtered };
                 };
 
                 // --- STATUS CHECK: shared helper for provider-based status check ---
-                const processProviderStatusCheck = async (providerKey: 'PASARJAYA' | 'DHARMAJAYA' | 'FOOD_STATION'): Promise<{ text: string | null; done: boolean }> => {
-                    // Food Station: cek data hari ini. Dharmajaya & Pasarjaya: cek data kemarin.
-                    const sourceDateDefault = providerKey === 'FOOD_STATION'
+                const processProviderStatusCheck = async (providerKey: 'PASARJAYA' | 'DHARMAJAYA' | 'FOODSTATION'): Promise<{ text: string | null; done: boolean }> => {
+                    // Foodstation: cek data hari ini. Dharmajaya & Pasarjaya: cek data kemarin.
+                    const sourceDateDefault = providerKey === 'FOODSTATION'
                         ? processingDayKey
                         : shiftIsoDate(processingDayKey, -1);
                     const targetDate = shiftIsoDate(processingDayKey, 1);
@@ -1956,7 +1956,7 @@ export async function connectToWhatsApp() {
 
                     if (!items.length) {
                         // Foodstation cek data hari ini — langsung bilang tidak ada data
-                        if (providerKey === 'FOOD_STATION') {
+                        if (providerKey === 'FOODSTATION') {
                             return { text: STATUS_CHECK_NO_DATA_TEXT(providerKey), done: false };
                         }
                         // Dharmajaya & Pasarjaya cek data kemarin — cek apakah user punya data hari ini yang belum bisa dicek
@@ -2002,7 +2002,7 @@ export async function connectToWhatsApp() {
                                 await sock.sendMessage(remoteJid, { text: failedData.header });
                                 await sock.sendMessage(remoteJid, { text: failedData.body });
                             }
-                        } else if (providerKey === 'FOOD_STATION') {
+                        } else if (providerKey === 'FOODSTATION') {
                             const { checkFoodStationStatuses } = await import('./services/foodStationStatusCheck');
                             const { buildFoodStationStatusSummary, buildFoodStationFailedCopy } = await import('./services/statusCheckFormatter');
                             const results = await checkFoodStationStatuses(items);
@@ -2046,11 +2046,11 @@ export async function connectToWhatsApp() {
                             session.selectedIndex = idx;
                             session.selectedRecordId = record.id;
 
-                            // Determine Type (Food Station vs Pasarjaya vs Dharmajaya)
-                            const isFoodStation = record.lokasi?.startsWith('FOOD STATION');
+                            // Determine Type (Foodstation vs Pasarjaya vs Dharmajaya)
+                            const isFoodStation = record.lokasi?.startsWith('FOODSTATION') || record.lokasi?.startsWith('FOOD STATION') || record.lokasi?.startsWith('FOD STATION');
                             const isPasarjaya = !isFoodStation && ((record.lokasi && record.lokasi.startsWith('PASARJAYA')) || !!record.tanggal_lahir);
                             if (isFoodStation) {
-                                session.selectedType = 'FOOD_STATION';
+                                session.selectedType = 'FOODSTATION';
                             } else if (isPasarjaya) {
                                 session.selectedType = 'PASARJAYA';
                             } else {
@@ -2143,7 +2143,7 @@ export async function connectToWhatsApp() {
                             replyText = '✅ Edit dibatalkan.';
                             userFlowByPhone.set(senderPhone, 'NONE');
                             editSessionMap.delete(senderPhone);
-                        } else if (fieldKey === 'lokasi' && session.selectedType === 'FOOD_STATION') {
+                        } else if (fieldKey === 'lokasi' && session.selectedType === 'FOODSTATION') {
                             const record = session.recordsToday.find(r => r.id === session.selectedRecordId);
                             let displayLocation = record?.lokasi || '';
                             if (displayLocation.includes('-')) {
@@ -2160,7 +2160,7 @@ export async function connectToWhatsApp() {
                                 '6️⃣ BATAL'
                             ];
                             replyText = [
-                                '⚠️ Lokasi Foodstation tidak bisa diubah (tetap FOOD STATION).',
+                                '⚠️ Lokasi Foodstation tidak bisa diubah (tetap Foodstation).',
                                 '',
                                 `📝 *EDIT DATA KE-${session.selectedIndex}*`,
                                 `👤 Nama: ${extractChildName(record?.nama || '')}`,
@@ -2990,9 +2990,9 @@ export async function connectToWhatsApp() {
                                 isValidFormat = true;
                             }
                         }
-                    } else if (existingLocation === 'DHARMAJAYA' || existingLocation === 'FOOD_STATION') {
+                    } else if (existingLocation === 'DHARMAJAYA' || existingLocation === 'FOODSTATION') {
                         // WAJIB 4 BARIS per orang
-                        const locationLabel = existingLocation === 'FOOD_STATION' ? 'FOOD STATION' : 'DHARMAJAYA';
+                        const locationLabel = existingLocation === 'FOODSTATION' ? 'FOODSTATION' : 'DHARMAJAYA';
                         if (dataLines.length % 4 !== 0) {
                             isValidFormat = false;
                             if (dataLines.length % 5 === 0) {
@@ -3234,7 +3234,7 @@ export async function connectToWhatsApp() {
                         replyText = MENU_MESSAGE;
                     } else {
                         const providerMap = await getStatusCheckProviderMapping();
-                        const providerKey = providerMap.get(normalized) as 'PASARJAYA' | 'DHARMAJAYA' | 'FOOD_STATION' | undefined;
+                        const providerKey = providerMap.get(normalized) as 'PASARJAYA' | 'DHARMAJAYA' | 'FOODSTATION' | undefined;
 
                         if (!providerKey) {
                             replyText = await STATUS_CHECK_PROVIDER_MENU();
@@ -3307,7 +3307,7 @@ export async function connectToWhatsApp() {
                     const selectedProvider = providerMap.get(normalized);
                     const pasarjayaNum = [...providerMap.entries()].find(([, v]) => v === 'PASARJAYA')?.[0];
                     const dharmajayaNum = [...providerMap.entries()].find(([, v]) => v === 'DHARMAJAYA')?.[0];
-                    const foodstationNum = [...providerMap.entries()].find(([, v]) => v === 'FOOD_STATION')?.[0];
+                    const foodstationNum = [...providerMap.entries()].find(([, v]) => v === 'FOODSTATION')?.[0];
 
                     if (normalized === '0') {
                         userFlowByPhone.set(senderPhone, 'NONE');
@@ -3318,7 +3318,7 @@ export async function connectToWhatsApp() {
                         replyText = `⚠️ Pilihan tidak dikenali. Ketik ${validNums} untuk pilih lokasi, atau 0 untuk batal.`;
                     } else if (!(await isProviderAvailable(selectedProvider))) {
                         const config = REGISTRATION_HOURS[selectedProvider];
-                        const displayNames: Record<string, string> = { PASARJAYA: 'Pasarjaya', DHARMAJAYA: 'Dharmajaya', FOOD_STATION: 'Foodstation' };
+                        const displayNames: Record<string, string> = { PASARJAYA: 'Pasarjaya', DHARMAJAYA: 'Dharmajaya', FOODSTATION: 'Foodstation' };
                         const displayName = displayNames[selectedProvider] ?? selectedProvider;
                         const jamInfo = config ? `Jam operasional: *${config.label} WIB*` : '';
                         replyText = [
@@ -3392,7 +3392,7 @@ export async function connectToWhatsApp() {
                             replyText = await buildDharmajayaMenuWithStatus();
                             userFlowByPhone.set(senderPhone, 'SELECT_DHARMAJAYA_SUB');
                         }
-                    } else if (selectedProvider === 'FOOD_STATION') {
+                    } else if (selectedProvider === 'FOODSTATION') {
                         const pendingData = pendingRegistrationData.get(senderPhone);
                         let rejectFoodStation = false;
 
@@ -3403,7 +3403,7 @@ export async function connectToWhatsApp() {
                                 replyText = [
                                     '⚠️ *DATA TERTOLAK (SALAH FORMAT)*',
                                     '',
-                                    `Anda memilih: *${normalized}. FOOD STATION*`,
+                                    `Anda memilih: *${normalized}. Foodstation*`,
                                     'Syarat: *Wajib 4 Baris* (Nama, Kartu, KTP, KK).',
                                     '',
                                     `Data Anda: *${lines.length} baris* (Terdeteksi format Pasarjaya / ada Tanggal Lahir).`,
@@ -3420,9 +3420,9 @@ export async function connectToWhatsApp() {
                         }
 
                         if (!rejectFoodStation) {
-                            userLocationChoice.set(senderPhone, 'FOOD_STATION');
-                            userSpecificLocationChoice.set(senderPhone, 'FOOD STATION');
-                            console.log(`[DEBUG] SET Specific Location for ${senderPhone}: FOOD STATION`);
+                            userLocationChoice.set(senderPhone, 'FOODSTATION');
+                            userSpecificLocationChoice.set(senderPhone, 'FOODSTATION');
+                            console.log(`[DEBUG] SET Specific Location for ${senderPhone}: FOODSTATION`);
 
                             if (pendingData) {
                                 await sock.sendMessage(remoteJid, { text: '🔄 Memproses data untuk Foodstation...' });
@@ -3434,8 +3434,8 @@ export async function connectToWhatsApp() {
                                     receivedAt,
                                     tanggal: tanggalWib,
                                     processingDayKey,
-                                    locationContext: 'FOOD_STATION',
-                                    specificLocation: 'FOOD STATION'
+                                    locationContext: 'FOODSTATION',
+                                    specificLocation: 'FOODSTATION'
                                 });
                                 logJson.sender_name = existingName || undefined;
 
@@ -3446,8 +3446,8 @@ export async function connectToWhatsApp() {
                                         senderPhone,
                                         logJson,
                                         originalText: pendingData,
-                                        locationContext: 'FOOD_STATION',
-                                        processingDayKey,
+                                    locationContext: 'FOODSTATION',
+                                    processingDayKey,
                                     });
                                     if (hasPendingUnknownRegion) {
                                         pendingRegistrationData.delete(senderPhone);
@@ -3461,8 +3461,8 @@ export async function connectToWhatsApp() {
                                         senderPhone,
                                         logJson,
                                         originalText: pendingData,
-                                        locationContext: 'FOOD_STATION',
-                                        processingDayKey,
+                                    locationContext: 'FOODSTATION',
+                                    processingDayKey,
                                     });
                                     if (hasPendingUnderage) {
                                         pendingRegistrationData.delete(senderPhone);
@@ -3485,11 +3485,11 @@ export async function connectToWhatsApp() {
                                     const saveResult = await saveLogAndOkItems(logJson, pendingData);
                                     if (!saveResult.success) {
                                         await releaseGlobalQuotaReservationIfNeeded(globalQuotaCheck.reservation);
-                                        console.error('❌ Gagal simpan ke database (FOOD STATION):', saveResult.dataError);
+                                        console.error('❌ Gagal simpan ke database (Foodstation):', saveResult.dataError);
                                         replyText = buildDatabaseErrorMessage(saveResult.dataError, logJson);
                                     } else {
                                         const { validCount, validItems } = await getTodayRecapForSender(senderPhone, processingDayKey, 'received_at');
-                                        replyText = buildReplyForNewData(logJson, validCount, 'FOOD_STATION', validItems);
+                                        replyText = buildReplyForNewData(logJson, validCount, 'FOODSTATION', validItems);
                                     }
                                     userFlowByPhone.set(senderPhone, 'NONE');
                                     pendingRegistrationData.delete(senderPhone);
@@ -4743,11 +4743,11 @@ export async function connectToWhatsApp() {
                             const { REGISTRATION_HOURS, isProviderOpen } = await import('./config/messages');
                             const { getWibParts } = await import('./time');
 
-                            const providerKeys = ['DHARMAJAYA', 'PASARJAYA', 'FOOD_STATION'] as const;
+                            const providerKeys = ['DHARMAJAYA', 'PASARJAYA', 'FOODSTATION'] as const;
                             const providerDisplayNames: Record<string, string> = {
                                 DHARMAJAYA: 'Dharmajaya',
                                 PASARJAYA: 'Pasarjaya',
-                                FOOD_STATION: 'Foodstation',
+                                FOODSTATION: 'Foodstation',
                             };
 
                             const statusLines: string[] = [];
@@ -4907,11 +4907,11 @@ export async function connectToWhatsApp() {
                         const { getWibParts } = await import('./time');
                         const { providerOverrideDraftByPhone } = await import('./state');
 
-                        const providerKeys = ['DHARMAJAYA', 'PASARJAYA', 'FOOD_STATION'] as const;
+                        const providerKeys = ['DHARMAJAYA', 'PASARJAYA', 'FOODSTATION'] as const;
                         const providerDisplayNames: Record<string, string> = {
                             DHARMAJAYA: 'Dharmajaya',
                             PASARJAYA: 'Pasarjaya',
-                            FOOD_STATION: 'Foodstation',
+                            FOODSTATION: 'Foodstation',
                         };
 
                         if (normalized === '0') {
@@ -4932,7 +4932,7 @@ export async function connectToWhatsApp() {
                                 '_Ketik 0 untuk batal._',
                             ].join('\n');
                         } else if (normalized === '1' || normalized === '2' || normalized === '3') {
-                            const selectedProvider = normalized === '1' ? 'DHARMAJAYA' : normalized === '2' ? 'PASARJAYA' : 'FOOD_STATION';
+                            const selectedProvider = normalized === '1' ? 'DHARMAJAYA' : normalized === '2' ? 'PASARJAYA' : 'FOODSTATION';
                             providerOverrideDraftByPhone.set(senderPhone, { provider: selectedProvider });
 
                             const config = REGISTRATION_HOURS[selectedProvider];
@@ -4995,7 +4995,7 @@ export async function connectToWhatsApp() {
                         const providerDisplayNames: Record<string, string> = {
                             DHARMAJAYA: 'Dharmajaya',
                             PASARJAYA: 'Pasarjaya',
-                            FOOD_STATION: 'Foodstation',
+                            FOODSTATION: 'Foodstation',
                         };
 
                         const draft = providerOverrideDraftByPhone.get(senderPhone);
@@ -5006,7 +5006,7 @@ export async function connectToWhatsApp() {
                             providerOverrideDraftByPhone.delete(senderPhone);
                             adminFlowByPhone.set(senderPhone, 'SETTING_PROVIDER_SELECT');
 
-                            const providerKeys = ['DHARMAJAYA', 'PASARJAYA', 'FOOD_STATION'] as const;
+                            const providerKeys = ['DHARMAJAYA', 'PASARJAYA', 'FOODSTATION'] as const;
                             const statusLines: string[] = [];
                             const now = new Date();
                             let idx = 1;
@@ -5116,97 +5116,7 @@ export async function connectToWhatsApp() {
                         const providerDisplayNames: Record<string, string> = {
                             DHARMAJAYA: 'Dharmajaya',
                             PASARJAYA: 'Pasarjaya',
-                            FOOD_STATION: 'Foodstation',
-                        };
-
-                        const draft = providerOverrideDraftByPhone.get(senderPhone);
-                        if (!draft) {
-                            adminFlowByPhone.set(senderPhone, 'SETTING_OPERATION_MENU');
-                            replyText = '⚠️ Sesi pengaturan hilang. Kembali ke menu Atur Status Bot.';
-                        } else if (normalized === '0') {
-                            const { getProviderOverride } = await import('./supabase');
-                            const { REGISTRATION_HOURS, isProviderOpen } = await import('./config/messages');
-                            const { getWibParts } = await import('./time');
-
-                            const config = REGISTRATION_HOURS[draft.provider];
-                            const override = await getProviderOverride(draft.provider);
-                            const now = new Date();
-                            let isOpen = isProviderOpen(draft.provider);
-                            let overrideInfo = 'Tidak ada';
-
-                            if (override) {
-                                if (override.override_type === 'open') {
-                                    if (override.expires_at) {
-                                        isOpen = now <= new Date(override.expires_at);
-                                    } else {
-                                        isOpen = true;
-                                    }
-                                    const wibExpiry = override.expires_at
-                                        ? (() => { const p = getWibParts(new Date(override.expires_at)); return `${String(p.day).padStart(2,'0')}-${String(p.month).padStart(2,'0')}-${p.year} ${String(p.hour).padStart(2,'0')}:${String(p.minute).padStart(2,'0')}`; })()
-                                        : 'tanpa batas';
-                                    overrideInfo = `Buka sampai ${wibExpiry} WIB`;
-                                } else if (override.override_type === 'close') {
-                                    if (override.manual_close_start && override.manual_close_end) {
-                                        const endTime = new Date(override.manual_close_end);
-                                        if (now >= new Date(override.manual_close_start) && now <= endTime) {
-                                            isOpen = false;
-                                        }
-                                        const pStart = getWibParts(new Date(override.manual_close_start));
-                                        const pEnd = getWibParts(endTime);
-                                        overrideInfo = `Tutup ${String(pStart.day).padStart(2,'0')}-${String(pStart.month).padStart(2,'0')}-${pStart.year} ${String(pStart.hour).padStart(2,'0')}:${String(pStart.minute).padStart(2,'0')} s/d ${String(pEnd.day).padStart(2,'0')}-${String(pEnd.month).padStart(2,'0')}-${pEnd.year} ${String(pEnd.hour).padStart(2,'0')}:${String(pEnd.minute).padStart(2,'0')} WIB`;
-                                    }
-                                }
-                            }
-
-                            const emoji = isOpen ? '🟢' : '🔴';
-                            const statusLabel = isOpen ? 'BUKA' : 'TUTUP';
-
-                            adminFlowByPhone.set(senderPhone, 'SETTING_PROVIDER_ACTION');
-                            replyText = [
-                                `⏰ *${providerDisplayNames[draft.provider]?.toUpperCase()}*`,
-                                '',
-                                `📌 Jam default: ${config?.label ?? '-'} WIB`,
-                                `📌 Status saat ini: ${emoji} ${statusLabel}`,
-                                `📌 Override aktif: ${overrideInfo}`,
-                                '',
-                                '1️⃣ Buka Sekarang (sampai 23:59 hari ini)',
-                                '2️⃣ Tutup Sekarang (periode manual)',
-                                '3️⃣ Kembali ke Default',
-                                '',
-                                '_Ketik 0 untuk kembali._',
-                            ].join('\n');
-                        } else {
-                            const parsed = parseAdminWibDateTimeToIso(rawTrim);
-                            if (!parsed) {
-                                replyText = '⚠️ Format salah. Gunakan *DD-MM-YYYY HH:mm* (contoh: 22-02-2026 00:01).';
-                            } else {
-                                providerOverrideDraftByPhone.set(senderPhone, {
-                                    provider: draft.provider,
-                                    closeStart: parsed.iso,
-                                });
-                                adminFlowByPhone.set(senderPhone, 'SETTING_PROVIDER_MANUAL_CLOSE_END');
-                                replyText = [
-                                    `✅ Mulai tutup: *${parsed.display} WIB*`,
-                                    '',
-                                    'Sekarang masukkan *Tanggal & Jam SELESAI tutup*.',
-                                    'Format: *DD-MM-YYYY HH:mm*',
-                                    'Contoh: *22-02-2026 23:59*',
-                                    '',
-                                    '_Ketik 0 untuk batal._',
-                                ].join('\n');
-                            }
-                        }
-
-                    } else if (currentAdminFlow === 'SETTING_PROVIDER_MANUAL_CLOSE_END') {
-                        const { upsertProviderOverride } = await import('./supabase');
-                        const { REGISTRATION_HOURS } = await import('./config/messages');
-                        const { getWibParts } = await import('./time');
-                        const { providerOverrideDraftByPhone } = await import('./state');
-
-                        const providerDisplayNames: Record<string, string> = {
-                            DHARMAJAYA: 'Dharmajaya',
-                            PASARJAYA: 'Pasarjaya',
-                            FOOD_STATION: 'Foodstation',
+                            FOODSTATION: 'Foodstation',
                         };
 
                         const draft = providerOverrideDraftByPhone.get(senderPhone);
@@ -5277,7 +5187,8 @@ export async function connectToWhatsApp() {
                                 if (endMs <= startMs) {
                                     replyText = '⚠️ Tanggal/jam selesai harus lebih besar dari mulai tutup.';
                                 } else {
-                                    const ok = await upsertProviderOverride({
+                                    const { upsertProviderOverride: upsertOverride } = await import('./supabase');
+                                    const ok = await upsertOverride({
                                         provider: draft.provider,
                                         override_type: 'close',
                                         manual_close_start: draft.closeStart,
@@ -7183,13 +7094,13 @@ export async function connectToWhatsApp() {
                                     });
                                 }
 
-                                const regionExports: { keyword: string; filename: string; label: string; parentRegion: 'DHARMAJAYA' | 'PASARJAYA' | 'FOOD_STATION' }[] = [
+                                const regionExports: { keyword: string; filename: string; label: string; parentRegion: 'DHARMAJAYA' | 'PASARJAYA' | 'FOODSTATION' }[] = [
                                     { keyword: 'KAPUK', filename: 'kjp_kapuk', label: 'Kapuk', parentRegion: 'DHARMAJAYA' },
                                     { keyword: 'DURI KOSAMBI', filename: 'kjp_durikosambi', label: 'Duri Kosambi', parentRegion: 'DHARMAJAYA' },
                                     { keyword: 'CAKUNG', filename: 'kjp_cakung', label: 'Cakung', parentRegion: 'DHARMAJAYA' },
                                     { keyword: 'PULOGADUNG', filename: 'kjp_pulogadung', label: 'Pulogadung', parentRegion: 'DHARMAJAYA' },
                                     { keyword: 'PASARJAYA', filename: 'kjp_pasarjaya', label: 'Pasarjaya', parentRegion: 'PASARJAYA' },
-                                    { keyword: 'FOOD STATION', filename: 'kjp_foodstation', label: 'Foodstation', parentRegion: 'FOOD_STATION' },
+                                    { keyword: 'FOODSTATION', filename: 'kjp_foodstation', label: 'Foodstation', parentRegion: 'FOODSTATION' },
                                 ];
 
                                 for (const region of regionExports) {
@@ -7264,13 +7175,13 @@ export async function connectToWhatsApp() {
                                     });
                                 }
 
-                                const regionExports: { keyword: string; filename: string; label: string; parentRegion: 'DHARMAJAYA' | 'PASARJAYA' | 'FOOD_STATION' }[] = [
+                                const regionExports: { keyword: string; filename: string; label: string; parentRegion: 'DHARMAJAYA' | 'PASARJAYA' | 'FOODSTATION' }[] = [
                                     { keyword: 'KAPUK', filename: 'kjp_kapuk', label: 'Kapuk', parentRegion: 'DHARMAJAYA' },
                                     { keyword: 'DURI KOSAMBI', filename: 'kjp_durikosambi', label: 'Duri Kosambi', parentRegion: 'DHARMAJAYA' },
                                     { keyword: 'CAKUNG', filename: 'kjp_cakung', label: 'Cakung', parentRegion: 'DHARMAJAYA' },
                                     { keyword: 'PULOGADUNG', filename: 'kjp_pulogadung', label: 'Pulogadung', parentRegion: 'DHARMAJAYA' },
                                     { keyword: 'PASARJAYA', filename: 'kjp_pasarjaya', label: 'Pasarjaya', parentRegion: 'PASARJAYA' },
-                                    { keyword: 'FOOD STATION', filename: 'kjp_foodstation', label: 'Foodstation', parentRegion: 'FOOD_STATION' },
+                                    { keyword: 'FOODSTATION', filename: 'kjp_foodstation', label: 'Foodstation', parentRegion: 'FOODSTATION' },
                                 ];
 
                                 for (const region of regionExports) {
@@ -7368,13 +7279,13 @@ export async function connectToWhatsApp() {
                                         });
                                     }
 
-                                    const regionExports: { keyword: string; filename: string; label: string; parentRegion: 'DHARMAJAYA' | 'PASARJAYA' | 'FOOD_STATION' }[] = [
+                                    const regionExports: { keyword: string; filename: string; label: string; parentRegion: 'DHARMAJAYA' | 'PASARJAYA' | 'FOODSTATION' }[] = [
                                         { keyword: 'KAPUK', filename: 'kjp_kapuk', label: 'Kapuk', parentRegion: 'DHARMAJAYA' },
                                         { keyword: 'DURI KOSAMBI', filename: 'kjp_durikosambi', label: 'Duri Kosambi', parentRegion: 'DHARMAJAYA' },
                                         { keyword: 'CAKUNG', filename: 'kjp_cakung', label: 'Cakung', parentRegion: 'DHARMAJAYA' },
                                         { keyword: 'PULOGADUNG', filename: 'kjp_pulogadung', label: 'Pulogadung', parentRegion: 'DHARMAJAYA' },
                                         { keyword: 'PASARJAYA', filename: 'kjp_pasarjaya', label: 'Pasarjaya', parentRegion: 'PASARJAYA' },
-                                        { keyword: 'FOOD STATION', filename: 'kjp_foodstation', label: 'Foodstation', parentRegion: 'FOOD_STATION' },
+                                        { keyword: 'FOODSTATION', filename: 'kjp_foodstation', label: 'Foodstation', parentRegion: 'FOODSTATION' },
                                     ];
 
                                     for (const region of regionExports) {
@@ -7646,7 +7557,7 @@ export async function connectToWhatsApp() {
                         userFlowByPhone.set(senderPhone, 'EDIT_PICK_RECORD');
 
                         const listRows = items.map((item, i) => {
-                            const typeLabel = (item.lokasi && item.lokasi.startsWith('PASARJAYA')) ? '[PSJ]' : (item.lokasi && item.lokasi.startsWith('FOOD STATION')) ? '[FS]' : '[DHJ]';
+                            const typeLabel = (item.lokasi && item.lokasi.startsWith('PASARJAYA')) ? '[PSJ]' : (item.lokasi && (item.lokasi.startsWith('FOODSTATION') || item.lokasi.startsWith('FOOD STATION') || item.lokasi.startsWith('FOD STATION'))) ? '[FS]' : '[DHJ]';
                             return `${i + 1}. ${extractChildName(item.nama)} ${typeLabel}`;
                         });
 
@@ -7797,7 +7708,7 @@ export async function connectToWhatsApp() {
                         userFlowByPhone.set(senderPhone, 'EDIT_PICK_RECORD');
 
                         const listRows = items.map((item, i) => {
-                            const typeLabel = (item.lokasi && item.lokasi.startsWith('PASARJAYA')) ? '[PSJ]' : (item.lokasi && item.lokasi.startsWith('FOOD STATION')) ? '[FS]' : '[DHJ]';
+                            const typeLabel = (item.lokasi && item.lokasi.startsWith('PASARJAYA')) ? '[PSJ]' : (item.lokasi && (item.lokasi.startsWith('FOODSTATION') || item.lokasi.startsWith('FOOD STATION') || item.lokasi.startsWith('FOD STATION'))) ? '[FS]' : '[DHJ]';
                             return `${i + 1}. ${extractChildName(item.nama)} ${typeLabel}`;
                         });
 
@@ -7826,7 +7737,7 @@ export async function connectToWhatsApp() {
                         if (providerMap.size === 0) {
                             replyText = '⛔ Semua lokasi sedang tutup. Silakan coba lagi nanti.';
                         } else if (providerMap.size === 1) {
-                            const providerKey = [...providerMap.values()][0] as 'PASARJAYA' | 'DHARMAJAYA' | 'FOOD_STATION';
+                            const providerKey = [...providerMap.values()][0] as 'PASARJAYA' | 'DHARMAJAYA' | 'FOODSTATION';
                             if (!isStatusCheckOpen(providerKey)) {
                                 replyText = getStatusCheckClosedMessage(providerKey);
                             } else {
@@ -7850,7 +7761,7 @@ export async function connectToWhatsApp() {
                     // FIX: Use looksLikeDate() function instead of simple regex (handles labels like 'Tggl lahir : 12-11-2014')
 
                     // Deteksi format berdasarkan pattern data
-                    let detectedFormat: 'PASARJAYA' | 'DHARMAJAYA' | 'FOOD_STATION' | null = null;
+                    let detectedFormat: 'PASARJAYA' | 'DHARMAJAYA' | 'FOODSTATION' | null = null;
 
                     // Cek untuk single data (5 baris = Pasarjaya, 4 baris = Dharmajaya)
                     if (lines.length === 5 && looksLikeDate(lines[4] || '')) {
@@ -7890,8 +7801,8 @@ export async function connectToWhatsApp() {
                         // User sudah pilih Dharmajaya (4 baris), tapi kirim format Pasarjaya (5 baris)
                         // Kita TOLAK juga agar konsisten
                         blockStrictMismatch = true;
-                    } else if (existingLocation === 'FOOD_STATION' && detectedFormat === 'PASARJAYA') {
-                        // User sudah pilih Food Station (4 baris), tapi kirim format Pasarjaya (5 baris)
+                    } else if (existingLocation === 'FOODSTATION' && detectedFormat === 'PASARJAYA') {
+                        // User sudah pilih Foodstation (4 baris), tapi kirim format Pasarjaya (5 baris)
                         blockStrictMismatch = true;
                     }
 
@@ -7931,7 +7842,7 @@ export async function connectToWhatsApp() {
                                 text: `⚠️ *DATA TERTOLAK (Salah Format)*\n\nAnda memilih **PASARJAYA**, maka wajib kirim **5 Baris** (termasuk Tanggal Lahir).\n\nAnda hanya mengirim 4 baris.\nSilakan lengkapi data Anda dengan Tanggal Lahir di baris ke-5.`
                             });
                         } else {
-                            const locationLabel = existingLocation === 'FOOD_STATION' ? 'FOOD STATION' : 'DHARMAJAYA';
+                            const locationLabel = existingLocation === 'FOODSTATION' ? 'Foodstation' : 'DHARMAJAYA';
                             await sock.sendMessage(remoteJid, {
                                 text: `⚠️ *DATA TERTOLAK (Salah Format)*\n\nAnda memilih **${locationLabel}**, maka format data harus **4 Baris**.\n\nAnda mengirim 5 baris (dengan tanggal lahir).\nSilakan hapus baris tanggal lahir lalu kirim ulang.`
                             });
@@ -7947,7 +7858,7 @@ export async function connectToWhatsApp() {
                     // Sesuai request: "Kalo sudah pilih Pasarjaya, HARUS 5 baris".
 
                     // Final decision logic:
-                    let finalContext: 'PASARJAYA' | 'DHARMAJAYA' | 'FOOD_STATION' = existingLocation || detectedFormat || 'DHARMAJAYA';
+                    let finalContext: 'PASARJAYA' | 'DHARMAJAYA' | 'FOODSTATION' = existingLocation || detectedFormat || 'DHARMAJAYA';
 
                     // Update session biar sinkron (misal upgrade dari Dharmajaya ke Pasarjaya jika diperbolehkan, tapi strict mode melarang sebaliknya)
                     if (detectedFormat && !blockStrictMismatch && !isNewUser) {
@@ -7958,8 +7869,8 @@ export async function connectToWhatsApp() {
                         finalContext = detectedFormat;
                     }
 
-                    if (finalContext === 'FOOD_STATION') {
-                        const fsCloseStatus = await isSpecificLocationClosed('FOOD_STATION', 'FOD STATION');
+                    if (finalContext === 'FOODSTATION') {
+                        const fsCloseStatus = await isSpecificLocationClosed('FOODSTATION', 'FOODSTATION');
                         if (fsCloseStatus.closed) {
                             const reasonSuffix = fsCloseStatus.reason ? `\nAlasan: ${fsCloseStatus.reason}` : '';
                             userFlowByPhone.set(senderPhone, 'SELECT_LOCATION');
@@ -8038,8 +7949,8 @@ export async function connectToWhatsApp() {
                             }
                         }
 
-                        if (storedSpecificLocation && (storedSpecificLocation === 'FOD STATION' || storedSpecificLocation.startsWith('FOOD_STATION'))) {
-                            const closeStatus = await isSpecificLocationClosed('FOOD_STATION', 'FOD STATION');
+                        if (storedSpecificLocation && (storedSpecificLocation === 'FOODSTATION' || storedSpecificLocation.startsWith('FOODSTATION'))) {
+                            const closeStatus = await isSpecificLocationClosed('FOODSTATION', 'FOODSTATION');
                             if (closeStatus.closed) {
                                 const reasonSuffix = closeStatus.reason ? `\nAlasan: ${closeStatus.reason}` : '';
                                 userFlowByPhone.set(senderPhone, 'SELECT_LOCATION');

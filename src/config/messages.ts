@@ -3,24 +3,24 @@
 
 import { getWibParts } from '../time';
 
-type ProviderType = 'PASARJAYA' | 'DHARMAJAYA' | 'FOOD_STATION';
+type ProviderType = 'PASARJAYA' | 'DHARMAJAYA' | 'FOODSTATION';
 
 export const STATUS_CHECK_HOURS: Record<string, { startHour: number; startMinute: number; endHour: number; endMinute: number; label: string }> = {
     DHARMAJAYA: { startHour: 6, startMinute: 5, endHour: 23, endMinute: 59, label: '06:05' },
     PASARJAYA: { startHour: 7, startMinute: 10, endHour: 23, endMinute: 59, label: '07:10' },
-    FOOD_STATION: { startHour: 16, startMinute: 10, endHour: 23, endMinute: 59, label: '16:10' },
+    FOODSTATION: { startHour: 16, startMinute: 10, endHour: 23, endMinute: 59, label: '16:10' },
 };
 
 export const REGISTRATION_HOURS: Record<string, { startHour: number; startMinute: number; endHour: number; endMinute: number; label: string }> = {
     DHARMAJAYA: { startHour: 6, startMinute: 5, endHour: 23, endMinute: 59, label: '06.05 - 23.59' },
     PASARJAYA: { startHour: 7, startMinute: 10, endHour: 23, endMinute: 59, label: '07.10 - 23.59' },
-    FOOD_STATION: { startHour: 6, startMinute: 30, endHour: 15, endMinute: 0, label: '06.30 - 15.00' },
+    FOODSTATION: { startHour: 6, startMinute: 30, endHour: 15, endMinute: 0, label: '06.30 - 15.00' },
 };
 
 const STATUS_CHECK_PROVIDER_DISPLAY: Record<ProviderType, string> = {
     DHARMAJAYA: 'Dharmajaya',
     PASARJAYA: 'Pasarjaya',
-    FOOD_STATION: 'Foodstation',
+    FOODSTATION: 'Foodstation',
 };
 
 export function isStatusCheckOpen(provider: string): boolean {
@@ -83,7 +83,7 @@ export async function buildFormatDaftarMessage(): Promise<string> {
     const providerList: { key: string; name: string; detail: string }[] = [
         { key: 'PASARJAYA', name: 'PASARJAYA', detail: '(Jakgrosir Kedoya,Gerai Rusun Pesakih,Mini DC Kec. Cengkareng,Jakmart Bambu Larangan,dll)' },
         { key: 'DHARMAJAYA', name: 'DHARMAJAYA', detail: '(Kosambi,Kapuk Jagal,Pulogadung,Cakung)' },
-        { key: 'FOOD_STATION', name: 'FOOD STATION', detail: '(Cipinang)' },
+        { key: 'FOODSTATION', name: 'Foodstation', detail: '(Cipinang)' },
     ];
 
     const providers: { num: number; name: string; detail: string; closedLabel?: string }[] = [];
@@ -166,7 +166,7 @@ export async function getActiveProviderMapping(): Promise<Map<string, string>> {
     const mapping = new Map<string, string>();
     mapping.set('1', 'PASARJAYA');
     mapping.set('2', 'DHARMAJAYA');
-    mapping.set('3', 'FOOD_STATION');
+    mapping.set('3', 'FOODSTATION');
     return mapping;
 }
 
@@ -196,13 +196,13 @@ export async function STATUS_CHECK_PROVIDER_MENU(): Promise<string> {
     const [pasarjayaBlocked, dharmajayaBlocked, foodStationBlocked] = await Promise.all([
         isProviderBlocked('PASARJAYA'),
         isProviderBlocked('DHARMAJAYA'),
-        isProviderBlocked('FOOD_STATION'),
+        isProviderBlocked('FOODSTATION'),
     ]);
 
     const providers: { key: ProviderType; name: string; label?: string }[] = [];
     if (!dharmajayaBlocked) providers.push({ key: 'DHARMAJAYA', name: 'Dharmajaya' });
     if (!pasarjayaBlocked) providers.push({ key: 'PASARJAYA', name: 'Pasarjaya' });
-    if (!foodStationBlocked) providers.push({ key: 'FOOD_STATION', name: 'Foodstation' });
+    if (!foodStationBlocked) providers.push({ key: 'FOODSTATION', name: 'Foodstation' });
 
     if (providers.length === 0) {
         return [
@@ -242,21 +242,21 @@ export async function getStatusCheckProviderMapping(): Promise<Map<string, strin
     const [pasarjayaBlocked, dharmajayaBlocked, foodStationBlocked] = await Promise.all([
         isProviderBlocked('PASARJAYA'),
         isProviderBlocked('DHARMAJAYA'),
-        isProviderBlocked('FOOD_STATION'),
+        isProviderBlocked('FOODSTATION'),
     ]);
 
     const mapping = new Map<string, string>();
     let idx = 1;
     if (!dharmajayaBlocked) mapping.set(String(idx++), 'DHARMAJAYA');
     if (!pasarjayaBlocked) mapping.set(String(idx++), 'PASARJAYA');
-    if (!foodStationBlocked) mapping.set(String(idx++), 'FOOD_STATION');
+    if (!foodStationBlocked) mapping.set(String(idx++), 'FOODSTATION');
 
     return mapping;
 }
 
 export const STATUS_CHECK_NO_DATA_TEXT = (provider: string): string => {
     const displayName = STATUS_CHECK_PROVIDER_DISPLAY[provider as ProviderType] ?? provider;
-    const sumber = provider === 'FOOD_STATION' ? 'hari ini' : 'kemarin';
+    const sumber = provider === 'FOODSTATION' ? 'hari ini' : 'kemarin';
     return `⚠️ Tidak ada data pendaftaran ${sumber} untuk ${displayName}.\n\n_Ketik 0 untuk kembali atau ketik MENU untuk menu utama._`;
 };
 
@@ -307,13 +307,13 @@ export const DHARMAJAYA_MAPPING: Record<string, string> = {
 };
 
 export const FOODSTATION_MAPPING: Record<string, string> = {
-    '1': 'FOD STATION'
+    '1': 'FOODSTATION'
 };
 
 export const PROVIDER_LIST: Array<{ key: ProviderType; name: string; mapping: Record<string, string> }> = [
     { key: 'DHARMAJAYA', name: 'Dharmajaya', mapping: DHARMAJAYA_MAPPING },
     { key: 'PASARJAYA', name: 'Pasarjaya', mapping: PASARJAYA_MAPPING },
-    { key: 'FOOD_STATION', name: 'Foodstation', mapping: FOODSTATION_MAPPING },
+    { key: 'FOODSTATION', name: 'Foodstation', mapping: FOODSTATION_MAPPING },
 ];
 
 export const LOCATION_MGMT_MENU_TEXT = ({
@@ -431,9 +431,9 @@ export const FORMAT_DAFTAR_DHARMAJAYA = [
     'Langsung kirim ya Bu~ 🚀',
 ].join('\n');
 
-// --- FORMAT DAFTAR FOOD STATION (4 baris, sama seperti Dharmajaya) ---
+// --- FORMAT DAFTAR FOODSTATION (4 baris, sama seperti Dharmajaya) ---
 export const FORMAT_DAFTAR_FOOD_STATION = [
-    '✅ *LOKASI TERPILIH: FOOD STATION*',
+    '✅ *LOKASI TERPILIH: Foodstation*',
     '',
     '📝 Kirim data dalam *4 BARIS* (wajib urut):',
     '',
@@ -478,7 +478,7 @@ export const FAQ_MESSAGE = [
     '📌 *ALUR CEPAT*',
     '━━━━━━━━━━━━━━━━━━━━',
     '1) Ketik *1* untuk DAFTAR',
-    '2) Pilih lokasi yang tersedia: *PASARJAYA*, *DHARMAJAYA*, atau *FOOD STATION*',
+    '2) Pilih lokasi yang tersedia: *PASARJAYA*, *DHARMAJAYA*, atau *Foodstation*',
     '3) Kirim data sesuai format',
     '4) Ketik *CEK* untuk lihat data masuk',
     '',
@@ -493,7 +493,7 @@ export const FAQ_MESSAGE = [
     '━━━━━━━━━━━━━━━━━━━━',
     '• PASARJAYA: *5 baris* (Nama, Nomor Kartu, Nomor KTP, Nomor KK, Tanggal Lahir)',
     '• DHARMAJAYA: *4 baris* (Nama, Jenis Kartu+Nomor, KTP+Nomor, KK+Nomor KK)',
-    '• FOOD STATION: *4 baris* (Nama, Jenis Kartu+Nomor, KTP+Nomor, KK+Nomor KK)',
+    '• Foodstation: *4 baris* (Nama, Jenis Kartu+Nomor, KTP+Nomor, KK+Nomor KK)',
     '• Boleh kirim banyak orang, pisahkan 1 baris kosong',
     '',
     '━━━━━━━━━━━━━━━━━━━━',

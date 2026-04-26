@@ -597,13 +597,13 @@ describe('parser.ts', () => {
             expect(item.parsed.lokasi).toBe('PASARJAYA');
         });
 
-        it('parses FOOD_STATION block via same 4-line path as DHARMAJAYA', () => {
+        it('parses FOODSTATION block via same 4-line path as DHARMAJAYA', () => {
             const block = makeDharmajayaBlock(['Dewi', VALID_KJP, VALID_KTP, VALID_KK]);
-            const item = parseBlockToItem(block, 2, '2026-04-24', 'FOOD_STATION');
+            const item = parseBlockToItem(block, 2, '2026-04-24', 'FOODSTATION');
 
             expect(item.parsed.nama).toBe('Dewi');
             expect(item.parsed.tanggal_lahir).toBeUndefined();
-            expect(item.parsed.lokasi).toBe('FOOD_STATION');
+            expect(item.parsed.lokasi).toBe('FOODSTATION');
         });
 
         it('uses specificLocation override when provided', () => {
@@ -632,7 +632,7 @@ describe('parser.ts', () => {
 
         it('handles missing optional 5th line for non-PASARJAYA context', () => {
             const block = makeDharmajayaBlock();
-            const item = parseBlockToItem(block, 1, '2026-04-24', 'FOOD_STATION');
+            const item = parseBlockToItem(block, 1, '2026-04-24', 'FOODSTATION');
             expect(item.parsed.tanggal_lahir).toBeUndefined();
         });
 
@@ -753,8 +753,8 @@ describe('parser.ts', () => {
             expect(item.parsed.jenis_kartu_sumber).toBe('prefix');
         });
 
-        it('includes no errors for FOOD_STATION valid block', () => {
-            const item = validateBlockToItem(makeDharmajayaBlock(['Ani', VALID_KJP, ALT_KTP, ALT_KK]), 2, 'FOOD_STATION');
+        it('includes no errors for FOODSTATION valid block', () => {
+            const item = validateBlockToItem(makeDharmajayaBlock(['Ani', VALID_KJP, ALT_KTP, ALT_KK]), 2, 'FOODSTATION');
             expect(item.status).toBe('OK');
             expect(item.errors).toHaveLength(0);
         });

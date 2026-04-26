@@ -15,4 +15,13 @@ nul
 # Local reference repos and planning docs (not for production branch)
 _tmp_refs/
 plan.md
-.sisyphus/plans/plan.md
+.sisyphus/boulder.json
+.sisyphus/drafts/
+.sisyphus/evidence/
+.sisyphus/notepads/
+
+# Playwright MCP artifacts
+.playwright-mcp/
+
+# Test screenshots and temp files
+*.png

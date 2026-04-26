@@ -5,7 +5,7 @@ mock.restore();
 const actualSupabase = await import('../supabase');
 const actualTime = await import('../time');
 
-type ProviderKey = 'PASARJAYA' | 'DHARMAJAYA' | 'FOOD_STATION';
+type ProviderKey = 'PASARJAYA' | 'DHARMAJAYA' | 'FOODSTATION';
 
 type OverrideType = {
     provider: ProviderKey;
@@ -184,7 +184,7 @@ describe('integration - provider operating hours', () => {
         const { messagesModule, locationGateModule } = await loadProviderHoursModules('s1-outside-hours-reject');
 
         const daftarMessage = await messagesModule.buildFormatDaftarMessage();
-        expect(daftarMessage).toContain('*PASARJAYA* (buka jam 07.10)');
+        expect(daftarMessage).toContain('*PASARJAYA* (TUTUP - buka jam 07.10)');
 
         const gateResult = await locationGateModule.isSpecificLocationClosed('PASARJAYA', 'Jakgrosir Kedoya');
         expect(gateResult.closed).toBe(true);
@@ -237,7 +237,7 @@ describe('integration - provider operating hours', () => {
             manual_close_end: '2099-01-01T12:00:00+07:00',
         });
         await mockUpsertProviderOverride({
-            provider: 'FOOD_STATION',
+            provider: 'FOODSTATION',
             override_type: 'open',
             expires_at: '2099-01-01T23:59:00+07:00',
         });
@@ -247,7 +247,7 @@ describe('integration - provider operating hours', () => {
 
         expect(await mockGetProviderOverride('PASARJAYA')).toBeNull();
         expect(await mockGetProviderOverride('DHARMAJAYA')).toBeNull();
-        expect(await mockGetProviderOverride('FOOD_STATION')).toBeNull();
+        expect(await mockGetProviderOverride('FOODSTATION')).toBeNull();
     });
 
     it('S5: override expired -> falls back to default hours', async () => {

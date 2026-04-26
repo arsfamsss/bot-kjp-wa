@@ -95,8 +95,8 @@ describe('generateKJPExcel', () => {
         expect(rows[1][7]).toBe('PASARJAYA - Jakgrosir Kedoya');
     });
 
-    it('keeps FOOD STATION lokasi and does not fallback to DHARMAJAYA default', () => {
-        const item = createDataItem({ lokasi: 'FOOD STATION' });
+    it('keeps FOODSTATION lokasi and does not fallback to DHARMAJAYA default', () => {
+        const item = createDataItem({ lokasi: 'FOODSTATION' });
         const rows = parseExcelBuffer(generateKJPExcel([item]));
 
         expect(rows[0]).toEqual(expectedHeader);
@@ -108,9 +108,9 @@ describe('generateKJPExcel', () => {
             '3171234567890123',
             '3171098765432109',
             '-',
-            'FOOD STATION'
+            'FOODSTATION'
         ]);
-        expect(rows[1][7]).toBe('FOOD STATION');
+        expect(rows[1][7]).toBe('FOODSTATION');
         expect(rows[1][7]).not.toBe('DHARMAJAYA DURI KOSAMBI');
     });
 
@@ -155,7 +155,7 @@ describe('generateKJPExcel', () => {
             createDataItem({ nama: 'ROW A', lokasi: 'DHARMAJAYA - Duri Kosambi' }),
             createDataItem({ nama: 'ROW B', lokasi: 'DHARMAJAYA' }),
             createDataItem({ nama: 'ROW C', lokasi: 'PASARJAYA - Jakgrosir Kedoya' }),
-            createDataItem({ nama: 'ROW D', lokasi: 'FOOD STATION' }),
+            createDataItem({ nama: 'ROW D', lokasi: 'FOODSTATION' }),
             createDataItem({ nama: 'ROW E', lokasi: null, tanggal_lahir: '2011-01-01' }),
             createDataItem({ nama: 'ROW F', lokasi: null, tanggal_lahir: null }),
         ];
@@ -170,7 +170,7 @@ describe('generateKJPExcel', () => {
             'DHARMAJAYA - Duri Kosambi',
             'DHARMAJAYA DURI KOSAMBI',
             'PASARJAYA - Jakgrosir Kedoya',
-            'FOOD STATION',
+            'FOODSTATION',
             'PASARJAYA',
             'DHARMAJAYA DURI KOSAMBI',
         ]);

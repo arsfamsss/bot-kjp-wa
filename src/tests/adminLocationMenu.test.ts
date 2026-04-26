@@ -27,7 +27,7 @@ const mockOpenSpecificLocation = mock(() => Promise.resolve({ success: true, mes
 const mockListAllProviderStatuses = mock(() => Promise.resolve([
     { provider: 'DHARMAJAYA', name: 'Dharmajaya', closed: false },
     { provider: 'PASARJAYA', name: 'Pasarjaya', closed: false },
-    { provider: 'FOOD_STATION', name: 'Foodstation', closed: false },
+    { provider: 'FOODSTATION', name: 'Foodstation', closed: false },
 ]));
 
 mock.module('../services/locationGate', () => ({
@@ -43,11 +43,11 @@ mock.module('../config/messages', () => ({
     PROVIDER_LIST: [
         { key: 'DHARMAJAYA', name: 'Dharmajaya', mapping: { '1': 'Duri Kosambi', '2': 'Kapuk Jagal', '3': 'Pulogadung', '4': 'Cakung' } },
         { key: 'PASARJAYA', name: 'Pasarjaya', mapping: { '1': 'Jakgrosir Kedoya', '2': 'Gerai Rusun Pesakih', '3': 'Mini DC Kec. Cengkareng', '4': 'Jakmart Bambu Larangan' } },
-        { key: 'FOOD_STATION', name: 'Foodstation', mapping: { '1': 'FOD STATION' } },
+        { key: 'FOODSTATION', name: 'Foodstation', mapping: { '1': 'FOODSTATION' } },
     ],
     PASARJAYA_MAPPING: { '1': 'Jakgrosir Kedoya', '2': 'Gerai Rusun Pesakih', '3': 'Mini DC Kec. Cengkareng', '4': 'Jakmart Bambu Larangan' },
     DHARMAJAYA_MAPPING: { '1': 'Duri Kosambi', '2': 'Kapuk Jagal', '3': 'Pulogadung', '4': 'Cakung' },
-    FOODSTATION_MAPPING: { '1': 'FOD STATION' },
+    FOODSTATION_MAPPING: { '1': 'FOODSTATION' },
     LOCATION_MGMT_MENU_TEXT: ({ dharmajayaStatus, pasarjayaStatus, foodStationStatus }: { dharmajayaStatus: string; pasarjayaStatus: string; foodStationStatus: string }) =>
         [`*📍 Kelola Buka/Tutup Lokasi*`, '', `1. Dharmajaya [${dharmajayaStatus}]`, `2. Pasarjaya [${pasarjayaStatus}]`, `3. Foodstation [${foodStationStatus}]`, '', '0. Kembali ke menu admin'].join('\n'),
 }));
@@ -94,7 +94,7 @@ describe('handleLocationMgmt', () => {
         mockListAllProviderStatuses.mockImplementation(() => Promise.resolve([
             { provider: 'DHARMAJAYA', name: 'Dharmajaya', closed: false },
             { provider: 'PASARJAYA', name: 'Pasarjaya', closed: false },
-            { provider: 'FOOD_STATION', name: 'Foodstation', closed: false },
+            { provider: 'FOODSTATION', name: 'Foodstation', closed: false },
         ]));
     });
 
@@ -167,11 +167,11 @@ describe('handleLocationMgmt', () => {
 
         const selectSub = await handleLocationMgmt('LOCATION_MGMT_PROVIDER_ACTION', '3', phone);
         expect(selectSub.nextState).toBe('LOCATION_MGMT_SELECT_SUB');
-        expect(selectSub.replyText).toContain('1. FOD STATION');
+        expect(selectSub.replyText).toContain('1. FOODSTATION');
 
         const chooseSub = await handleLocationMgmt('LOCATION_MGMT_SELECT_SUB', '1', phone);
         expect(chooseSub.nextState).toBe('LOCATION_MGMT_CONFIRM_TOGGLE');
-        expect(chooseSub.replyText).toContain('FOD STATION');
+        expect(chooseSub.replyText).toContain('FOODSTATION');
     });
 
     it('confirm toggle auto-opens when current status is closed', async () => {

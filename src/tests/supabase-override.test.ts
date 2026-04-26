@@ -125,14 +125,14 @@ describe('supabase provider overrides', () => {
     it('deleteProviderOverride calls delete and provider filter', async () => {
         const { deleteProviderOverride } = await loadSupabaseModule();
 
-        const ok = await deleteProviderOverride('FOOD_STATION');
+        const ok = await deleteProviderOverride('FOODSTATION');
         expect(ok).toBe(true);
 
         const deleteCall = getCalls().find((call) => call.method === 'delete');
         expect(deleteCall).toBeTruthy();
 
         const eqCall = getCalls().find((call) => call.method === 'eq');
-        expect(eqCall?.args).toEqual(['provider', 'FOOD_STATION']);
+        expect(eqCall?.args).toEqual(['provider', 'FOODSTATION']);
     });
 
     it('deleteAllProviderOverrides deletes all rows using neq provider empty string', async () => {

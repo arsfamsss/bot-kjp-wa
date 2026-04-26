@@ -83,15 +83,15 @@ describe('recap.ts exported pure functions', () => {
             expect(reply).toContain('🎂 Lahir : 30-01-2015');
         });
 
-        test('single FOOD STATION item contains FOOD STATION location label', () => {
+        test('single FOODSTATION item contains FOODSTATION location label', () => {
             const reply = buildReplyForTodayRecap(
                 1,
                 0,
-                [baseItem({ lokasi: 'FOOD STATION' })],
+                [baseItem({ lokasi: 'FOODSTATION' })],
                 '2026-04-24'
             );
 
-            expect(reply).toContain('📍 FOOD STATION');
+            expect(reply).toContain('📍 FOODSTATION');
         });
 
         test('item with no lokasi defaults to Duri Kosambi', () => {

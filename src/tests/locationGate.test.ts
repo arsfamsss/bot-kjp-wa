@@ -11,6 +11,7 @@ const getBlockedLocationListMock = mock(() => Promise.resolve([]));
 const closeLocationMock = mock(() => Promise.resolve({ success: true, message: 'OK' }));
 const openLocationMock = mock(() => Promise.resolve({ success: true, message: 'OK' }));
 const getProcessingDayKeyMock = mock(() => '2026-04-24');
+const getProviderOverrideMock = mock(() => Promise.resolve(null));
 
 let moduleSeq = 0;
 
@@ -24,6 +25,7 @@ async function loadLocationGateModule() {
         getBlockedLocationList: getBlockedLocationListMock,
         closeLocation: closeLocationMock,
         openLocation: openLocationMock,
+        getProviderOverride: getProviderOverrideMock,
     }));
     mock.module('../supabase.ts', () => ({
         ...actualSupabase,
@@ -33,6 +35,7 @@ async function loadLocationGateModule() {
         getBlockedLocationList: getBlockedLocationListMock,
         closeLocation: closeLocationMock,
         openLocation: openLocationMock,
+        getProviderOverride: getProviderOverrideMock,
     }));
     mock.module(supabaseResolved, () => ({
         ...actualSupabase,
@@ -42,6 +45,7 @@ async function loadLocationGateModule() {
         getBlockedLocationList: getBlockedLocationListMock,
         closeLocation: closeLocationMock,
         openLocation: openLocationMock,
+        getProviderOverride: getProviderOverrideMock,
     }));
 
     mock.module('../config/messages', () => ({
@@ -54,6 +58,8 @@ async function loadLocationGateModule() {
             '1': 'Jakgrosir Kedoya',
             '2': 'Gerai Rusun Pesakih',
         },
+        isProviderOpen: () => true,
+        getProviderClosedLabel: () => 'buka jam 06.30',
     }));
 
     mock.module('../time', () => ({
@@ -73,6 +79,7 @@ function resetAllMocks() {
     closeLocationMock.mockReset();
     openLocationMock.mockReset();
     getProcessingDayKeyMock.mockReset();
+    getProviderOverrideMock.mockReset();
 
     isLocationBlockedMock.mockImplementation(() => Promise.resolve({ blocked: false, reason: null }));
     isProviderBlockedMock.mockImplementation(() => Promise.resolve(false));
@@ -81,6 +88,7 @@ function resetAllMocks() {
     closeLocationMock.mockImplementation(() => Promise.resolve({ success: true, message: 'OK' }));
     openLocationMock.mockImplementation(() => Promise.resolve({ success: true, message: 'OK' }));
     getProcessingDayKeyMock.mockImplementation(() => '2026-04-24');
+    getProviderOverrideMock.mockImplementation(() => Promise.resolve(null));
 }
 
 describe('locationGate - isSpecificLocationClosed', () => {
@@ -149,32 +157,32 @@ describe('locationGate - isSpecificLocationClosed', () => {
         expect(result).toEqual({ closed: true, reason: 'Provider ditutup' });
     });
 
-    it('FOOD_STATION: returns open when no sub-location/provider block', async () => {
+    it('FOODSTATION: returns open when no sub-location/provider block', async () => {
         const { isSpecificLocationClosed } = await loadLocationGateModule();
 
-        const result = await isSpecificLocationClosed('FOOD_STATION', 'FOD STATION');
+        const result = await isSpecificLocationClosed('FOODSTATION', 'FOODSTATION');
 
         expect(result).toEqual({ closed: false, reason: null });
-        expect(isLocationBlockedMock).toHaveBeenCalledWith('FOOD_STATION - FOD STATION');
-        expect(isProviderBlockedMock).toHaveBeenCalledWith('FOOD_STATION');
+        expect(isLocationBlockedMock).toHaveBeenCalledWith('FOODSTATION - FOODSTATION');
+        expect(isProviderBlockedMock).toHaveBeenCalledWith('FOODSTATION');
         expect(isGlobalLocationQuotaFullMock).not.toHaveBeenCalled();
     });
 
-    it('FOOD_STATION: returns closed when sub-location is blocked', async () => {
+    it('FOODSTATION: returns closed when sub-location is blocked', async () => {
         const { isSpecificLocationClosed } = await loadLocationGateModule();
         isLocationBlockedMock.mockImplementation(() => Promise.resolve({ blocked: true, reason: 'Food station tutup' }));
 
-        const result = await isSpecificLocationClosed('FOOD_STATION', 'FOD STATION');
+        const result = await isSpecificLocationClosed('FOODSTATION', 'FOODSTATION');
 
         expect(result).toEqual({ closed: true, reason: 'Food station tutup' });
         expect(isProviderBlockedMock).not.toHaveBeenCalled();
     });
 
-    it('FOOD_STATION: returns closed when provider-level is blocked', async () => {
+    it('FOODSTATION: returns closed when provider-level is blocked', async () => {
         const { isSpecificLocationClosed } = await loadLocationGateModule();
         isProviderBlockedMock.mockImplementation(() => Promise.resolve(true));
 
-        const result = await isSpecificLocationClosed('FOOD_STATION', 'FOD STATION');
+        const result = await isSpecificLocationClosed('FOODSTATION', 'FOODSTATION');
 
         expect(result).toEqual({ closed: true, reason: 'Provider ditutup' });
     });
@@ -189,12 +197,12 @@ describe('locationGate - isSpecificLocationClosed', () => {
         expect(result.reason).toContain('Kuota global harian sudah penuh (100/100).');
     });
 
-    it('Food Station no early-return: still checks DB blocker', async () => {
+    it('Foodstation no early-return: still checks DB blocker', async () => {
         const { isSpecificLocationClosed } = await loadLocationGateModule();
 
-        await isSpecificLocationClosed('FOOD_STATION', 'FOD STATION');
+        await isSpecificLocationClosed('FOODSTATION', 'FOODSTATION');
         expect(isLocationBlockedMock).toHaveBeenCalledTimes(1);
-        expect(isLocationBlockedMock).toHaveBeenCalledWith('FOOD_STATION - FOD STATION');
+        expect(isLocationBlockedMock).toHaveBeenCalledWith('FOODSTATION - FOODSTATION');
     });
 });
 
@@ -252,7 +260,7 @@ describe('locationGate - status/menu helpers', () => {
         expect(rows).toEqual([
             { provider: 'DHARMAJAYA', name: 'Dharmajaya', closed: true },
             { provider: 'PASARJAYA', name: 'Pasarjaya', closed: false },
-            { provider: 'FOOD_STATION', name: 'Foodstation', closed: true },
+            { provider: 'FOODSTATION', name: 'Foodstation', closed: true },
         ]);
     });
 });

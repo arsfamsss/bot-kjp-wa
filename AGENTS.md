@@ -1,7 +1,7 @@
 # AGENTS.md — Bot Input Data KJP di WA Otomatis
 
 > Knowledge base untuk AI agent. Baca file ini PERTAMA sebelum explore codebase.
-> Terakhir diupdate: 2026-04-26 (sesi: jam operasional per-provider)
+> Terakhir diupdate: 2026-04-26 (sesi: rename Foodstation konsisten)
 
 ---
 
@@ -105,11 +105,11 @@ src/
 - reply.ts: branch `ktp_blocked` pakai `err.detail` langsung (detail string di-set per jenis oleh `checkBlockedKtpBatch`)
 
 ### Location System
-- 3 provider: `PASARJAYA`, `DHARMAJAYA`, `FOOD_STATION`
-- `ProviderType = 'PASARJAYA' | 'DHARMAJAYA' | 'FOOD_STATION'` (di locationGate.ts)
+- 3 provider: `PASARJAYA`, `DHARMAJAYA`, `FOODSTATION`
+- `ProviderType = 'PASARJAYA' | 'DHARMAJAYA' | 'FOODSTATION'` (di locationGate.ts)
 - Location key format: `{PROVIDER} - {SubLocation}` (contoh: `PASARJAYA - Jakgrosir Kedoya`)
-- Foodstation: single location, key = `FOD STATION` (tanpa dash prefix). Display name = `Foodstation` (bukan "Food Station")
-- Provider-level close: key = `PASARJAYA` / `DHARMAJAYA` / `FOOD_STATION` (tanpa sub-location)
+- Foodstation: single location, key = `FOODSTATION` (tanpa dash prefix). Display name = `Foodstation`
+- Provider-level close: key = `PASARJAYA` / `DHARMAJAYA` / `FOODSTATION` (tanpa sub-location)
 - `isSpecificLocationClosed()` cek 4 fase: jam operasional/override → sub-location → provider-level → quota (Dharmajaya only)
 - Menu user dinamis: provider yang ditutup atau di luar jam tampil dengan label "(TUTUP - buka jam X)" di menu, user tetap bisa ketik nomornya tapi ditolak dengan pesan informatif + jam operasional
 
@@ -170,6 +170,7 @@ src/
 - Foodstation: cek data **hari ini** (processingDayKey, tanpa shift)
 - Pesan no-data: "kemarin" untuk Dharmajaya/Pasarjaya, "hari ini" untuk Foodstation
 - Pesan no-data selalu ditambah hint `_Ketik 0 untuk kembali atau ketik MENU untuk menu utama._`
+- No-data branch di `processProviderStatusCheck`: Foodstation early-return langsung ke `STATUS_CHECK_NO_DATA_TEXT` (skip `todayCount` check). Dharmajaya/Pasarjaya cek `todayCount > 0` → pesan "data hari ini belum bisa dicek, sumber: data kemarin"
 
 **Data Flow**:
 - `getTodayRecapForSender` (recap.ts) SELECT `lokasi` + `tanggal_lahir` dari `data_harian`
@@ -365,7 +366,7 @@ providerHours-integration.test.ts # 7 tests: override priority, expiry, status c
 
 ### Pilih Lokasi & Rename Foodstation (April 2026)
 - Pesan "Pilih Lokasi Dulu" disederhanakan: hapus preview sub-lokasi Dharmajaya dan instruksi "Balas bertahap". Sub-lokasi muncul setelah user pilih Dharmajaya (flow existing).
-- Display name `Food Station` → `Foodstation` di semua pesan ke user. Internal key tetap `FOOD_STATION` / `FOD STATION`.
+- Display name `Foodstation` di semua pesan ke user. Internal key = `FOODSTATION`.
 
 ### Fix State Bug Atur Status Bot (April 2026)
 - Bug: Setelah aksi "Buka Sekarang" atau "Kembali ke Default", state di-set ke `MENU` (menu admin utama). Input berikutnya ditangkap sebagai pilihan menu admin, bukan sub-menu Atur Status Bot.
@@ -419,7 +420,7 @@ ssh user@192.168.100.104 "cd /path/to/bot && npm install --production && pm2 res
 1. **wa.ts 7000+ baris** — JANGAN refactor keseluruhan. Ubah hanya bagian yang relevan.
 2. **bun:test mock global** — Selalu pakai `--isolate` flag dan dynamic import per-test.
 3. **tsc vs bun** — `bun:test` import menyebabkan tsc error. Test files di-exclude via tsconfig.json.
-4. **Foodstation key** — Display name: `Foodstation`. Internal key: `FOD STATION` (tanpa underscore, tanpa dash). Provider type: `FOOD_STATION`.
+4. **Foodstation key** — Display name: `Foodstation`. Internal key: `FOODSTATION`. Provider type: `FOODSTATION`.
 5. **0-escape prevention** — wa.ts punya guard agar input `0` tidak keluar dari sub-menu tertentu. Tambahkan prefix state baru ke guard ini.
 6. **Supabase SQL** — File di `src/sql/` adalah reference DDL. Untuk tabel yang sudah ada, pakai `ALTER TABLE ADD COLUMN IF NOT EXISTS`, bukan `CREATE TABLE IF NOT EXISTS`.
 7. **Timezone** — Semua waktu pakai WIB (Asia/Jakarta). Gunakan `getWibParts()` dari time.ts.

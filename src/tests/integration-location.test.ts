@@ -327,6 +327,8 @@ let lastLoadedScheduler: { stopSchedulePoller: () => void } | null = null;
 async function loadIntegrationModules(caseName: string) {
     const supabaseResolved = new URL('../supabase.ts', import.meta.url).pathname;
 
+    const getProviderOverrideMock = mock(async () => null);
+
     const supabaseFactory = () => ({
         ...actualSupabase,
         closeLocationByProvider: closeLocationByProviderMock,
@@ -342,6 +344,7 @@ async function loadIntegrationModules(caseName: string) {
         markScheduleExecuted: markScheduleExecutedMock,
         deleteSchedule: deleteScheduleMock,
         listSchedulesByProvider: listSchedulesByProviderMock,
+        getProviderOverride: getProviderOverrideMock,
     });
 
     mock.module('../supabase', supabaseFactory);
@@ -350,6 +353,8 @@ async function loadIntegrationModules(caseName: string) {
 
     mock.module('../config/messages', () => ({
         ...actualMessages,
+        isProviderOpen: () => true,
+        getProviderClosedLabel: () => 'buka jam 06.30',
         PROVIDER_LIST: [
             {
                 key: 'DHARMAJAYA',
@@ -372,10 +377,10 @@ async function loadIntegrationModules(caseName: string) {
                 },
             },
             {
-                key: 'FOOD_STATION',
+                key: 'FOODSTATION',
                 name: 'Foodstation',
                 mapping: {
-                    '1': 'FOD STATION',
+                    '1': 'FOODSTATION',
                 },
             },
         ],
@@ -392,7 +397,7 @@ async function loadIntegrationModules(caseName: string) {
             '4': 'Lokasi Lain',
         },
         FOODSTATION_MAPPING: {
-            '1': 'FOD STATION',
+            '1': 'FOODSTATION',
         },
         LOCATION_MGMT_MENU_TEXT: ({
             dharmajayaStatus,
@@ -538,7 +543,7 @@ describe('integration - location toggle full lifecycle', () => {
 
         const dj = await locationGateModule.isSpecificLocationClosed('DHARMAJAYA', 'Cakung');
         const pj = await locationGateModule.isSpecificLocationClosed('PASARJAYA', 'Jakgrosir Kedoya');
-        const fs = await locationGateModule.isSpecificLocationClosed('FOOD_STATION', 'FOD STATION');
+        const fs = await locationGateModule.isSpecificLocationClosed('FOODSTATION', 'FOODSTATION');
 
         expect(dj.closed).toBe(true);
         expect(pj.closed).toBe(false);

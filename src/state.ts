@@ -30,7 +30,7 @@ export interface EditSession {
     recordsToday: any[]; // Store the fetched records to avoid re-fetching and ensure ID consistency
     selectedIndex?: number; // UI index (1-based)
     selectedRecordId?: number; // DB ID
-    selectedType?: 'DHARMAJAYA' | 'PASARJAYA' | 'FOOD_STATION';
+    selectedType?: 'DHARMAJAYA' | 'PASARJAYA' | 'FOODSTATION';
     selectedFieldKey?: string;
     newValue?: string; // PATCH 2
 }
@@ -52,14 +52,14 @@ export interface StatusCheckSelectionSession {
 export interface PendingUnderageConfirmationSession {
     logJson: LogJson;
     originalText: string;
-    locationContext: 'PASARJAYA' | 'DHARMAJAYA' | 'FOOD_STATION';
+    locationContext: 'PASARJAYA' | 'DHARMAJAYA' | 'FOODSTATION';
     processingDayKey: string;
 }
 
 export interface PendingUnknownRegionConfirmationSession {
     logJson: LogJson;
     originalText: string;
-    locationContext: 'PASARJAYA' | 'DHARMAJAYA' | 'FOOD_STATION';
+    locationContext: 'PASARJAYA' | 'DHARMAJAYA' | 'FOODSTATION';
     processingDayKey: string;
 }
 
@@ -173,7 +173,7 @@ export type BroadcastDraft = {
 export const userFlowByPhone = new Map<string, UserFlowState>();
 
 // Pilihan lokasi user (Pasarjaya vs Dharmajaya)
-export const userLocationChoice = new Map<string, 'PASARJAYA' | 'DHARMAJAYA' | 'FOOD_STATION'>();
+export const userLocationChoice = new Map<string, 'PASARJAYA' | 'DHARMAJAYA' | 'FOODSTATION'>();
 
 // Pilihan lokasi spesifik user (contoh: "PASARJAYA - Jakgrosir Kedoya")
 export const userSpecificLocationChoice = new Map<string, string>();

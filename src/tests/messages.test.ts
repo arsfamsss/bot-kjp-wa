@@ -1,8 +1,11 @@
 import { describe, test, expect, mock } from 'bun:test';
 
-// Mock supabase before importing messages (buildFormatDaftarMessage calls isProviderBlocked)
+mock.restore();
+
+// Mock supabase before importing messages (buildFormatDaftarMessage calls isProviderBlocked + getProviderOverride)
 mock.module('../supabase', () => ({
     isProviderBlocked: async (_provider: string) => false,
+    getProviderOverride: async (_provider: string) => null,
 }));
 
 import {
@@ -31,7 +34,7 @@ describe('messages config constants', () => {
 
     test('buildFormatDaftarMessage lists providers and option numbers when all open', async () => {
         const msg = await buildFormatDaftarMessage();
-        ['PASARJAYA', 'DHARMAJAYA', 'FOOD STATION'].forEach((provider) => {
+        ['PASARJAYA', 'DHARMAJAYA', 'Foodstation'].forEach((provider) => {
             expect(msg).toContain(provider);
         });
         ['1', '2', '3'].forEach((option) => {
@@ -106,7 +109,7 @@ describe('messages config constants', () => {
         const [first, second, third] = PROVIDER_LIST;
         expect(first.key).toBe('DHARMAJAYA');
         expect(second.key).toBe('PASARJAYA');
-        expect(third.key).toBe('FOOD_STATION');
+        expect(third.key).toBe('FOODSTATION');
         PROVIDER_LIST.forEach((provider) => {
             expect(typeof provider.name).toBe('string');
             expect(provider.name.trim().length).toBeGreaterThan(0);
@@ -120,8 +123,8 @@ describe('messages config constants', () => {
         });
     });
 
-    test('FAQ_MESSAGE mentions FOOD STATION', () => {
-        expect(FAQ_MESSAGE).toContain('FOOD STATION');
+    test('FAQ_MESSAGE mentions Foodstation', () => {
+        expect(FAQ_MESSAGE).toContain('Foodstation');
     });
 
     test('ADMIN_PHONES_RAW is an array of strings', () => {
