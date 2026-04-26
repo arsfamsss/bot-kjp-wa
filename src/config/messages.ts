@@ -150,19 +150,17 @@ export async function buildFormatDaftarMessage(): Promise<string> {
 
 // Helper: mapping nomor dinamis → provider key
 export async function getActiveProviderMapping(): Promise<Map<string, string>> {
-    const { isProviderBlocked } = await import('../supabase');
-
-    const [pasarjayaBlocked, dharmajayaBlocked, foodStationBlocked] = await Promise.all([
-        isProviderBlocked('PASARJAYA'),
-        isProviderBlocked('DHARMAJAYA'),
-        isProviderBlocked('FOOD_STATION'),
+    const [pasarjayaAvail, dharmajayaAvail, foodStationAvail] = await Promise.all([
+        isProviderAvailable('PASARJAYA'),
+        isProviderAvailable('DHARMAJAYA'),
+        isProviderAvailable('FOOD_STATION'),
     ]);
 
     const mapping = new Map<string, string>();
     let idx = 1;
-    if (!pasarjayaBlocked) mapping.set(String(idx++), 'PASARJAYA');
-    if (!dharmajayaBlocked) mapping.set(String(idx++), 'DHARMAJAYA');
-    if (!foodStationBlocked) mapping.set(String(idx++), 'FOOD_STATION');
+    if (pasarjayaAvail) mapping.set(String(idx++), 'PASARJAYA');
+    if (dharmajayaAvail) mapping.set(String(idx++), 'DHARMAJAYA');
+    if (foodStationAvail) mapping.set(String(idx++), 'FOOD_STATION');
 
     return mapping;
 }
