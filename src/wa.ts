@@ -1938,8 +1938,8 @@ export async function connectToWhatsApp() {
                         if (!item.lokasi) return false;
                         if (providerFilter === 'PASARJAYA') return item.lokasi.startsWith('PASARJAYA');
                         if (providerFilter === 'DHARMAJAYA') return item.lokasi.startsWith('DHARMAJAYA');
-                        // FOOD_STATION: lokasi bisa 'FOD STATION' atau 'FOOD_STATION'
-                        return item.lokasi.startsWith('FOD STATION') || item.lokasi.startsWith('FOOD_STATION');
+                        // FOOD_STATION: lokasi 'FOOD STATION' atau 'FOOD_STATION'
+                        return item.lokasi.startsWith('FOOD STATION') || item.lokasi.startsWith('FOOD_STATION');
                     });
 
                     return { sourceDate, items: filtered };
