@@ -359,6 +359,132 @@ export function parseRawMessageToLines(text: string): string[] {
         mergedLabelLines.push(current);
     }
 
+    // ── Tahap Baru 1: Split baris KJP+NIK/KTP satu baris ──
+    // Deteksi baris yang mengandung 504948-prefix number DIIKUTI label NIK/KTP + number,
+    // atau bare 16-digit number terpisah whitespace setelah KJP number.
+    // Contoh: "kjp: 5049488507463288 nik:3175065310890022" → 2 baris
+    // Contoh: "kjp:5049488507463288nik:3175065310890022" → 2 baris (glued)
+    const afterKjpNikSplit: string[] = [];
+    const kjpNumberPattern = /504948\d{10,12}/;
+
+    for (const line of mergedLabelLines) {
+        const kjpMatch = line.match(kjpNumberPattern);
+        if (!kjpMatch) {
+            afterKjpNikSplit.push(line);
+            continue;
+        }
+
+        const kjpStart = kjpMatch.index!;
+        const kjpNumber = kjpMatch[0];
+        const afterKjpPos = kjpStart + kjpNumber.length;
+        const afterKjp = line.slice(afterKjpPos);
+
+        // Case 1: Label NIK/KTP after KJP number (with or without whitespace)
+        // Match: optional whitespace + NIK/KTP label keyword (possibly with colon/space before digits)
+        const nikLabelMatch = afterKjp.match(/^(\s*)(?=((?:(?:no(?:mor)?)\s+)?(?:nik|ktp))\s*:?\s*\d)/i);
+        if (nikLabelMatch) {
+            const splitPos = afterKjpPos + nikLabelMatch[1].length;
+            const part1 = line.slice(0, splitPos).trim();
+            const part2 = line.slice(splitPos).trim();
+            if (part1 && part2) {
+                afterKjpNikSplit.push(part1);
+                afterKjpNikSplit.push(part2);
+                continue;
+            }
+        }
+
+        // Case 2: Bare 16-digit number after KJP, separated by whitespace (no label)
+        // e.g. "kjp: 5049488507463288 3175065310890022"
+        const bareDigitMatch = afterKjp.match(/^\s+(\d{16})\b/);
+        if (bareDigitMatch) {
+            // Make sure the bare digits are NOT a continuation of the KJP number
+            // (KJP is 16-18 digits starting with 504948, already fully captured)
+            const part1 = line.slice(0, afterKjpPos).trim();
+            const part2 = bareDigitMatch[1];
+            if (part1 && part2) {
+                afterKjpNikSplit.push(part1);
+                afterKjpNikSplit.push(part2);
+                continue;
+            }
+        }
+
+        afterKjpNikSplit.push(line);
+    }
+
+    // ── Tahap Baru 2: Split baris Nama+KJP ──
+    // Deteksi baris yang mengandung NAMA ORANG diikuti 504948-prefix KJP number
+    // (dengan atau tanpa label kartu sebelum/sesudah angka).
+    // Contoh: "Bu haji/suha 5049483502922396 lansia" → ["Bu haji/suha", "5049483502922396 lansia"]
+    // Contoh: "Boru Sinaga3 kjp:5049488508915633" → ["Boru Sinaga3", "kjp:5049488508915633"]
+    // GUARD: Jangan split jika bagian "Nama" hanya berisi label keyword.
+    const afterNameKjpSplit: string[] = [];
+
+    // Label keywords yang menandakan baris KJP (bukan nama orang)
+    // Includes card type labels + generic labels
+    const kjpLabelKeywords = /^(?:NIK|KTP|KK|KJP|KPJ|KAJ|KPDJ|KJMU|LANSIA|PJLP|RUSUN|DISABILITAS|DISABLITAS|DASAWISMA|DAWIS|GURU|HONORER|PEKERJA|KARTU|KELUARGA|ATM|NO|NOMOR|NOMER|LNS|LS|KLJ|CLJ|PKJ|PKJA|DIFABEL|CACAT|GURU\s+HONORER|DASA\s+WISMA|RUMAH\s+SUSUN|LANJUT\s+USIA|KARTU\s+JAKARTA\s+PINTAR|PEKERJA\s+JAKARTA|KARTU\s+PEKERJA(?:\s+JAKARTA)?|PENYANDANG\s+DISABILITAS)$/i;
+
+    for (const line of afterKjpNikSplit) {
+        // Find 504948-prefix number in the line
+        const kjpMatch = line.match(/504948\d{10,12}/);
+        if (!kjpMatch) {
+            afterNameKjpSplit.push(line);
+            continue;
+        }
+
+        const kjpStart = kjpMatch.index!;
+
+        // Determine split point: look for a card label keyword BEFORE the 504948 number
+        // e.g. "Boru Sinaga3 kjp:5049488508915633" → label "kjp" starts before 504948
+        // e.g. "Tante 2 Kjp 504948120004302883" → label "Kjp" starts before 504948
+        // e.g. "Suwarti kjp504948853150149738" → label "kjp" glued to number
+
+        // Search for a card-type label keyword that precedes the 504948 number
+        // The label can be glued (kjp504948...) or separated by colon/space (kjp: 504948..., Kjp 504948...)
+        const beforeKjp = line.slice(0, kjpStart);
+
+        // Try to find a label keyword at the end of beforeKjp
+        // Pattern: optional whitespace + label keyword + optional colon/space at end
+        const labelBeforeMatch = beforeKjp.match(/(?:^|\s)((?:kjp|kpj|kaj|kpdj|kjmu|lansia|klj|lns|ls|rusun|disabilitas|disablitas|dasawisma|dawis|guru\s*honorer|guru|honorer|pekerja|pkja|pkj|pjlp|difabel|cacat|dasa\s*wisma|rumah\s*susun|lanjut\s*usia|kartu(?:\s*jakarta\s*pintar|\s*pekerja(?:\s*jakarta)?|\s*keluarga)?|penyandang\s*disabilitas|atm)\s*:?\s*)$/i);
+
+        let splitPoint: number;
+        if (labelBeforeMatch) {
+            // Split before the label keyword
+            // labelBeforeMatch.index is the position of the match start (including leading space)
+            // We want to split at the start of the label (after the leading space)
+            const matchStartInBefore = beforeKjp.lastIndexOf(labelBeforeMatch[1]);
+            splitPoint = matchStartInBefore >= 0 ? matchStartInBefore : kjpStart;
+        } else {
+            // No label before 504948 — split directly before the number
+            splitPoint = kjpStart;
+        }
+
+        const namePart = line.slice(0, splitPoint).trim();
+        const kjpPart = line.slice(splitPoint).trim();
+
+        // GUARD 1: Nama must contain at least 2 letters (not just digits/symbols)
+        if (!namePart || !/[a-zA-Z]{2,}/.test(namePart)) {
+            afterNameKjpSplit.push(line);
+            continue;
+        }
+
+        // GUARD 2: Nama must NOT be only a label keyword
+        // Strip colons/spaces from namePart for comparison
+        const nameClean = namePart.replace(/[\s:;,]+/g, ' ').trim();
+        if (kjpLabelKeywords.test(nameClean)) {
+            afterNameKjpSplit.push(line);
+            continue;
+        }
+
+        // GUARD 3: kjpPart must not be empty
+        if (!kjpPart) {
+            afterNameKjpSplit.push(line);
+            continue;
+        }
+
+        afterNameKjpSplit.push(namePart);
+        afterNameKjpSplit.push(kjpPart);
+    }
+
     const finalLines: string[] = [];
 
     // Auto-Split Logic: Deteksi baris yang berisi Nama + Angka 16 digit tergabung
@@ -368,7 +494,7 @@ export function parseRawMessageToLines(text: string): string[] {
     // (\d{16,})$      -> Angka 16 digit atau lebih di akhir
     const mergedRegex = /^(.*?)[\s\t]+(\d{16,})$/;
 
-    for (const line of mergedLabelLines) {
+    for (const line of afterNameKjpSplit) {
         // Cek apakah baris ini "Name + KJP" yang nempel?
         // Contoh: "Agus Dalimin 5049488500001111"
         const match = line.match(mergedRegex);

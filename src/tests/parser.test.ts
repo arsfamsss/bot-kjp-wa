@@ -258,6 +258,147 @@ describe('parser.ts', () => {
                 'KK 3171234567890222',
             ]);
         });
+
+        describe('split Nama+KJP nyatu (Pola A)', () => {
+            it('A1: splits "Bu haji/suha 5049483502922396 lansia"', () => {
+                const lines = parseRawMessageToLines('Bu haji/suha 5049483502922396 lansia');
+                expect(lines).toEqual(['Bu haji/suha', '5049483502922396 lansia']);
+            });
+
+            it('A2: splits "Boru Sinaga3 kjp:5049488508915633"', () => {
+                const lines = parseRawMessageToLines('Boru Sinaga3 kjp:5049488508915633');
+                expect(lines).toEqual(['Boru Sinaga3', 'kjp:5049488508915633']);
+            });
+
+            it('A3: splits "Suwarti kjp504948853150149738"', () => {
+                const lines = parseRawMessageToLines('Suwarti kjp504948853150149738');
+                expect(lines).toEqual(['Suwarti', 'kjp504948853150149738']);
+            });
+
+            it('A4: splits "Tante 2 Kjp 504948120004302883"', () => {
+                const lines = parseRawMessageToLines('Tante 2 Kjp 504948120004302883');
+                expect(lines).toEqual(['Tante 2', 'Kjp 504948120004302883']);
+            });
+
+            it('A5: splits "Lea Irma 5049483501993026 lansia"', () => {
+                const lines = parseRawMessageToLines('Lea Irma 5049483501993026 lansia');
+                expect(lines).toEqual(['Lea Irma', '5049483501993026 lansia']);
+            });
+        });
+
+        describe('split KJP+NIK nyatu (Pola B)', () => {
+            it('B1: splits "kjp: 5049488507463288 nik:3175065310890022"', () => {
+                const lines = parseRawMessageToLines('kjp: 5049488507463288 nik:3175065310890022');
+                expect(lines).toEqual(['kjp: 5049488507463288', 'nik:3175065310890022']);
+            });
+
+            it('B2: splits "lansia: 5049488507463288 ktp:3175065310890022"', () => {
+                const lines = parseRawMessageToLines('lansia: 5049488507463288 ktp:3175065310890022');
+                expect(lines).toEqual(['lansia: 5049488507463288', 'ktp:3175065310890022']);
+            });
+
+            it('B3: splits glued "kjp:5049488507463288nik:3175065310890022"', () => {
+                const lines = parseRawMessageToLines('kjp:5049488507463288nik:3175065310890022');
+                expect(lines).toEqual(['kjp:5049488507463288', 'nik:3175065310890022']);
+            });
+        });
+
+        describe('full message split — kasus nyata user', () => {
+            it('3 baris KJP+NIK nyatu jadi 4 baris', () => {
+                const input = 'Rakha adiansyah\nkjp: 5049488507463288 nik:3175065310890022\nKK :3175061208160078';
+                const lines = parseRawMessageToLines(input);
+
+                expect(lines).toHaveLength(4);
+                expect(lines).toEqual([
+                    'Rakha adiansyah',
+                    'kjp: 5049488507463288',
+                    'nik:3175065310890022',
+                    'KK :3175061208160078',
+                ]);
+            });
+
+            it('3 baris Nama+KJP nyatu jadi 4 baris', () => {
+                const input = 'Bu haji/suha 5049483502922396 lansia\nKtp  3175020206800014\nKk 3175020801090397';
+                const lines = parseRawMessageToLines(input);
+
+                expect(lines).toHaveLength(4);
+                expect(lines).toEqual([
+                    'Bu haji/suha',
+                    '5049483502922396 lansia',
+                    'Ktp  3175020206800014',
+                    'Kk 3175020801090397',
+                ]);
+            });
+        });
+
+        describe('regression — existing behavior preserved', () => {
+            it('auto-split tetap jalan untuk "Agus Dalimin 5049488500001111"', () => {
+                const lines = parseRawMessageToLines('Agus Dalimin 5049488500001111');
+                expect(lines).toEqual(['Agus Dalimin', '5049488500001111']);
+            });
+
+            it('label-merge tetap jalan untuk "KTP\\n3175065310890022"', () => {
+                const lines = parseRawMessageToLines('KTP\n3175065310890022');
+                expect(lines).toEqual(['KTP : 3175065310890022']);
+            });
+
+            it('single label+number tidak dipecah: "NIK 3175065310890022"', () => {
+                const lines = parseRawMessageToLines('NIK 3175065310890022');
+                expect(lines).toEqual(['NIK 3175065310890022']);
+            });
+
+            it('4 baris benar tetap tidak berubah', () => {
+                const input = 'Nama\n5049488507463288\n3175065310890022\n3175061208160078';
+                const lines = parseRawMessageToLines(input);
+                expect(lines).toEqual(['Nama', '5049488507463288', '3175065310890022', '3175061208160078']);
+            });
+        });
+
+        describe('KRITIS — format benar TIDAK terganggu', () => {
+            it('"KJP 5049488500001234 lansia" tetap 1 elemen', () => {
+                const lines = parseRawMessageToLines('KJP 5049488500001234 lansia');
+                expect(lines).toHaveLength(1);
+                expect(lines).toEqual(['KJP 5049488500001234 lansia']);
+            });
+
+            it('"5049488500001234 lansia" tetap 1 elemen', () => {
+                const lines = parseRawMessageToLines('5049488500001234 lansia');
+                expect(lines).toHaveLength(1);
+                expect(lines).toEqual(['5049488500001234 lansia']);
+            });
+
+            it('"lansia 5049488500001234" tetap 1 elemen', () => {
+                const lines = parseRawMessageToLines('lansia 5049488500001234');
+                expect(lines).toHaveLength(1);
+                expect(lines).toEqual(['lansia 5049488500001234']);
+            });
+
+            it('4 baris format label tetap tidak berubah', () => {
+                const input = 'Budi\nKJP 5049488500001234 lansia\nKTP 3175065310890022\nKK 3175061208160078';
+                const lines = parseRawMessageToLines(input);
+                expect(lines).toHaveLength(4);
+                expect(lines).toEqual([
+                    'Budi',
+                    'KJP 5049488500001234 lansia',
+                    'KTP 3175065310890022',
+                    'KK 3175061208160078',
+                ]);
+            });
+
+            it('4 baris numeric format tetap tidak berubah', () => {
+                const input = 'Budi\n5049488500001234\n3175065310890022\n3175061208160078';
+                const lines = parseRawMessageToLines(input);
+                expect(lines).toHaveLength(4);
+                expect(lines).toEqual(['Budi', '5049488500001234', '3175065310890022', '3175061208160078']);
+            });
+
+            it('5 baris Pasarjaya tetap tidak berubah', () => {
+                const input = 'Budi\n5049488500001234\n3175065310890022\n3175061208160078\n15-08-1990';
+                const lines = parseRawMessageToLines(input);
+                expect(lines).toHaveLength(5);
+                expect(lines).toEqual(['Budi', '5049488500001234', '3175065310890022', '3175061208160078', '15-08-1990']);
+            });
+        });
     });
 
     describe('groupLinesToBlocks', () => {
