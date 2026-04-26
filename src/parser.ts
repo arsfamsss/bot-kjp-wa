@@ -334,6 +334,7 @@ export function parseRawMessageToLines(text: string): string[] {
     // SANITASI AWAL: Bersihkan karakter invisible dan format aneh
     const sanitized = sanitizeInboundText(text)
         .replace(/\bdisablitas\b/gi, 'Disabilitas')
+        .replace(/\.{2,}/g, ':')                  // .. atau ... → : (KJP..504948 → KJP:504948)
         .replace(/=/g, ':')                       // = → : (sebelum colon dedup)
         .replace(/:+/g, ':')                      // :: → :
         .replace(/(\d)\.+(?=\s|$)/g, '$1');       // strip trailing dot(s) setelah angka
