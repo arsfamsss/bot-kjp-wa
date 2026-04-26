@@ -1955,6 +1955,11 @@ export async function connectToWhatsApp() {
                     const { sourceDate, items } = await resolveStatusSourceItems(sourceDateDefault, providerKey);
 
                     if (!items.length) {
+                        // Foodstation cek data hari ini — langsung bilang tidak ada data
+                        if (providerKey === 'FOOD_STATION') {
+                            return { text: STATUS_CHECK_NO_DATA_TEXT(providerKey), done: false };
+                        }
+                        // Dharmajaya & Pasarjaya cek data kemarin — cek apakah user punya data hari ini yang belum bisa dicek
                         const { validCount: todayCount } = await getTodayRecapForSender(senderPhone, processingDayKey, 'received_at');
                         if (todayCount > 0) {
                             const displayDate = sourceDateDefault.split('-').reverse().join('-');
