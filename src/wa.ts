@@ -1946,20 +1946,48 @@ export async function connectToWhatsApp() {
                 };
 
                 // --- STATUS CHECK: shared helper for provider-based status check ---
-                const processProviderStatusCheck = async (providerKey: 'PASARJAYA' | 'DHARMAJAYA' | 'FOODSTATION'): Promise<{ text: string | null; done: boolean }> => {
-                    // Foodstation: cek data hari ini. Dharmajaya & Pasarjaya: cek data kemarin.
+                const processProviderStatusCheck = async (providerKey: 'PASARJAYA' | 'DHARMAJAYA' | 'FOODSTATION', pasarjayaSourceOverride?: string): Promise<{ text: string | null; done: boolean }> => {
+                    // Pasarjaya: user pilih kemarin atau hari ini via sub-menu
+                    if (providerKey === 'PASARJAYA' && !pasarjayaSourceOverride) {
+                        const yesterday = shiftIsoDate(processingDayKey, -1);
+                        const yesterdayDisplay = yesterday.split('-').reverse().join('-');
+                        const todayDisplay = processingDayKey.split('-').reverse().join('-');
+                        userFlowByPhone.set(senderPhone, 'CHECK_STATUS_PASARJAYA_DATE');
+                        return {
+                            text: [
+                                '📋 *CEK STATUS PASARJAYA*',
+                                '',
+                                'Pilih data yang ingin dicek:',
+                                `1️⃣ Data kemarin (${yesterdayDisplay})`,
+                                `2️⃣ Data hari ini (${todayDisplay})`,
+                                '',
+                                '_Ketik 1 atau 2, atau ketik 0 untuk kembali._',
+                            ].join('\n'),
+                            done: false,
+                        };
+                    }
+
+                    // Foodstation: cek data hari ini. Dharmajaya: cek data kemarin. Pasarjaya: sesuai pilihan user.
                     const sourceDateDefault = providerKey === 'FOODSTATION'
                         ? processingDayKey
-                        : shiftIsoDate(processingDayKey, -1);
+                        : providerKey === 'PASARJAYA' && pasarjayaSourceOverride
+                            ? pasarjayaSourceOverride
+                            : shiftIsoDate(processingDayKey, -1);
                     const targetDate = shiftIsoDate(processingDayKey, 1);
                     const { sourceDate, items } = await resolveStatusSourceItems(sourceDateDefault, providerKey);
 
                     if (!items.length) {
-                        // Foodstation cek data hari ini — langsung bilang tidak ada data
                         if (providerKey === 'FOODSTATION') {
                             return { text: STATUS_CHECK_NO_DATA_TEXT(providerKey), done: false };
                         }
-                        // Dharmajaya & Pasarjaya cek data kemarin — cek apakah user punya data hari ini yang belum bisa dicek
+                        if (providerKey === 'PASARJAYA' && pasarjayaSourceOverride) {
+                            const isToday = pasarjayaSourceOverride === processingDayKey;
+                            const label = isToday ? 'hari ini' : 'kemarin';
+                            return {
+                                text: `⚠️ Tidak ada data pendaftaran ${label} untuk Pasarjaya.\n_Ketik 0 untuk kembali atau ketik MENU untuk menu utama._`,
+                                done: false,
+                            };
+                        }
                         const { validCount: todayCount } = await getTodayRecapForSender(senderPhone, processingDayKey, 'received_at');
                         if (todayCount > 0) {
                             const displayDate = sourceDateDefault.split('-').reverse().join('-');
@@ -3247,6 +3275,26 @@ export async function connectToWhatsApp() {
                             if (result.done) continue;
                             replyText = result.text!;
                         }
+                    }
+                    if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
+                    continue;
+                }
+                else if (currentUserFlow === 'CHECK_STATUS_PASARJAYA_DATE') {
+                    if (normalized === '0') {
+                        userFlowByPhone.delete(senderPhone);
+                        replyText = MENU_MESSAGE;
+                    } else if (normalized === '1') {
+                        const sourceDate = shiftIsoDate(processingDayKey, -1);
+                        const result = await processProviderStatusCheck('PASARJAYA', sourceDate);
+                        if (result.done) continue;
+                        replyText = result.text!;
+                    } else if (normalized === '2') {
+                        const sourceDate = processingDayKey;
+                        const result = await processProviderStatusCheck('PASARJAYA', sourceDate);
+                        if (result.done) continue;
+                        replyText = result.text!;
+                    } else {
+                        replyText = '⚠️ Pilihan tidak valid. Ketik *1* (data kemarin) atau *2* (data hari ini), atau *0* untuk kembali.';
                     }
                     if (replyText) await sock.sendMessage(remoteJid, { text: replyText });
                     continue;
