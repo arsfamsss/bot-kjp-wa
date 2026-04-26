@@ -111,7 +111,7 @@ src/
 - Foodstation: single location, key = `FOD STATION` (tanpa dash prefix). Display name = `Foodstation` (bukan "Food Station")
 - Provider-level close: key = `PASARJAYA` / `DHARMAJAYA` / `FOOD_STATION` (tanpa sub-location)
 - `isSpecificLocationClosed()` cek 4 fase: jam operasional/override → sub-location → provider-level → quota (Dharmajaya only)
-- Menu user dinamis: provider yang ditutup atau di luar jam di-hide dari mapping, tampil dengan label "(buka jam X)" di menu
+- Menu user dinamis: provider yang ditutup atau di luar jam tampil dengan label "(TUTUP - buka jam X)" di menu, user tetap bisa ketik nomornya tapi ditolak dengan pesan informatif + jam operasional
 
 **Jam Operasional Registrasi** (di luar jam → tolak + pesan jam):
 - Dharmajaya: 06:05 - 23:59 WIB
@@ -120,7 +120,7 @@ src/
 - Config: `REGISTRATION_HOURS` di messages.ts
 - `isProviderOpen(provider)` → boolean (cek jam default)
 - `isProviderAvailable(provider)` → boolean (cek blocked + jam + override)
-- `getProviderClosedLabel(provider)` → string "(buka jam XX.XX)"
+- `getProviderClosedLabel(provider)` → string "buka jam XX.XX"
 - Override: tabel `provider_operation_overrides` (upsert 1 row per provider)
   - `override_type`: 'open' (buka sampai 23:59 hari ini) atau 'close' (periode manual start-end)
   - `expires_at`: auto-expire untuk "Buka Sekarang"

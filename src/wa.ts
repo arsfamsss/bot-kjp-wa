@@ -143,6 +143,8 @@ import {
     getStatusCheckClosedMessage,
     STATUS_CHECK_NO_DATA_TEXT,
     STATUS_CHECK_PROCESSING_TEXT,
+    isProviderAvailable,
+    REGISTRATION_HOURS,
 } from './config/messages';
 import {
     normalizePhone,
@@ -3307,12 +3309,19 @@ export async function connectToWhatsApp() {
                         pendingRegistrationData.delete(senderPhone);
                         replyText = '✅ Pendaftaran dibatalkan.';
                     } else if (!selectedProvider) {
-                        if (providerMap.size === 0) {
-                            replyText = '⛔ Semua lokasi sedang tutup. Silakan coba lagi nanti.';
-                        } else {
-                            const validNums = [...providerMap.keys()].join(', ');
-                            replyText = `⚠️ Pilihan tidak dikenali. Ketik ${validNums} untuk pilih lokasi, atau 0 untuk batal.`;
-                        }
+                        const validNums = [...providerMap.keys()].join(', ');
+                        replyText = `⚠️ Pilihan tidak dikenali. Ketik ${validNums} untuk pilih lokasi, atau 0 untuk batal.`;
+                    } else if (!(await isProviderAvailable(selectedProvider))) {
+                        const config = REGISTRATION_HOURS[selectedProvider];
+                        const displayNames: Record<string, string> = { PASARJAYA: 'Pasarjaya', DHARMAJAYA: 'Dharmajaya', FOOD_STATION: 'Foodstation' };
+                        const displayName = displayNames[selectedProvider] ?? selectedProvider;
+                        const jamInfo = config ? `Jam operasional: *${config.label} WIB*` : '';
+                        replyText = [
+                            `⏰ *${displayName}* sedang tutup saat ini.`,
+                            jamInfo,
+                            '',
+                            'Silakan pilih lokasi lain yang tersedia, atau ketik 0 untuk batal.'
+                        ].filter(Boolean).join('\n');
                     } else if (selectedProvider === 'PASARJAYA') {
                         const pendingData = pendingRegistrationData.get(senderPhone);
                         let rejectPasarjaya = false;

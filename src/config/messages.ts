@@ -49,7 +49,7 @@ export function getProviderClosedLabel(provider: string): string {
     const config = REGISTRATION_HOURS[provider];
     if (!config) return '';
     const startTime = config.label.split(' - ')[0];
-    return `(buka jam ${startTime})`;
+    return `buka jam ${startTime}`;
 }
 
 export function getStatusCheckClosedMessage(provider: string): string {
@@ -87,11 +87,20 @@ export async function buildFormatDaftarMessage(): Promise<string> {
     ];
 
     const providers: { num: number; name: string; detail: string; closedLabel?: string }[] = [];
-    let idx = 1;
 
-    for (const p of providerList) {
+    for (let i = 0; i < providerList.length; i++) {
+        const p = providerList[i];
         const blocked = await isProviderBlocked(p.key);
-        if (blocked) continue;
+
+        if (blocked) {
+            providers.push({
+                num: i + 1,
+                name: p.name,
+                detail: p.detail,
+                closedLabel: '(TUTUP)',
+            });
+            continue;
+        }
 
         let isOpen = isProviderOpen(p.key);
         if (!isOpen) {
@@ -106,18 +115,21 @@ export async function buildFormatDaftarMessage(): Promise<string> {
         }
 
         providers.push({
-            num: idx++,
+            num: i + 1,
             name: p.name,
             detail: p.detail,
-            closedLabel: isOpen ? undefined : getProviderClosedLabel(p.key),
+            closedLabel: isOpen ? undefined : `(TUTUP - ${getProviderClosedLabel(p.key)})`,
         });
     }
 
-    if (providers.length === 0) {
+    const allClosed = providers.every(p => !!p.closedLabel);
+    if (allClosed) {
+        const closedLines = providers.map(p => `• *${p.name}* ${p.closedLabel}`).join('\n');
         return [
             '⛔ *SEMUA LOKASI SEDANG TUTUP*',
             '',
-            'Mohon maaf, saat ini semua lokasi pengambilan sedang ditutup.',
+            closedLines,
+            '',
             'Silakan coba lagi nanti. 🙏'
         ].join('\n');
     }
@@ -141,27 +153,20 @@ export async function buildFormatDaftarMessage(): Promise<string> {
         lines.push('');
     }
 
-    const nums = providers.map(p => `*${p.num}*`).join(', ');
-    lines.push(`Silakan ketik ${nums} untuk pilih lokasi.`);
+    const openProviders = providers.filter(p => !p.closedLabel);
+    const openNums = openProviders.map(p => `*${p.num}*`).join(', ');
+    lines.push(`Silakan ketik ${openNums} untuk pilih lokasi.`);
     lines.push('Ketik 0 kalau batal 😊');
 
     return lines.join('\n');
 }
 
-// Helper: mapping nomor dinamis → provider key
+// Helper: mapping nomor tetap → provider key (semua provider selalu ada)
 export async function getActiveProviderMapping(): Promise<Map<string, string>> {
-    const [pasarjayaAvail, dharmajayaAvail, foodStationAvail] = await Promise.all([
-        isProviderAvailable('PASARJAYA'),
-        isProviderAvailable('DHARMAJAYA'),
-        isProviderAvailable('FOOD_STATION'),
-    ]);
-
     const mapping = new Map<string, string>();
-    let idx = 1;
-    if (pasarjayaAvail) mapping.set(String(idx++), 'PASARJAYA');
-    if (dharmajayaAvail) mapping.set(String(idx++), 'DHARMAJAYA');
-    if (foodStationAvail) mapping.set(String(idx++), 'FOOD_STATION');
-
+    mapping.set('1', 'PASARJAYA');
+    mapping.set('2', 'DHARMAJAYA');
+    mapping.set('3', 'FOOD_STATION');
     return mapping;
 }
 
