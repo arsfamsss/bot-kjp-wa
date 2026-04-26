@@ -11,6 +11,12 @@ export const STATUS_CHECK_HOURS: Record<string, { startHour: number; startMinute
     FOOD_STATION: { startHour: 16, startMinute: 10, endHour: 23, endMinute: 59, label: '16:10' },
 };
 
+export const REGISTRATION_HOURS: Record<string, { startHour: number; startMinute: number; endHour: number; endMinute: number; label: string }> = {
+    DHARMAJAYA: { startHour: 6, startMinute: 5, endHour: 23, endMinute: 59, label: '06.05 - 23.59' },
+    PASARJAYA: { startHour: 7, startMinute: 10, endHour: 23, endMinute: 59, label: '07.10 - 23.59' },
+    FOOD_STATION: { startHour: 6, startMinute: 30, endHour: 15, endMinute: 0, label: '06.30 - 15.00' },
+};
+
 const STATUS_CHECK_PROVIDER_DISPLAY: Record<ProviderType, string> = {
     DHARMAJAYA: 'Dharmajaya',
     PASARJAYA: 'Pasarjaya',
@@ -27,6 +33,23 @@ export function isStatusCheckOpen(provider: string): boolean {
     const endMinutes = config.endHour * 60 + config.endMinute;
 
     return currentMinutes >= startMinutes && currentMinutes <= endMinutes;
+}
+
+export function isProviderOpen(provider: string): boolean {
+    const config = REGISTRATION_HOURS[provider];
+    if (!config) return false;
+    const { hour, minute } = getWibParts(new Date());
+    const currentMinutes = hour * 60 + minute;
+    const startMinutes = config.startHour * 60 + config.startMinute;
+    const endMinutes = config.endHour * 60 + config.endMinute;
+    return currentMinutes >= startMinutes && currentMinutes <= endMinutes;
+}
+
+export function getProviderClosedLabel(provider: string): string {
+    const config = REGISTRATION_HOURS[provider];
+    if (!config) return '';
+    const startTime = config.label.split(' - ')[0];
+    return `(buka jam ${startTime})`;
 }
 
 export function getStatusCheckClosedMessage(provider: string): string {
@@ -54,27 +77,40 @@ export const MENU_MESSAGE = [
 ].join('\n');
 
 // --- FORMAT DAFTAR (Dipanggil saat user ketik 1) ---
-// Dynamic: hanya tampilkan provider yang BUKA
 export async function buildFormatDaftarMessage(): Promise<string> {
-    const { isProviderBlocked } = await import('../supabase');
+    const { isProviderBlocked, getProviderOverride } = await import('../supabase');
 
-    const [pasarjayaBlocked, dharmajayaBlocked, foodStationBlocked] = await Promise.all([
-        isProviderBlocked('PASARJAYA'),
-        isProviderBlocked('DHARMAJAYA'),
-        isProviderBlocked('FOOD_STATION'),
-    ]);
+    const providerList: { key: string; name: string; detail: string }[] = [
+        { key: 'PASARJAYA', name: 'PASARJAYA', detail: '(Jakgrosir Kedoya,Gerai Rusun Pesakih,Mini DC Kec. Cengkareng,Jakmart Bambu Larangan,dll)' },
+        { key: 'DHARMAJAYA', name: 'DHARMAJAYA', detail: '(Kosambi,Kapuk Jagal,Pulogadung,Cakung)' },
+        { key: 'FOOD_STATION', name: 'FOOD STATION', detail: '(Cipinang)' },
+    ];
 
-    const providers: { num: number; name: string; detail: string }[] = [];
+    const providers: { num: number; name: string; detail: string; closedLabel?: string }[] = [];
     let idx = 1;
 
-    if (!pasarjayaBlocked) {
-        providers.push({ num: idx++, name: 'PASARJAYA', detail: '(Jakgrosir Kedoya,Gerai Rusun Pesakih,Mini DC Kec. Cengkareng,Jakmart Bambu Larangan,dll)' });
-    }
-    if (!dharmajayaBlocked) {
-        providers.push({ num: idx++, name: 'DHARMAJAYA', detail: '(Kosambi,Kapuk Jagal,Pulogadung,Cakung)' });
-    }
-    if (!foodStationBlocked) {
-        providers.push({ num: idx++, name: 'FOOD STATION', detail: '(Cipinang)' });
+    for (const p of providerList) {
+        const blocked = await isProviderBlocked(p.key);
+        if (blocked) continue;
+
+        let isOpen = isProviderOpen(p.key);
+        if (!isOpen) {
+            const override = await getProviderOverride(p.key);
+            if (override && override.override_type === 'open') {
+                if (override.expires_at) {
+                    isOpen = new Date() <= new Date(override.expires_at);
+                } else {
+                    isOpen = true;
+                }
+            }
+        }
+
+        providers.push({
+            num: idx++,
+            name: p.name,
+            detail: p.detail,
+            closedLabel: isOpen ? undefined : getProviderClosedLabel(p.key),
+        });
     }
 
     if (providers.length === 0) {
@@ -96,7 +132,11 @@ export async function buildFormatDaftarMessage(): Promise<string> {
     ];
 
     for (const p of providers) {
-        lines.push(`${numEmoji(p.num)} *${p.name}*`);
+        if (p.closedLabel) {
+            lines.push(`${numEmoji(p.num)} *${p.name}* ${p.closedLabel}`);
+        } else {
+            lines.push(`${numEmoji(p.num)} *${p.name}*`);
+        }
         lines.push(p.detail);
         lines.push('');
     }
@@ -125,6 +165,25 @@ export async function getActiveProviderMapping(): Promise<Map<string, string>> {
     if (!foodStationBlocked) mapping.set(String(idx++), 'FOOD_STATION');
 
     return mapping;
+}
+
+export async function isProviderAvailable(provider: string): Promise<boolean> {
+    const { isProviderBlocked, getProviderOverride } = await import('../supabase');
+
+    const blocked = await isProviderBlocked(provider);
+    if (blocked) return false;
+
+    if (isProviderOpen(provider)) return true;
+
+    const override = await getProviderOverride(provider);
+    if (override && override.override_type === 'open') {
+        if (override.expires_at) {
+            return new Date() <= new Date(override.expires_at);
+        }
+        return true;
+    }
+
+    return false;
 }
 
 // --- STATUS CHECK PROVIDER MENU & MAPPING ---

@@ -3401,3 +3401,87 @@ export async function checkBlockedKtpBatch(items: LogItem[]): Promise<LogItem[]>
         };
     });
 }
+
+// --- Provider Operation Overrides ---
+
+export interface ProviderOverride {
+    provider: string;
+    override_type: 'open' | 'close';
+    expires_at?: string | null;
+    manual_close_start?: string | null;
+    manual_close_end?: string | null;
+    created_at?: string;
+}
+
+export async function getProviderOverride(provider: string): Promise<ProviderOverride | null> {
+    const { data, error } = await supabase
+        .from('provider_operation_overrides')
+        .select('*')
+        .eq('provider', provider)
+        .maybeSingle();
+
+    if (error) {
+        if (!isMissingTableError(error, 'provider_operation_overrides')) {
+            console.error('[getProviderOverride] Error:', error.message);
+        }
+        return null;
+    }
+    return data as ProviderOverride | null;
+}
+
+export async function upsertProviderOverride(data: {
+    provider: string;
+    override_type: 'open' | 'close';
+    expires_at?: string;
+    manual_close_start?: string;
+    manual_close_end?: string;
+}): Promise<boolean> {
+    const { error } = await supabase
+        .from('provider_operation_overrides')
+        .upsert({
+            provider: data.provider,
+            override_type: data.override_type,
+            expires_at: data.expires_at || null,
+            manual_close_start: data.manual_close_start || null,
+            manual_close_end: data.manual_close_end || null,
+            created_at: new Date().toISOString(),
+        }, { onConflict: 'provider' });
+
+    if (error) {
+        if (!isMissingTableError(error, 'provider_operation_overrides')) {
+            console.error('[upsertProviderOverride] Error:', error.message);
+        }
+        return false;
+    }
+    return true;
+}
+
+export async function deleteProviderOverride(provider: string): Promise<boolean> {
+    const { error } = await supabase
+        .from('provider_operation_overrides')
+        .delete()
+        .eq('provider', provider);
+
+    if (error) {
+        if (!isMissingTableError(error, 'provider_operation_overrides')) {
+            console.error('[deleteProviderOverride] Error:', error.message);
+        }
+        return false;
+    }
+    return true;
+}
+
+export async function deleteAllProviderOverrides(): Promise<boolean> {
+    const { error } = await supabase
+        .from('provider_operation_overrides')
+        .delete()
+        .neq('provider', '');  // Delete all rows (neq empty string = all)
+
+    if (error) {
+        if (!isMissingTableError(error, 'provider_operation_overrides')) {
+            console.error('[deleteAllProviderOverrides] Error:', error.message);
+        }
+        return false;
+    }
+    return true;
+}

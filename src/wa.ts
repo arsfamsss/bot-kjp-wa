@@ -4516,6 +4516,7 @@ export async function connectToWhatsApp() {
                                 '1️⃣ Buka Sekarang',
                                 '2️⃣ Tutup Sekarang',
                                 '3️⃣ Kembali ke Default (00.00 - 06.00)',
+                                '4️⃣ Atur Jam Per-Provider',
                                 '',
                                 '_Ketik 0 untuk batal._'
                             ].join('\n');
@@ -4704,6 +4705,8 @@ export async function connectToWhatsApp() {
                             });
 
                             clearBotSettingsCache();
+                            const { deleteAllProviderOverrides } = await import('./supabase');
+                            await deleteAllProviderOverrides();
                             closeWindowDraftByPhone.delete(senderPhone);
                             adminFlowByPhone.set(senderPhone, 'SETTING_OPERATION_MENU');
 
@@ -4715,11 +4718,78 @@ export async function connectToWhatsApp() {
                                     '🟢 BUKA: *06.05 - 23.59 WIB*',
                                     '🔴 TUTUP: *00.00 - 06.05 WIB*',
                                     '',
+                                    '📌 Override jam per-provider juga di-reset ke default.',
+                                    '',
                                     '_Ketik 0 untuk kembali ke menu admin._',
                                 ].join('\n')
                                 : '❌ Gagal mengaktifkan jadwal default. Coba lagi.';
+                        } else if (normalized === '4') {
+                            // --- Atur Jam Per-Provider ---
+                            const { getProviderOverride } = await import('./supabase');
+                            const { REGISTRATION_HOURS, isProviderOpen } = await import('./config/messages');
+                            const { getWibParts } = await import('./time');
+
+                            const providerKeys = ['DHARMAJAYA', 'PASARJAYA', 'FOOD_STATION'] as const;
+                            const providerDisplayNames: Record<string, string> = {
+                                DHARMAJAYA: 'Dharmajaya',
+                                PASARJAYA: 'Pasarjaya',
+                                FOOD_STATION: 'Foodstation',
+                            };
+
+                            const statusLines: string[] = [];
+                            const now = new Date();
+                            let idx = 1;
+                            for (const pk of providerKeys) {
+                                const config = REGISTRATION_HOURS[pk];
+                                const override = await getProviderOverride(pk);
+                                let isOpen = isProviderOpen(pk);
+                                let overrideInfo = 'Tidak ada';
+
+                                if (override) {
+                                    if (override.override_type === 'open') {
+                                        if (override.expires_at) {
+                                            isOpen = now <= new Date(override.expires_at);
+                                        } else {
+                                            isOpen = true;
+                                        }
+                                        const wibExpiry = override.expires_at
+                                            ? (() => { const p = getWibParts(new Date(override.expires_at)); return `${String(p.day).padStart(2,'0')}-${String(p.month).padStart(2,'0')}-${p.year} ${String(p.hour).padStart(2,'0')}:${String(p.minute).padStart(2,'0')}`; })()
+                                            : 'tanpa batas';
+                                        overrideInfo = `Buka sampai ${wibExpiry} WIB`;
+                                    } else if (override.override_type === 'close') {
+                                        if (override.manual_close_start && override.manual_close_end) {
+                                            const endTime = new Date(override.manual_close_end);
+                                            if (now >= new Date(override.manual_close_start) && now <= endTime) {
+                                                isOpen = false;
+                                            }
+                                            const pStart = getWibParts(new Date(override.manual_close_start));
+                                            const pEnd = getWibParts(endTime);
+                                            overrideInfo = `Tutup ${String(pStart.day).padStart(2,'0')}-${String(pStart.month).padStart(2,'0')}-${pStart.year} ${String(pStart.hour).padStart(2,'0')}:${String(pStart.minute).padStart(2,'0')} s/d ${String(pEnd.day).padStart(2,'0')}-${String(pEnd.month).padStart(2,'0')}-${pEnd.year} ${String(pEnd.hour).padStart(2,'0')}:${String(pEnd.minute).padStart(2,'0')} WIB`;
+                                        }
+                                    }
+                                }
+
+                                const emoji = isOpen ? '🟢' : '🔴';
+                                const statusLabel = isOpen ? 'BUKA' : 'TUTUP';
+                                const numEmoji = idx === 1 ? '1️⃣' : idx === 2 ? '2️⃣' : '3️⃣';
+                                statusLines.push(`${numEmoji} *${providerDisplayNames[pk]}* — ${emoji} ${statusLabel} (default: ${config?.label ?? '-'})`);
+                                if (overrideInfo !== 'Tidak ada') {
+                                    statusLines.push(`   _Override: ${overrideInfo}_`);
+                                }
+                                idx++;
+                            }
+
+                            adminFlowByPhone.set(senderPhone, 'SETTING_PROVIDER_SELECT');
+                            replyText = [
+                                '⏰ *ATUR JAM PER-PROVIDER*',
+                                '',
+                                ...statusLines,
+                                '',
+                                'Ketik angka untuk pilih provider.',
+                                '_Ketik 0 untuk kembali._',
+                            ].join('\n');
                         } else {
-                            replyText = '⚠️ Pilihan tidak dikenali. Ketik 1, 2, 3, atau 0.';
+                            replyText = '⚠️ Pilihan tidak dikenali. Ketik 1, 2, 3, 4, atau 0.';
                         }
                     } else if (currentAdminFlow === 'SETTING_MANUAL_CLOSE_START') {
                         if (normalized === '0') {
@@ -4735,6 +4805,7 @@ export async function connectToWhatsApp() {
                                 '1️⃣ Buka Sekarang',
                                 '2️⃣ Tutup Sekarang',
                                 '3️⃣ Kembali ke Default (00.00 - 06.05)',
+                                '4️⃣ Atur Jam Per-Provider',
                                 '',
                                 '_Ketik 0 untuk batal._',
                             ].join('\n');
@@ -4773,6 +4844,7 @@ export async function connectToWhatsApp() {
                                 '1️⃣ Buka Sekarang',
                                 '2️⃣ Tutup Sekarang',
                                 '3️⃣ Kembali ke Default (00.00 - 06.00)',
+                                '4️⃣ Atur Jam Per-Provider',
                                 '',
                                 '_Ketik 0 untuk batal._',
                             ].join('\n');
@@ -4815,6 +4887,407 @@ export async function connectToWhatsApp() {
                                 }
                             }
                         }
+                    } else if (currentAdminFlow === 'SETTING_PROVIDER_SELECT') {
+                        const { getProviderOverride } = await import('./supabase');
+                        const { REGISTRATION_HOURS, isProviderOpen } = await import('./config/messages');
+                        const { getWibParts } = await import('./time');
+                        const { providerOverrideDraftByPhone } = await import('./state');
+
+                        const providerKeys = ['DHARMAJAYA', 'PASARJAYA', 'FOOD_STATION'] as const;
+                        const providerDisplayNames: Record<string, string> = {
+                            DHARMAJAYA: 'Dharmajaya',
+                            PASARJAYA: 'Pasarjaya',
+                            FOOD_STATION: 'Foodstation',
+                        };
+
+                        if (normalized === '0') {
+                            providerOverrideDraftByPhone.delete(senderPhone);
+                            adminFlowByPhone.set(senderPhone, 'SETTING_OPERATION_MENU');
+                            const currentSettings = await getBotSettings();
+                            const currentTimeStr = formatOperationStatus(currentSettings);
+                            replyText = [
+                                '⏰ *ATUR STATUS BOT*',
+                                '',
+                                `📌 Status saat ini: *${currentTimeStr}*`,
+                                '',
+                                '1️⃣ Buka Sekarang',
+                                '2️⃣ Tutup Sekarang',
+                                '3️⃣ Kembali ke Default (00.00 - 06.05)',
+                                '4️⃣ Atur Jam Per-Provider',
+                                '',
+                                '_Ketik 0 untuk batal._',
+                            ].join('\n');
+                        } else if (normalized === '1' || normalized === '2' || normalized === '3') {
+                            const selectedProvider = normalized === '1' ? 'DHARMAJAYA' : normalized === '2' ? 'PASARJAYA' : 'FOOD_STATION';
+                            providerOverrideDraftByPhone.set(senderPhone, { provider: selectedProvider });
+
+                            const config = REGISTRATION_HOURS[selectedProvider];
+                            const override = await getProviderOverride(selectedProvider);
+                            const now = new Date();
+                            let isOpen = isProviderOpen(selectedProvider);
+                            let overrideInfo = 'Tidak ada';
+
+                            if (override) {
+                                if (override.override_type === 'open') {
+                                    if (override.expires_at) {
+                                        isOpen = now <= new Date(override.expires_at);
+                                    } else {
+                                        isOpen = true;
+                                    }
+                                    const wibExpiry = override.expires_at
+                                        ? (() => { const p = getWibParts(new Date(override.expires_at)); return `${String(p.day).padStart(2,'0')}-${String(p.month).padStart(2,'0')}-${p.year} ${String(p.hour).padStart(2,'0')}:${String(p.minute).padStart(2,'0')}`; })()
+                                        : 'tanpa batas';
+                                    overrideInfo = `Buka sampai ${wibExpiry} WIB`;
+                                } else if (override.override_type === 'close') {
+                                    if (override.manual_close_start && override.manual_close_end) {
+                                        const endTime = new Date(override.manual_close_end);
+                                        if (now >= new Date(override.manual_close_start) && now <= endTime) {
+                                            isOpen = false;
+                                        }
+                                        const pStart = getWibParts(new Date(override.manual_close_start));
+                                        const pEnd = getWibParts(endTime);
+                                        overrideInfo = `Tutup ${String(pStart.day).padStart(2,'0')}-${String(pStart.month).padStart(2,'0')}-${pStart.year} ${String(pStart.hour).padStart(2,'0')}:${String(pStart.minute).padStart(2,'0')} s/d ${String(pEnd.day).padStart(2,'0')}-${String(pEnd.month).padStart(2,'0')}-${pEnd.year} ${String(pEnd.hour).padStart(2,'0')}:${String(pEnd.minute).padStart(2,'0')} WIB`;
+                                    }
+                                }
+                            }
+
+                            const emoji = isOpen ? '🟢' : '🔴';
+                            const statusLabel = isOpen ? 'BUKA' : 'TUTUP';
+
+                            adminFlowByPhone.set(senderPhone, 'SETTING_PROVIDER_ACTION');
+                            replyText = [
+                                `⏰ *${providerDisplayNames[selectedProvider]?.toUpperCase()}*`,
+                                '',
+                                `📌 Jam default: ${config?.label ?? '-'} WIB`,
+                                `📌 Status saat ini: ${emoji} ${statusLabel}`,
+                                `📌 Override aktif: ${overrideInfo}`,
+                                '',
+                                '1️⃣ Buka Sekarang (sampai 23:59 hari ini)',
+                                '2️⃣ Tutup Sekarang (periode manual)',
+                                '3️⃣ Kembali ke Default',
+                                '',
+                                '_Ketik 0 untuk kembali._',
+                            ].join('\n');
+                        } else {
+                            replyText = '⚠️ Pilihan tidak dikenali. Ketik 1, 2, 3, atau 0.';
+                        }
+
+                    } else if (currentAdminFlow === 'SETTING_PROVIDER_ACTION') {
+                        const { getProviderOverride, upsertProviderOverride, deleteProviderOverride } = await import('./supabase');
+                        const { REGISTRATION_HOURS, isProviderOpen } = await import('./config/messages');
+                        const { getWibParts } = await import('./time');
+                        const { providerOverrideDraftByPhone } = await import('./state');
+
+                        const providerDisplayNames: Record<string, string> = {
+                            DHARMAJAYA: 'Dharmajaya',
+                            PASARJAYA: 'Pasarjaya',
+                            FOOD_STATION: 'Foodstation',
+                        };
+
+                        const draft = providerOverrideDraftByPhone.get(senderPhone);
+                        if (!draft) {
+                            adminFlowByPhone.set(senderPhone, 'SETTING_OPERATION_MENU');
+                            replyText = '⚠️ Sesi pengaturan hilang. Kembali ke menu Atur Status Bot.';
+                        } else if (normalized === '0') {
+                            providerOverrideDraftByPhone.delete(senderPhone);
+                            adminFlowByPhone.set(senderPhone, 'SETTING_PROVIDER_SELECT');
+
+                            const providerKeys = ['DHARMAJAYA', 'PASARJAYA', 'FOOD_STATION'] as const;
+                            const statusLines: string[] = [];
+                            const now = new Date();
+                            let idx = 1;
+                            for (const pk of providerKeys) {
+                                const config = REGISTRATION_HOURS[pk];
+                                const override = await getProviderOverride(pk);
+                                let isOpen = isProviderOpen(pk);
+                                let overrideInfoText = 'Tidak ada';
+
+                                if (override) {
+                                    if (override.override_type === 'open') {
+                                        if (override.expires_at) {
+                                            isOpen = now <= new Date(override.expires_at);
+                                        } else {
+                                            isOpen = true;
+                                        }
+                                        const wibExpiry = override.expires_at
+                                            ? (() => { const p = getWibParts(new Date(override.expires_at)); return `${String(p.day).padStart(2,'0')}-${String(p.month).padStart(2,'0')}-${p.year} ${String(p.hour).padStart(2,'0')}:${String(p.minute).padStart(2,'0')}`; })()
+                                            : 'tanpa batas';
+                                        overrideInfoText = `Buka sampai ${wibExpiry} WIB`;
+                                    } else if (override.override_type === 'close') {
+                                        if (override.manual_close_start && override.manual_close_end) {
+                                            const endTime = new Date(override.manual_close_end);
+                                            if (now >= new Date(override.manual_close_start) && now <= endTime) {
+                                                isOpen = false;
+                                            }
+                                            const pStart = getWibParts(new Date(override.manual_close_start));
+                                            const pEnd = getWibParts(endTime);
+                                            overrideInfoText = `Tutup ${String(pStart.day).padStart(2,'0')}-${String(pStart.month).padStart(2,'0')}-${pStart.year} ${String(pStart.hour).padStart(2,'0')}:${String(pStart.minute).padStart(2,'0')} s/d ${String(pEnd.day).padStart(2,'0')}-${String(pEnd.month).padStart(2,'0')}-${pEnd.year} ${String(pEnd.hour).padStart(2,'0')}:${String(pEnd.minute).padStart(2,'0')} WIB`;
+                                        }
+                                    }
+                                }
+
+                                const emoji = isOpen ? '🟢' : '🔴';
+                                const statusLabel = isOpen ? 'BUKA' : 'TUTUP';
+                                const numEmoji = idx === 1 ? '1️⃣' : idx === 2 ? '2️⃣' : '3️⃣';
+                                statusLines.push(`${numEmoji} *${providerDisplayNames[pk]}* — ${emoji} ${statusLabel} (default: ${config?.label ?? '-'})`);
+                                if (overrideInfoText !== 'Tidak ada') {
+                                    statusLines.push(`   _Override: ${overrideInfoText}_`);
+                                }
+                                idx++;
+                            }
+
+                            replyText = [
+                                '⏰ *ATUR JAM PER-PROVIDER*',
+                                '',
+                                ...statusLines,
+                                '',
+                                'Ketik angka untuk pilih provider.',
+                                '_Ketik 0 untuk kembali._',
+                            ].join('\n');
+                        } else if (normalized === '1') {
+                            const now = new Date();
+                            const wib = getWibParts(now);
+                            const todayEndIso = `${String(wib.year).padStart(4,'0')}-${String(wib.month).padStart(2,'0')}-${String(wib.day).padStart(2,'0')}T16:59:59.000Z`;
+
+                            const ok = await upsertProviderOverride({
+                                provider: draft.provider,
+                                override_type: 'open',
+                                expires_at: todayEndIso,
+                                manual_close_start: undefined,
+                                manual_close_end: undefined,
+                            });
+
+                            const displayName = providerDisplayNames[draft.provider] ?? draft.provider;
+                            const config = REGISTRATION_HOURS[draft.provider];
+
+                            replyText = ok
+                                ? [
+                                    `✅ *${displayName}* dibuka sampai *23:59 WIB* hari ini.`,
+                                    `Besok kembali ke jadwal default (${config?.label ?? '-'}).`,
+                                    '',
+                                    '_Ketik 0 untuk kembali._',
+                                ].join('\n')
+                                : '❌ Gagal menyimpan override. Coba lagi.';
+                        } else if (normalized === '2') {
+                            adminFlowByPhone.set(senderPhone, 'SETTING_PROVIDER_MANUAL_CLOSE_START');
+                            const displayName = providerDisplayNames[draft.provider] ?? draft.provider;
+                            replyText = [
+                                `🔴 *TUTUP ${displayName.toUpperCase()} (PERIODE MANUAL)*`,
+                                '',
+                                'Masukkan *Tanggal & Jam MULAI tutup*.',
+                                'Format: *DD-MM-YYYY HH:mm*',
+                                'Contoh: *22-02-2026 00:01*',
+                                '',
+                                '_Ketik 0 untuk batal._',
+                            ].join('\n');
+                        } else if (normalized === '3') {
+                            const ok = await deleteProviderOverride(draft.provider);
+                            const displayName = providerDisplayNames[draft.provider] ?? draft.provider;
+                            const config = REGISTRATION_HOURS[draft.provider];
+
+                            replyText = ok
+                                ? [
+                                    `✅ *${displayName}* kembali ke jadwal default (${config?.label ?? '-'}).`,
+                                    '',
+                                    '_Ketik 0 untuk kembali._',
+                                ].join('\n')
+                                : '❌ Gagal menghapus override. Coba lagi.';
+                        } else {
+                            replyText = '⚠️ Pilihan tidak dikenali. Ketik 1, 2, 3, atau 0.';
+                        }
+
+                    } else if (currentAdminFlow === 'SETTING_PROVIDER_MANUAL_CLOSE_START') {
+                        const { providerOverrideDraftByPhone } = await import('./state');
+
+                        const providerDisplayNames: Record<string, string> = {
+                            DHARMAJAYA: 'Dharmajaya',
+                            PASARJAYA: 'Pasarjaya',
+                            FOOD_STATION: 'Foodstation',
+                        };
+
+                        const draft = providerOverrideDraftByPhone.get(senderPhone);
+                        if (!draft) {
+                            adminFlowByPhone.set(senderPhone, 'SETTING_OPERATION_MENU');
+                            replyText = '⚠️ Sesi pengaturan hilang. Kembali ke menu Atur Status Bot.';
+                        } else if (normalized === '0') {
+                            const { getProviderOverride } = await import('./supabase');
+                            const { REGISTRATION_HOURS, isProviderOpen } = await import('./config/messages');
+                            const { getWibParts } = await import('./time');
+
+                            const config = REGISTRATION_HOURS[draft.provider];
+                            const override = await getProviderOverride(draft.provider);
+                            const now = new Date();
+                            let isOpen = isProviderOpen(draft.provider);
+                            let overrideInfo = 'Tidak ada';
+
+                            if (override) {
+                                if (override.override_type === 'open') {
+                                    if (override.expires_at) {
+                                        isOpen = now <= new Date(override.expires_at);
+                                    } else {
+                                        isOpen = true;
+                                    }
+                                    const wibExpiry = override.expires_at
+                                        ? (() => { const p = getWibParts(new Date(override.expires_at)); return `${String(p.day).padStart(2,'0')}-${String(p.month).padStart(2,'0')}-${p.year} ${String(p.hour).padStart(2,'0')}:${String(p.minute).padStart(2,'0')}`; })()
+                                        : 'tanpa batas';
+                                    overrideInfo = `Buka sampai ${wibExpiry} WIB`;
+                                } else if (override.override_type === 'close') {
+                                    if (override.manual_close_start && override.manual_close_end) {
+                                        const endTime = new Date(override.manual_close_end);
+                                        if (now >= new Date(override.manual_close_start) && now <= endTime) {
+                                            isOpen = false;
+                                        }
+                                        const pStart = getWibParts(new Date(override.manual_close_start));
+                                        const pEnd = getWibParts(endTime);
+                                        overrideInfo = `Tutup ${String(pStart.day).padStart(2,'0')}-${String(pStart.month).padStart(2,'0')}-${pStart.year} ${String(pStart.hour).padStart(2,'0')}:${String(pStart.minute).padStart(2,'0')} s/d ${String(pEnd.day).padStart(2,'0')}-${String(pEnd.month).padStart(2,'0')}-${pEnd.year} ${String(pEnd.hour).padStart(2,'0')}:${String(pEnd.minute).padStart(2,'0')} WIB`;
+                                    }
+                                }
+                            }
+
+                            const emoji = isOpen ? '🟢' : '🔴';
+                            const statusLabel = isOpen ? 'BUKA' : 'TUTUP';
+
+                            adminFlowByPhone.set(senderPhone, 'SETTING_PROVIDER_ACTION');
+                            replyText = [
+                                `⏰ *${providerDisplayNames[draft.provider]?.toUpperCase()}*`,
+                                '',
+                                `📌 Jam default: ${config?.label ?? '-'} WIB`,
+                                `📌 Status saat ini: ${emoji} ${statusLabel}`,
+                                `📌 Override aktif: ${overrideInfo}`,
+                                '',
+                                '1️⃣ Buka Sekarang (sampai 23:59 hari ini)',
+                                '2️⃣ Tutup Sekarang (periode manual)',
+                                '3️⃣ Kembali ke Default',
+                                '',
+                                '_Ketik 0 untuk kembali._',
+                            ].join('\n');
+                        } else {
+                            const parsed = parseAdminWibDateTimeToIso(rawTrim);
+                            if (!parsed) {
+                                replyText = '⚠️ Format salah. Gunakan *DD-MM-YYYY HH:mm* (contoh: 22-02-2026 00:01).';
+                            } else {
+                                providerOverrideDraftByPhone.set(senderPhone, {
+                                    provider: draft.provider,
+                                    closeStart: parsed.iso,
+                                });
+                                adminFlowByPhone.set(senderPhone, 'SETTING_PROVIDER_MANUAL_CLOSE_END');
+                                replyText = [
+                                    `✅ Mulai tutup: *${parsed.display} WIB*`,
+                                    '',
+                                    'Sekarang masukkan *Tanggal & Jam SELESAI tutup*.',
+                                    'Format: *DD-MM-YYYY HH:mm*',
+                                    'Contoh: *22-02-2026 23:59*',
+                                    '',
+                                    '_Ketik 0 untuk batal._',
+                                ].join('\n');
+                            }
+                        }
+
+                    } else if (currentAdminFlow === 'SETTING_PROVIDER_MANUAL_CLOSE_END') {
+                        const { upsertProviderOverride } = await import('./supabase');
+                        const { REGISTRATION_HOURS } = await import('./config/messages');
+                        const { getWibParts } = await import('./time');
+                        const { providerOverrideDraftByPhone } = await import('./state');
+
+                        const providerDisplayNames: Record<string, string> = {
+                            DHARMAJAYA: 'Dharmajaya',
+                            PASARJAYA: 'Pasarjaya',
+                            FOOD_STATION: 'Foodstation',
+                        };
+
+                        const draft = providerOverrideDraftByPhone.get(senderPhone);
+                        if (!draft || !draft.closeStart) {
+                            adminFlowByPhone.set(senderPhone, 'SETTING_PROVIDER_MANUAL_CLOSE_START');
+                            replyText = '⚠️ Sesi pengaturan hilang. Ulangi input tanggal mulai tutup.';
+                        } else if (normalized === '0') {
+                            const { getProviderOverride } = await import('./supabase');
+                            const { isProviderOpen } = await import('./config/messages');
+                            const { getWibParts } = await import('./time');
+
+                            const config = REGISTRATION_HOURS[draft.provider];
+                            const override = await getProviderOverride(draft.provider);
+                            const now = new Date();
+                            let isOpen = isProviderOpen(draft.provider);
+                            let overrideInfo = 'Tidak ada';
+
+                            if (override) {
+                                if (override.override_type === 'open') {
+                                    if (override.expires_at) {
+                                        isOpen = now <= new Date(override.expires_at);
+                                    } else {
+                                        isOpen = true;
+                                    }
+                                    const wibExpiry = override.expires_at
+                                        ? (() => { const p = getWibParts(new Date(override.expires_at)); return `${String(p.day).padStart(2,'0')}-${String(p.month).padStart(2,'0')}-${p.year} ${String(p.hour).padStart(2,'0')}:${String(p.minute).padStart(2,'0')}`; })()
+                                        : 'tanpa batas';
+                                    overrideInfo = `Buka sampai ${wibExpiry} WIB`;
+                                } else if (override.override_type === 'close') {
+                                    if (override.manual_close_start && override.manual_close_end) {
+                                        const endTime = new Date(override.manual_close_end);
+                                        if (now >= new Date(override.manual_close_start) && now <= endTime) {
+                                            isOpen = false;
+                                        }
+                                        const pStart = getWibParts(new Date(override.manual_close_start));
+                                        const pEnd = getWibParts(endTime);
+                                        overrideInfo = `Tutup ${String(pStart.day).padStart(2,'0')}-${String(pStart.month).padStart(2,'0')}-${pStart.year} ${String(pStart.hour).padStart(2,'0')}:${String(pStart.minute).padStart(2,'0')} s/d ${String(pEnd.day).padStart(2,'0')}-${String(pEnd.month).padStart(2,'0')}-${pEnd.year} ${String(pEnd.hour).padStart(2,'0')}:${String(pEnd.minute).padStart(2,'0')} WIB`;
+                                    }
+                                }
+                            }
+
+                            const emoji = isOpen ? '🟢' : '🔴';
+                            const statusLabel = isOpen ? 'BUKA' : 'TUTUP';
+
+                            providerOverrideDraftByPhone.set(senderPhone, { provider: draft.provider });
+                            adminFlowByPhone.set(senderPhone, 'SETTING_PROVIDER_ACTION');
+                            replyText = [
+                                `⏰ *${providerDisplayNames[draft.provider]?.toUpperCase()}*`,
+                                '',
+                                `📌 Jam default: ${config?.label ?? '-'} WIB`,
+                                `📌 Status saat ini: ${emoji} ${statusLabel}`,
+                                `📌 Override aktif: ${overrideInfo}`,
+                                '',
+                                '1️⃣ Buka Sekarang (sampai 23:59 hari ini)',
+                                '2️⃣ Tutup Sekarang (periode manual)',
+                                '3️⃣ Kembali ke Default',
+                                '',
+                                '_Ketik 0 untuk kembali._',
+                            ].join('\n');
+                        } else {
+                            const parsedEnd = parseAdminWibDateTimeToIso(rawTrim);
+                            if (!parsedEnd) {
+                                replyText = '⚠️ Format salah. Gunakan *DD-MM-YYYY HH:mm* (contoh: 22-02-2026 23:59).';
+                            } else {
+                                const startMs = new Date(draft.closeStart).getTime();
+                                const endMs = new Date(parsedEnd.iso).getTime();
+
+                                if (endMs <= startMs) {
+                                    replyText = '⚠️ Tanggal/jam selesai harus lebih besar dari mulai tutup.';
+                                } else {
+                                    const ok = await upsertProviderOverride({
+                                        provider: draft.provider,
+                                        override_type: 'close',
+                                        manual_close_start: draft.closeStart,
+                                        manual_close_end: parsedEnd.iso,
+                                        expires_at: undefined,
+                                    });
+
+                                    const displayName = providerDisplayNames[draft.provider] ?? draft.provider;
+                                    const pStart = getWibParts(new Date(draft.closeStart!));
+                                    const startDisplay = `${String(pStart.day).padStart(2,'0')}-${String(pStart.month).padStart(2,'0')}-${pStart.year} ${String(pStart.hour).padStart(2,'0')}:${String(pStart.minute).padStart(2,'0')}`;
+
+                                    providerOverrideDraftByPhone.delete(senderPhone);
+
+                                    replyText = ok
+                                        ? [
+                                            `🔴 *${displayName}* ditutup dari *${startDisplay} WIB* sampai *${parsedEnd.display} WIB*.`,
+                                            '',
+                                            '_Ketik 0 untuk kembali._',
+                                        ].join('\n')
+                                        : '❌ Gagal menyimpan periode tutup. Coba lagi.';
+                                }
+                            }
+                        }
+
                     } else if (currentAdminFlow === 'RECAP_SPECIFIC_MENU') {
                         // SUB-MENU REKAP TANGGAL TERTENTU
                         if (normalized === '1') {

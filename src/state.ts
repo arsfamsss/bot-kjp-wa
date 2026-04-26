@@ -153,7 +153,12 @@ export type AdminFlowState =
     | 'BLOCK_NUMBER_MENU'   // Sub-menu pilih jenis blokir (KJP/KTP/KK/HP)
     | 'QUOTA_MENU'          // Sub-menu pilih jenis kuota (per user/global)
     | 'REPORT_MENU'         // Sub-menu laporan & analitik
-    | 'REKAP_MENU';         // Sub-menu rekap data
+    | 'REKAP_MENU'          // Sub-menu rekap data
+    // Per-provider operating hours states
+    | 'SETTING_PROVIDER_SELECT'
+    | 'SETTING_PROVIDER_ACTION'
+    | 'SETTING_PROVIDER_MANUAL_CLOSE_START'
+    | 'SETTING_PROVIDER_MANUAL_CLOSE_END';
 
 // Draft broadcast untuk penjadwalan/preview
 export type BroadcastDraft = {
@@ -236,4 +241,11 @@ export type CloseWindowDraft = {
 };
 
 export const closeWindowDraftByPhone = new Map<string, CloseWindowDraft>();
+
+export type ProviderOverrideDraft = {
+    provider: string;
+    closeStart?: string;
+};
+
+export const providerOverrideDraftByPhone = new Map<string, ProviderOverrideDraft>();
 import type { LogJson } from './types';

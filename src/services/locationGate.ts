@@ -5,8 +5,9 @@ import {
     closeLocation,
     openLocation,
     isGlobalLocationQuotaFull,
+    getProviderOverride,
 } from '../supabase';
-import { DHARMAJAYA_MAPPING, PASARJAYA_MAPPING } from '../config/messages';
+import { DHARMAJAYA_MAPPING, PASARJAYA_MAPPING, isProviderOpen, REGISTRATION_HOURS } from '../config/messages';
 import { getProcessingDayKey } from '../time';
 
 export type ProviderType = 'PASARJAYA' | 'DHARMAJAYA' | 'FOOD_STATION';
@@ -27,6 +28,43 @@ export function getProviderSubLocations(provider: ProviderType): string[] {
 
 export async function isSpecificLocationClosed(provider: ProviderType, subLocation: string): Promise<{ closed: boolean; reason?: string | null }> {
     const locationKey = buildLocationKey(provider, subLocation);
+
+    // Phase 0: Check operating hours + override
+    const override = await getProviderOverride(provider);
+
+    if (override) {
+        if (override.override_type === 'open') {
+            // Check if open override is expired
+            if (override.expires_at) {
+                const expiresAt = new Date(override.expires_at);
+                if (new Date() > expiresAt) {
+                    // Expired — fall through to default hours check
+                } else {
+                    return { closed: false, reason: null }; // Override: buka
+                }
+            } else {
+                return { closed: false, reason: null }; // Override tanpa expiry: buka
+            }
+        } else if (override.override_type === 'close') {
+            // Check if close override is in range
+            if (override.manual_close_start && override.manual_close_end) {
+                const now = new Date();
+                const start = new Date(override.manual_close_start);
+                const end = new Date(override.manual_close_end);
+                if (now >= start && now <= end) {
+                    return { closed: true, reason: 'Ditutup sementara oleh admin' };
+                }
+                // Outside range — fall through to default hours check
+            }
+        }
+    }
+
+    // Check default operating hours
+    if (!isProviderOpen(provider)) {
+        const config = REGISTRATION_HOURS[provider];
+        const label = config ? config.label : '';
+        return { closed: true, reason: `Di luar jam operasional (${label} WIB)` };
+    }
 
     // 1. Check specific sub-location key
     const subBlocked = await isLocationBlocked(locationKey);
