@@ -399,6 +399,120 @@ describe('parser.ts', () => {
                 expect(lines).toEqual(['Budi', '5049488500001234', '3175065310890022', '3175061208160078', '15-08-1990']);
             });
         });
+
+        describe('T3 — multi-field parser baru + regression Atlas', () => {
+            it('sanitasi `=` jadi `:` pada label kartu', () => {
+                const lines = parseRawMessageToLines('Kjp =5049488504454660');
+                expect(lines).toEqual(['Kjp :5049488504454660']);
+            });
+
+            it('sanitasi trailing dot pada angka tanpa merusak `Hj.`', () => {
+                const linesWithDot = parseRawMessageToLines('5049488500496525.  3173014602790008');
+                expect(linesWithDot).toEqual(['5049488500496525', '3173014602790008']);
+
+                const nameWithDot = parseRawMessageToLines('Hj. Siti');
+                expect(nameWithDot).toEqual(['Hj. Siti']);
+            });
+
+            it('C1 full message -> split 4 baris sesuai output tervalidasi', () => {
+                const input = 'Sapia\n5049488507461944 kjp 3175064905830028 nik 3175062511131032 kk';
+                const lines = parseRawMessageToLines(input);
+
+                expect(lines).toHaveLength(4);
+                expect(lines).toEqual([
+                    'Sapia',
+                    '5049488507461944',
+                    'kjp 3175064905830028',
+                    'nik 3175062511131032 kk',
+                ]);
+            });
+
+            it('C2 full message -> split 4 baris sesuai output tervalidasi', () => {
+                const input = 'Candra\nKjp =5049488504454660\nNik 3172044111830009                    Kk 3175060802111021';
+                const lines = parseRawMessageToLines(input);
+
+                expect(lines).toHaveLength(4);
+                expect(lines).toEqual([
+                    'Candra',
+                    'Kjp :5049488504454660',
+                    'Nik 3172044111830009',
+                    'Kk 3175060802111021',
+                ]);
+            });
+
+            it('C3 full message -> split 4 baris sesuai output tervalidasi', () => {
+                const input = 'Kennan\nKJP 5049488509351119                              KTP 3173015903900013                                KK 3173012011100025';
+                const lines = parseRawMessageToLines(input);
+
+                expect(lines).toHaveLength(4);
+                expect(lines).toEqual([
+                    'Kennan',
+                    'KJP 5049488509351119',
+                    'KTP 3173015903900013',
+                    'KK 3173012011100025',
+                ]);
+            });
+
+            it('C4 full message -> split 4 baris sesuai output tervalidasi', () => {
+                const input = 'Abdi\n5049488500496525.                          3173014602790008.                         3173011601094325';
+                const lines = parseRawMessageToLines(input);
+
+                expect(lines).toHaveLength(4);
+                expect(lines).toEqual([
+                    'Abdi',
+                    '5049488500496525',
+                    '3173014602790008',
+                    '3173011601094325',
+                ]);
+            });
+
+            it('split NIK+KK pada satu baris tanpa KJP', () => {
+                const lines = parseRawMessageToLines('Nik 3172044111830009 Kk 3175060802111021');
+                expect(lines).toEqual(['Nik 3172044111830009', 'Kk 3175060802111021']);
+            });
+
+            it('split 3 bare numbers tanpa label jadi 3 baris', () => {
+                const lines = parseRawMessageToLines('5049488500496525 3173014602790008 3173011601094325');
+                expect(lines).toEqual(['5049488500496525', '3173014602790008', '3173011601094325']);
+            });
+
+            it('regression: 4-baris label utuh tetap tidak berubah', () => {
+                const input = 'Budi\nKJP 5049488500001234\nKTP 3173015903900013\nKK 3173012011100025';
+                const lines = parseRawMessageToLines(input);
+                expect(lines).toEqual([
+                    'Budi',
+                    'KJP 5049488500001234',
+                    'KTP 3173015903900013',
+                    'KK 3173012011100025',
+                ]);
+            });
+
+            it('regression: single `NIK ...` tetap 1 baris', () => {
+                const lines = parseRawMessageToLines('NIK 3173015903900013');
+                expect(lines).toEqual(['NIK 3173015903900013']);
+            });
+
+            it('regression: single `KTP ...` tetap 1 baris', () => {
+                const lines = parseRawMessageToLines('KTP 3173015903900013');
+                expect(lines).toEqual(['KTP 3173015903900013']);
+            });
+
+            it('regression: 5-baris Pasarjaya utuh tetap tidak berubah', () => {
+                const input = 'Budi\n5049488500001234\n3175065310890022\n3175061208160078\n15-08-1990';
+                const lines = parseRawMessageToLines(input);
+                expect(lines).toEqual(['Budi', '5049488500001234', '3175065310890022', '3175061208160078', '15-08-1990']);
+            });
+
+            it('regression: auto-split nama+KJP tetap jalan', () => {
+                const lines = parseRawMessageToLines('Agus Dalimin 5049488500001111');
+                expect(lines).toEqual(['Agus Dalimin', '5049488500001111']);
+            });
+
+            it('regression: label-merge `KTP\n317...` tetap jalan', () => {
+                const lines = parseRawMessageToLines('KTP\n3175065310890022');
+                expect(lines).toEqual(['KTP : 3175065310890022']);
+            });
+        });
     });
 
     describe('groupLinesToBlocks', () => {

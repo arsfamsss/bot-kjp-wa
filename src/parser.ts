@@ -334,7 +334,9 @@ export function parseRawMessageToLines(text: string): string[] {
     // SANITASI AWAL: Bersihkan karakter invisible dan format aneh
     const sanitized = sanitizeInboundText(text)
         .replace(/\bdisablitas\b/gi, 'Disabilitas')
-        .replace(/:+/g, ':');                     // :: → :
+        .replace(/=/g, ':')                       // = → : (sebelum colon dedup)
+        .replace(/:+/g, ':')                      // :: → :
+        .replace(/(\d)\.+(?=\s|$)/g, '$1');       // strip trailing dot(s) setelah angka
 
     const rawLines = sanitized
         .split('\n')
@@ -395,12 +397,11 @@ export function parseRawMessageToLines(text: string): string[] {
 
         // Case 2: Bare 16-digit number after KJP, separated by whitespace (no label)
         // e.g. "kjp: 5049488507463288 3175065310890022"
+        // Push full remainder (not just first number) so Tahap 1.5 can split further
         const bareDigitMatch = afterKjp.match(/^\s+(\d{16})\b/);
         if (bareDigitMatch) {
-            // Make sure the bare digits are NOT a continuation of the KJP number
-            // (KJP is 16-18 digits starting with 504948, already fully captured)
             const part1 = line.slice(0, afterKjpPos).trim();
-            const part2 = bareDigitMatch[1];
+            const part2 = afterKjp.trim();
             if (part1 && part2) {
                 afterKjpNikSplit.push(part1);
                 afterKjpNikSplit.push(part2);
@@ -409,6 +410,71 @@ export function parseRawMessageToLines(text: string): string[] {
         }
 
         afterKjpNikSplit.push(line);
+    }
+
+    // ── Tahap 1.5: Generic Multi-Number Splitter ──
+    // Baris dengan ≥2 angka 16-digit → pecah jadi baris terpisah.
+    // Split point: label keyword terdekat ke angka berikutnya, atau whitespace boundary.
+    const afterMultiNumberSplit: string[] = [];
+    const multiNumLabelRe = /(?:(?:no(?:mor|mer)?)\s+)?(?:nik|ktp|kk|kjp|kpj|kaj|kpdj|kjmu|lansia|klj|lns|ls|rusun|disabilitas|disablitas|dasawisma|dawis|guru|honorer|pekerja|pkja|pkj|pjlp|difabel|cacat|kartu(?:\s+(?:keluarga|jakarta\s+pintar|pekerja(?:\s+jakarta)?))?|atm)/gi;
+
+    for (const line of afterKjpNikSplit) {
+        const digitRe = /\d{16}/g;
+        const matches: { start: number; end: number }[] = [];
+        let dm: RegExpExecArray | null;
+        while ((dm = digitRe.exec(line)) !== null) {
+            matches.push({ start: dm.index, end: dm.index + dm[0].length });
+        }
+
+        if (matches.length < 2) {
+            afterMultiNumberSplit.push(line);
+            continue;
+        }
+
+        const splitPoints: number[] = [0];
+        for (let i = 1; i < matches.length; i++) {
+            const regionStart = matches[i - 1].end;
+            const regionEnd = matches[i].start;
+            const region = line.slice(regionStart, regionEnd);
+
+            // Rightmost label keyword in region → split before it
+            let lastLabelStart = -1;
+            multiNumLabelRe.lastIndex = 0;
+            let lm: RegExpExecArray | null;
+            while ((lm = multiNumLabelRe.exec(region)) !== null) {
+                lastLabelStart = lm.index;
+            }
+
+            if (lastLabelStart >= 0) {
+                splitPoints.push(regionStart + lastLabelStart);
+            } else {
+                // No label → split at start of last whitespace run before next number
+                let wsPos = -1;
+                for (let j = region.length - 1; j >= 0; j--) {
+                    if (/\s/.test(region[j])) {
+                        wsPos = j;
+                        while (wsPos > 0 && /\s/.test(region[wsPos - 1])) {
+                            wsPos--;
+                        }
+                        break;
+                    }
+                }
+                if (wsPos >= 0) {
+                    splitPoints.push(regionStart + wsPos);
+                } else {
+                    splitPoints.push(regionEnd);
+                }
+            }
+        }
+
+        for (let i = 0; i < splitPoints.length; i++) {
+            const start = splitPoints[i];
+            const end = i + 1 < splitPoints.length ? splitPoints[i + 1] : line.length;
+            const part = line.slice(start, end).trim();
+            if (part) {
+                afterMultiNumberSplit.push(part);
+            }
+        }
     }
 
     // ── Tahap Baru 2: Split baris Nama+KJP ──
@@ -423,7 +489,7 @@ export function parseRawMessageToLines(text: string): string[] {
     // Includes card type labels + generic labels
     const kjpLabelKeywords = /^(?:NIK|KTP|KK|KJP|KPJ|KAJ|KPDJ|KJMU|LANSIA|PJLP|RUSUN|DISABILITAS|DISABLITAS|DASAWISMA|DAWIS|GURU|HONORER|PEKERJA|KARTU|KELUARGA|ATM|NO|NOMOR|NOMER|LNS|LS|KLJ|CLJ|PKJ|PKJA|DIFABEL|CACAT|GURU\s+HONORER|DASA\s+WISMA|RUMAH\s+SUSUN|LANJUT\s+USIA|KARTU\s+JAKARTA\s+PINTAR|PEKERJA\s+JAKARTA|KARTU\s+PEKERJA(?:\s+JAKARTA)?|PENYANDANG\s+DISABILITAS)$/i;
 
-    for (const line of afterKjpNikSplit) {
+    for (const line of afterMultiNumberSplit) {
         // Find 504948-prefix number in the line
         const kjpMatch = line.match(/504948\d{10,12}/);
         if (!kjpMatch) {
