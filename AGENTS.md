@@ -1,7 +1,7 @@
 # AGENTS.md — Bot Input Data KJP di WA Otomatis
 
 > Knowledge base untuk AI agent. Baca file ini PERTAMA sebelum explore codebase.
-> Terakhir diupdate: 2026-04-27 (sesi: perbarui menu bantuan user)
+> Terakhir diupdate: 2026-04-27 (sesi: blokir KTP sementara Dharmajaya only + format laporan Foodstation)
 
 ---
 
@@ -91,7 +91,7 @@ src/
 - **Permanen**: tidak pernah di-reset, terdeteksi tanpa filter tanggal. Pesan: "KTP tidak dapat digunakan, silahkan ganti KTP lain"
 - **Sementara**: reset bulanan (lazy-triggered cleanup). Pesan: "KTP Telah Mencapai Batas 5x Pendaftaran Bulan ini"
 - `cleanupBlockedKtpAtEndOfMonthWib()` hanya hapus `block_type = 'temporary'` — permanen aman
-- `checkBlockedKtpBatch()` dan `getBlockedKtpList()`: single query tanpa date filter, filter sementara di JS
+- `checkBlockedKtpBatch(items, locationContext?)`: blokir sementara **hanya berlaku untuk Dharmajaya** (`locationContext === 'DHARMAJAYA'`). Tanpa locationContext atau provider lain → hanya permanent yang dicek. `getBlockedKtpList()`: single query tanpa date filter, filter sementara di JS
 - `addBlockedKtp(noKtp, reason?, blockType)`: upsert, deteksi perubahan jenis → pesan warning
 - `changeBlockedKtpType(noKtp, newType)`: ubah jenis. Perm→temp WAJIB update `created_at` ke NOW (agar tidak langsung expired)
 - `removeBlockedKtp()`: SELECT sebelum DELETE untuk tampilkan jenis di pesan konfirmasi
@@ -284,7 +284,7 @@ supabase-location.test.ts     # 10 tests: CRUD blocked_locations + schedules
 adminLocationMenu.test.ts     # 17 tests: semua state transition + validation
 locationScheduler.test.ts     # 8 tests: one-time/recurring/error/lifecycle
 integration-location.test.ts  # 6 tests: end-to-end flow (close→reject→open→schedule)
-blockedKtp.test.ts            # 23 tests: 6 fungsi KTP (cleanup, check, list, add, remove, changeType)
+blockedKtp.test.ts            # 7+23 tests: 7 locationContext per-provider + 23 fungsi KTP (cleanup, check, list, add, remove, changeType)
 blockedKtpIntegration.test.ts # 7 tests: end-to-end dual block type (perm/temp flow, reply, cleanup)
 pasarjayaStatusCheck.test.ts  # 6 tests: CSRF extraction, HTML parse, cookie merge
 foodStationStatusCheck.test.ts# 4 tests: parseDetailFromHtml (capture-area, edge cases)
@@ -416,6 +416,22 @@ providerHours-integration.test.ts # 7 tests: override priority, expiry, status c
 | Perm→temp `created_at` | Update ke NOW | Agar tidak langsung expired (edge case kritis) |
 | Cleanup filter | `.eq('block_type', 'temporary')` | Highest-risk change, TDD first |
 | Shared parser | Closure wrapper, TIDAK modifikasi | `parseBlockedBulkAddInput` dan `buildBlockedBulkAddSummary` shared oleh KJP/KTP/KK |
+| Scope sementara | Hanya Dharmajaya | Pasarjaya/Foodstation tidak terpengaruh blokir KTP sementara |
+
+### Blokir KTP Sementara Hanya Dharmajaya (April 2026)
+- `checkBlockedKtpBatch(items, locationContext?)` — parameter baru `locationContext`
+- Temporary block: hanya berlaku jika `locationContext === 'DHARMAJAYA'`
+- Permanent block: tetap berlaku di semua provider (tidak berubah)
+- Tanpa locationContext (undefined): safe default = hanya permanent dicek
+- `parser.ts` pass `locationContext` dari `processRawMessageToLogJson`
+- Menu admin blokir KTP TIDAK berubah (tetap global add/remove/list)
+- Tabel DB `blocked_ktp` TIDAK berubah (tidak perlu kolom baru)
+
+### Format Laporan Cek Status Foodstation (April 2026)
+- Sukses: disederhanakan jadi `Nama (no_kjp)` saja (tanpa detail tgl/jam)
+- Gagal: em-dash diganti hyphen (`-`)
+- Error (API down/timeout): tetap tampil terpisah `PERLU DI CEK ULANG`
+- Validasi H+1: cek tanggal berlaku dari HTML response, jika bukan H+1 → GAGAL (data_lama)
 
 ---
 
