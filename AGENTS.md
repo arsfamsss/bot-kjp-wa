@@ -135,9 +135,10 @@ src/
 - Jika hanya 1 provider buka → bypass sub-menu, langsung cek
 - Jika semua tutup → pesan "SEMUA LOKASI SEDANG TUTUP"
 - State: `CHECK_STATUS_SELECT_PROVIDER` (di UserFlowState)
+- State: `CHECK_STATUS_PASARJAYA_DATE` — sub-menu pilih tanggal kemarin/hari ini (khusus Pasarjaya)
 - Lock: `statusCheckInProgressByPhone` Map (prevent double-click, shared semua provider)
 - `resolveStatusSourceItems(sourceDate, providerFilter?)` — filter data by provider prefix dari field `lokasi`
-- `processProviderStatusCheck(providerKey, ...)` — shared helper, route ke service per-provider
+- `processProviderStatusCheck(providerKey, pasarjayaSourceOverride?)` — shared helper, route ke service per-provider. Pasarjaya tanpa override → tampilkan sub-menu tanggal
 
 **Jam Operasional** (di luar jam → tolak + pesan jam):
 - Dharmajaya: 06:05 - 23:59 WIB
@@ -166,11 +167,12 @@ src/
 - Dharmajaya: format existing (`buildStatusSummaryMessage` + `buildFailedDataCopyMessage`)
 
 **Sumber Data**:
-- Dharmajaya & Pasarjaya: cek data **kemarin** (shiftIsoDate -1)
+- Dharmajaya: cek data **kemarin** (shiftIsoDate -1)
+- Pasarjaya: user pilih via sub-menu — **kemarin** ATAU **hari ini**
 - Foodstation: cek data **hari ini** (processingDayKey, tanpa shift)
-- Pesan no-data: "kemarin" untuk Dharmajaya/Pasarjaya, "hari ini" untuk Foodstation
+- Pesan no-data: "kemarin"/"hari ini" sesuai pilihan untuk Pasarjaya, "kemarin" untuk Dharmajaya, "hari ini" untuk Foodstation
 - Pesan no-data selalu ditambah hint `_Ketik 0 untuk kembali atau ketik MENU untuk menu utama._`
-- No-data branch di `processProviderStatusCheck`: Foodstation early-return langsung ke `STATUS_CHECK_NO_DATA_TEXT` (skip `todayCount` check). Dharmajaya/Pasarjaya cek `todayCount > 0` → pesan "data hari ini belum bisa dicek, sumber: data kemarin"
+- No-data branch di `processProviderStatusCheck`: Foodstation early-return langsung ke `STATUS_CHECK_NO_DATA_TEXT` (skip `todayCount` check). Pasarjaya dengan override → pesan spesifik "tidak ada data kemarin/hari ini". Dharmajaya cek `todayCount > 0` → pesan "data hari ini belum bisa dicek, sumber: data kemarin"
 
 **Data Flow**:
 - `getTodayRecapForSender` (recap.ts) SELECT `lokasi` + `tanggal_lahir` dari `data_harian`
@@ -262,7 +264,7 @@ src/
 - Reassign mock setelah import → tidak konsisten antar test
 - Tanpa `--isolate` flag → cross-file mock interference
 
-### Test Files (30 files, ~555+ tests)
+### Test Files (32 files, 555 tests)
 ```
 locationGate.test.ts          # 14 tests: 9 provider×state matrix + quota + helpers
 supabase-location.test.ts     # 10 tests: CRUD blocked_locations + schedules
@@ -304,7 +306,7 @@ providerHours-integration.test.ts # 7 tests: override priority, expiry, status c
 | Provider-level close | Separate key (e.g. `PASARJAYA`) | Handle "Lokasi Lain" free-text |
 | Audit log | Tidak ada | User tidak mau |
 | Mid-flow rejection | Tolak saat submit | User pilih ini vs tolak saat pilih |
-| Menu user | Dinamis — hide provider tutup | User minta agar tidak membingungkan |
+| Menu user | Dinamis — provider tutup tampil dengan label "(TUTUP - buka jam X)", user bisa ketik tapi ditolak | User minta label jelas |
 
 ### Admin Menu Consolidation (April 2026)
 - 23 opsi → 11 opsi (A-Z sorted)
