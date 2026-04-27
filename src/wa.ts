@@ -4549,22 +4549,16 @@ export async function connectToWhatsApp() {
                         } else if (normalized === '1') {
                             replyText = await getGlobalRecap(processingDayKey, undefined, lookupName);
                         } else if (normalized === '2') {
-                            adminFlowByPhone.set(senderPhone, 'RECAP_SPECIFIC_MENU');
-                            replyText = [
-                                '📅 *REKAP TANGGAL TERTENTU*',
-                                '',
-                                '1️⃣ Rekap Kemarin',
-                                '2️⃣ Input Tanggal Manual',
-                                '',
-                                '_Ketik 0 untuk batal._'
-                            ].join('\n');
-                        } else if (normalized === '3') {
-                            adminFlowByPhone.set(senderPhone, 'ASK_RANGE');
-                            replyText = ['📅 *REKAP RENTANG*', '', `Contoh: *01-01-2026 ${dmyExample}*`, '', '_Ketik 0 untuk kembali._'].join('\n');
+                            const yesterday = shiftIsoDate(processingDayKey, -1);
+                            replyText = await getGlobalRecap(yesterday, undefined, lookupName);
                         } else {
-                            replyText = '⚠️ Pilihan tidak dikenali. Ketik 1-3 atau 0 untuk kembali.';
+                            replyText = '⚠️ Pilihan tidak dikenali. Ketik 1-2 atau 0 untuk kembali.';
                         }
                     } else if (currentAdminFlow === 'MENU') {
+                        // === MENU ADMIN (urutan berdasarkan frekuensi pakai) ===
+                        // 1=Atur Status Bot, 2=Kelola Lokasi, 3=Export, 4=Rekap,
+                        // 5=Hapus Data, 6=Blokir, 7=Kuota, 8=Kontak, 9=Whitelist,
+                        // 10=Prefix Kartu, 11=Laporan
                         if (normalized === '1') {
                             const currentSettings = await getBotSettings();
                             const currentTimeStr = formatOperationStatus(currentSettings);
@@ -4583,6 +4577,11 @@ export async function connectToWhatsApp() {
                                 '_Ketik 0 untuk batal._'
                             ].join('\n');
                         } else if (normalized === '2') {
+                            const { handleLocationMgmt } = await import('./services/adminLocationMenu');
+                            const result = await handleLocationMgmt('LOCATION_MGMT_MENU', '', senderPhone);
+                            adminFlowByPhone.set(senderPhone, result.nextState ?? 'NONE');
+                            replyText = result.replyText;
+                        } else if (normalized === '3') {
                             adminFlowByPhone.set(senderPhone, 'EXPORT_SELECT_DATE');
                             replyText = [
                                 '📤 *EXPORT DATA*',
@@ -4595,7 +4594,17 @@ export async function connectToWhatsApp() {
                                 '',
                                 '_Ketik 0 untuk batal._'
                             ].join('\n');
-                        } else if (normalized === '3') {
+                        } else if (normalized === '4') {
+                            adminFlowByPhone.set(senderPhone, 'REKAP_MENU');
+                            replyText = [
+                                '📋 *REKAP DATA*',
+                                '',
+                                '1️⃣ Rekap Hari Ini',
+                                '2️⃣ Rekap Kemarin',
+                                '',
+                                '0️⃣ Kembali ke Menu Admin',
+                            ].join('\n');
+                        } else if (normalized === '5') {
                             adminFlowByPhone.set(senderPhone, 'ADMIN_DELETE_SELECT_USER');
                             const recap = await getGlobalRecap(processingDayKey, undefined, lookupName);
 
@@ -4644,7 +4653,7 @@ export async function connectToWhatsApp() {
                                 msg += '\n👇 Ketik nomor urut user.\n_Ketik 0 untuk batal._';
                                 replyText = msg;
                             }
-                        } else if (normalized === '4') {
+                        } else if (normalized === '6') {
                             adminFlowByPhone.set(senderPhone, 'BLOCK_NUMBER_MENU');
                             replyText = [
                                 '🔒 *KELOLA BLOKIR NOMOR*',
@@ -4655,23 +4664,6 @@ export async function connectToWhatsApp() {
                                 '4️⃣ Blokir No HP',
                                 '',
                                 '0️⃣ Kembali ke Menu Admin',
-                            ].join('\n');
-                        } else if (normalized === '5') {
-                            const { handleLocationMgmt } = await import('./services/adminLocationMenu');
-                            const result = await handleLocationMgmt('LOCATION_MGMT_MENU', '', senderPhone);
-                            adminFlowByPhone.set(senderPhone, result.nextState ?? 'NONE');
-                            replyText = result.replyText;
-                        } else if (normalized === '6') {
-                            adminFlowByPhone.set(senderPhone, 'CONTACT_MENU');
-                            replyText = [
-                                '👥 *KELOLA KONTAK*',
-                                '',
-                                '1️⃣ 🔍 Cari Kontak',
-                                '2️⃣ ➕ Tambah Kontak Baru',
-                                '3️⃣ 📂 Lihat Semua Kontak',
-                                '4️⃣ 🗑️ Hapus Kontak',
-                                '',
-                                '0️⃣ 🔙 Kembali ke Menu Admin',
                             ].join('\n');
                         } else if (normalized === '7') {
                             adminFlowByPhone.set(senderPhone, 'QUOTA_MENU');
@@ -4684,13 +4676,25 @@ export async function connectToWhatsApp() {
                                 '0️⃣ Kembali ke Menu Admin',
                             ].join('\n');
                         } else if (normalized === '8') {
-                            adminFlowByPhone.set(senderPhone, 'CARD_PREFIX_MENU');
-                            replyText = buildCardPrefixMenuText();
+                            adminFlowByPhone.set(senderPhone, 'CONTACT_MENU');
+                            replyText = [
+                                '👥 *KELOLA KONTAK*',
+                                '',
+                                '1️⃣ 🔍 Cari Kontak',
+                                '2️⃣ ➕ Tambah Kontak Baru',
+                                '3️⃣ 📂 Lihat Semua Kontak',
+                                '4️⃣ 🗑️ Hapus Kontak',
+                                '',
+                                '0️⃣ 🔙 Kembali ke Menu Admin',
+                            ].join('\n');
                         } else if (normalized === '9') {
                             whitelistSessionByPhone.delete(senderPhone);
                             adminFlowByPhone.set(senderPhone, 'WHITELIST_MENU');
                             replyText = buildWhitelistMenuText();
                         } else if (normalized === '10') {
+                            adminFlowByPhone.set(senderPhone, 'CARD_PREFIX_MENU');
+                            replyText = buildCardPrefixMenuText();
+                        } else if (normalized === '11') {
                             adminFlowByPhone.set(senderPhone, 'REPORT_MENU');
                             replyText = [
                                 '📊 *LAPORAN & ANALITIK*',
@@ -4699,17 +4703,6 @@ export async function connectToWhatsApp() {
                                 '2️⃣ Log Aktivitas',
                                 '3️⃣ Cari Data',
                                 '4️⃣ Broadcast Informasi',
-                                '',
-                                '0️⃣ Kembali ke Menu Admin',
-                            ].join('\n');
-                        } else if (normalized === '11') {
-                            adminFlowByPhone.set(senderPhone, 'REKAP_MENU');
-                            replyText = [
-                                '📋 *REKAP DATA*',
-                                '',
-                                '1️⃣ Rekap Hari Ini',
-                                '2️⃣ Rekap Tanggal Tertentu',
-                                '3️⃣ Rekap Rentang Tanggal',
                                 '',
                                 '0️⃣ Kembali ke Menu Admin',
                             ].join('\n');
