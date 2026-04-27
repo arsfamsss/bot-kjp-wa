@@ -3345,7 +3345,7 @@ export async function changeBlockedKtpType(noKtpRaw: string, newType: KtpBlockTy
     return { success: true, message: `Jenis blokir No KTP ${noKtp} berhasil diubah ke ${label}.` };
 }
 
-export async function checkBlockedKtpBatch(items: LogItem[]): Promise<LogItem[]> {
+export async function checkBlockedKtpBatch(items: LogItem[], locationContext?: string): Promise<LogItem[]> {
     await cleanupBlockedKtpAtEndOfMonthWib();
 
     const activeItems = items.filter(it => it.status === 'OK' && it.parsed.no_ktp);
@@ -3368,6 +3368,8 @@ export async function checkBlockedKtpBatch(items: LogItem[]): Promise<LogItem[]>
     const blockedMap = new Map<string, { reason: string | null; block_type: string }>();
     const blocked = (data || []).filter((row: any) => {
         if (row.block_type === 'permanent') return true;
+        // Temporary hanya berlaku untuk Dharmajaya
+        if (locationContext !== 'DHARMAJAYA') return false;
         if (!row.created_at) return true;
         return new Date(row.created_at) >= new Date(startOfMonth);
     });

@@ -158,7 +158,8 @@ describe('blocked KTP integration — cross-module flows', () => {
         ]);
 
         const item = createLogItem();
-        const [result] = await checkBlockedKtpBatch([item]);
+        // Temporary hanya berlaku untuk Dharmajaya
+        const [result] = await checkBlockedKtpBatch([item], 'DHARMAJAYA');
 
         expect(result.status).toBe('SKIP_FORMAT');
         expect(result.errors).toHaveLength(1);

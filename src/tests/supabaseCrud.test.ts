@@ -263,7 +263,8 @@ describe('supabase CRUD batch checks', () => {
             setTableResult('blocked_ktp', [{ no_ktp: '3171234567890123', reason: 'Bulanan' }]);
 
             const item = createLogItem();
-            const [result] = await checkBlockedKtpBatch([item]);
+            // Temporary hanya berlaku untuk Dharmajaya
+            const [result] = await checkBlockedKtpBatch([item], 'DHARMAJAYA');
 
             expect(result.status).toBe('SKIP_FORMAT');
             expect(result.errors).toHaveLength(1);

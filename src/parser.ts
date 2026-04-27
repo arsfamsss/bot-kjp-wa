@@ -950,7 +950,7 @@ export async function processRawMessageToLogJson(params: {
 
     items = await checkBlockedKjpBatch(items);
     items = await checkBlockedKkBatch(items);
-    items = await checkBlockedKtpBatch(items);
+    items = await checkBlockedKtpBatch(items, locationContext);
     items = await checkBlockedLocationBatch(items);
 
     const updatedItems = await checkDuplicatesBatch(items, {
