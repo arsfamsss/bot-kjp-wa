@@ -133,14 +133,7 @@ export function buildFoodStationStatusSummary(
         lines.push('-');
     } else {
         successResults.forEach((entry, idx) => {
-            const detail = entry.detail;
-            lines.push(`${idx + 1}. ${entry.item.nama} — BERHASIL`);
-            if (detail?.tanggalPengambilan) {
-                lines.push(`   📅 Tgl Pengambilan: ${detail.tanggalPengambilan}`);
-            }
-            if (detail?.jamPengambilan) {
-                lines.push(`   🕐 Jam: ${detail.jamPengambilan}`);
-            }
+            lines.push(`${idx + 1}. ${entry.item.nama} (${entry.item.no_kjp})`);
         });
     }
 
@@ -149,7 +142,7 @@ export function buildFoodStationStatusSummary(
         lines.push('-');
     } else {
         failedResults.forEach((entry, idx) => {
-            lines.push(`${idx + 1}. ${entry.item.nama} — Belum terdaftar`);
+            lines.push(`${idx + 1}. ${entry.item.nama} - Belum terdaftar`);
         });
     }
 
