@@ -1,7 +1,7 @@
 # AGENTS.md — Bot Input Data KJP di WA Otomatis
 
 > Knowledge base untuk AI agent. Baca file ini PERTAMA sebelum explore codebase.
-> Terakhir diupdate: 2026-04-27 (sesi: menu admin modern + fix bugs cek status)
+> Terakhir diupdate: 2026-04-27 (sesi: perbarui menu bantuan user)
 
 ---
 
@@ -25,7 +25,7 @@ src/wa.ts             → Core orchestrator (7500+ baris), semua message routing
 ```
 src/
 ├── config/
-│   └── messages.ts           # Semua template pesan, mapping lokasi, menu admin
+│   └── messages.ts           # Semua template pesan, mapping lokasi, menu admin, FAQ/bantuan user
 ├── services/
 │   ├── adminLocationMenu.ts  # Handler menu kelola buka/tutup lokasi (9 state)
 │   ├── csvContactsSync.ts    # Sync kontak dari CSV (fs.watchFile polling 60s)
@@ -233,6 +233,18 @@ src/
 - Sub-menu states: `BLOCK_NUMBER_MENU`, `QUOTA_MENU`, `REPORT_MENU`, `REKAP_MENU`
 - Desain: box-drawing chars, 4 grup (Pengaturan, Blokir & Kuota, Kontak, Data & Laporan), emoji per kategori, bold keywords
 
+### Menu Bantuan User (FAQ_MESSAGE)
+- Trigger: ketik `6` atau `BANTUAN` di menu utama
+- Template: `FAQ_MESSAGE` di messages.ts
+- Konten: jam layanan per-provider, cara daftar, format data, aturan kartu, batas KTP, perintah lengkap (CEK/EDIT/HAPUS/BATAL/CEK STATUS/MENU), tips (Lokasi Lain, label TUTUP, auto-detect)
+- Desain: bold, ringkas, tanpa garis — konsisten dengan menu admin
+- Tidak menggunakan kata "bot" di pesan ke user (keputusan April 2026)
+
+### Admin Menu Consolidation (April 2026)
+- 23 opsi → 11 opsi (A-Z sorted)
+- Grouping: Rekap (3→1), Kontak (3→1), Blokir (4→1), Kuota (2→1), Laporan (4→1)
+- Opsi 19 lama (Kelola Lokasi Penuh) dihapus, diganti opsi 5 (Kelola Buka/Tutup Lokasi)
+
 ### Naming Conventions
 - File: camelCase (`locationGate.ts`, `adminLocationMenu.ts`)
 - State: UPPER_SNAKE_CASE (`LOCATION_MGMT_MENU`, `BLOCKED_KTP_ADD_PERMANENT`)
@@ -386,6 +398,11 @@ providerHours-integration.test.ts # 7 tests: override priority, expiry, status c
 - Desain baru: PANEL ADMIN header dengan box-drawing, 4 grup kategori, emoji per kategori, bold keywords, sub-menu hints
 - Nomor opsi TIDAK berubah (tetap 1-11)
 - Template hint #TEMPLATE dan #TEMPLATE RESET tetap ada di footer
+
+### Admin Menu Consolidation (April 2026)
+- 23 opsi → 11 opsi (A-Z sorted)
+- Grouping: Rekap (3→1), Kontak (3→1), Blokir (4→1), Kuota (2→1), Laporan (4→1)
+- Opsi 19 lama (Kelola Lokasi Penuh) dihapus, diganti opsi 5 (Kelola Buka/Tutup Lokasi)
 
 ### Blokir KTP 2 Jenis — Permanen & Sementara (April 2026)
 | Keputusan | Pilihan | Alasan |

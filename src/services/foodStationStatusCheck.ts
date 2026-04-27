@@ -119,6 +119,37 @@ export async function checkFoodStationStatus(
                 res.body.includes('#capture-area') ||
                 res.body.includes('Registration Success')
             ) {
+                // Validasi H+1: tanggal berlaku harus = besok (data hari ini)
+                const dateMatch = res.body.match(
+                    /Hanya berlaku pada\s*:\s*<strong[^>]*>\s*(\d{1,2}-\w{3}-\d{4})/i,
+                );
+                if (dateMatch) {
+                    const MONTH_MAP: Record<string, number> = {
+                        JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5,
+                        JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11,
+                    };
+                    const parts = dateMatch[1].split('-');
+                    const day = parseInt(parts[0], 10);
+                    const mon = MONTH_MAP[parts[1].toUpperCase()] ?? -1;
+                    const year = parseInt(parts[2], 10);
+
+                    if (mon >= 0 && !isNaN(day) && !isNaN(year)) {
+                        const berlakuDate = new Date(year, mon, day);
+                        const now = new Date();
+                        const tomorrow = new Date(
+                            now.getFullYear(), now.getMonth(), now.getDate() + 1,
+                        );
+                        const toStr = (d: Date) =>
+                            `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+                        if (toStr(berlakuDate) !== toStr(tomorrow)) {
+                            return {
+                                state: 'GAGAL',
+                                reason: 'data_lama',
+                            };
+                        }
+                    }
+                }
                 const detail = parseDetailFromHtml(res.body);
                 return { state: 'BERHASIL', detail };
             }
