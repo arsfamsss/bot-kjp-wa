@@ -1,7 +1,7 @@
 # AGENTS.md — Bot Input Data KJP di WA Otomatis
 
 > Knowledge base untuk AI agent. Baca file ini PERTAMA sebelum explore codebase.
-> Terakhir diupdate: 2026-04-26 (sesi: rename Foodstation konsisten)
+> Terakhir diupdate: 2026-04-27 (sesi: menu admin modern + fix bugs cek status)
 
 ---
 
@@ -214,7 +214,7 @@ src/
 - **JANGAN ubah**: `extractCardNumber`, `extractCardText`, `extractDigits`, `groupLinesToBlocks`, `buildParsedFields`
 - Parser TIDAK pernah mengubah angka — hanya split baris
 
-### Admin Menu (11 opsi, A-Z sorted)
+### Admin Menu (11 opsi, grouped by category)
 ```
 1. Atur Status Buka/Tutup Bot
 2. Export Data (TXT & XLSX)
@@ -231,6 +231,7 @@ src/
 - Trigger: ketik `0`, `ADMIN`, atau `ADMIN MENU`
 - Auth: `isAdminPhone()` dari whitelistGate.ts
 - Sub-menu states: `BLOCK_NUMBER_MENU`, `QUOTA_MENU`, `REPORT_MENU`, `REKAP_MENU`
+- Desain: box-drawing chars, 4 grup (Pengaturan, Blokir & Kuota, Kontak, Data & Laporan), emoji per kategori, bold keywords
 
 ### Naming Conventions
 - File: camelCase (`locationGate.ts`, `adminLocationMenu.ts`)
@@ -379,6 +380,12 @@ providerHours-integration.test.ts # 7 tests: override priority, expiry, status c
 - Fix 1: Tambah early rejection di `SELECT_LOCATION` handler untuk Pasarjaya. Kondisi: `lines.length % 4 === 0 && lines.length % 5 !== 0` (inverse dari Dharmajaya/Foodstation). User tetap di `SELECT_LOCATION` agar bisa pilih lokasi lain.
 - Fix 2: 4 pesan error teknis (`Data X Gagal Proses`) diganti jadi pesan ramah dengan `CONTOH YANG BENAR` dan `Mohon kirim ulang ya Bu/Pak 🙏`. Pesan tidak mengasumsikan baris mana yang kurang.
 - Catatan: 5 baris = Pasarjaya, 4 baris = Dharmajaya & Foodstation. Edge case 20 baris (kelipatan 4 DAN 5) tidak di-reject.
+
+### Menu Admin Modern (April 2026)
+- Desain lama: daftar 11 opsi plain text tanpa grouping
+- Desain baru: PANEL ADMIN header dengan box-drawing, 4 grup kategori, emoji per kategori, bold keywords, sub-menu hints
+- Nomor opsi TIDAK berubah (tetap 1-11)
+- Template hint #TEMPLATE dan #TEMPLATE RESET tetap ada di footer
 
 ### Blokir KTP 2 Jenis — Permanen & Sementara (April 2026)
 | Keputusan | Pilihan | Alasan |
